@@ -1,0 +1,1924 @@
+/* =====================================================================
+   AIV Bank — student SQL console, presentation layer
+   =====================================================================
+
+   Rule for this file: NO literal colour, spacing, radius, shadow or font
+   stack. Everything resolves through a token in tokens.css, which is the
+   single place a rebrand touches. The only bare numbers left here are
+   layout arithmetic (grid tracks, breakpoints, z-index, border widths)
+   that describe structure rather than brand.
+
+   Behaviour is not styled away anywhere: nothing here hides an error, and
+   no `display` rule can defeat [hidden] (see the very first rule below).
+   ===================================================================== */
+
+/* The UA rule for [hidden] is display:none, but any author `display:` rule beats
+ * it. Several panels here are flex containers, so without this the JS that hides
+ * them (result meta bar, truncation banner, error box) silently has no effect and
+ * stale numbers stay on screen next to a fresh error. */
+[hidden] { display: none !important; }
+
+* { box-sizing: border-box; }
+
+button, input, select, textarea { touch-action: manipulation; }
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.skip-link {
+  position: fixed;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: var(--z-modal);
+  padding: var(--space-4) var(--space-6);
+  border-radius: var(--radius-sm);
+  background: var(--brand-700);
+  color: var(--on-brand);
+  font-weight: var(--weight-bold);
+  transform: translateY(-160%);
+  transition: transform var(--duration-fast) var(--ease);
+}
+.skip-link:focus { transform: translateY(0); }
+
+html, body {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  line-height: var(--leading-normal);
+  color: var(--ink);
+  background: var(--surface-sunken);
+  display: flex;
+  flex-direction: column;
+  /* A wide result grid scrolls inside its own frame; the page itself never
+   * scrolls sideways, which is what makes the top bar and the sidebar stay
+   * where the student left them. */
+  overflow-x: hidden;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* One focus treatment everywhere, never removed. */
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-radius: var(--radius-xs);
+}
+
+/* Belt and braces on top of the token-level reduction: some UA animations and
+ * smooth scrolling are not driven by our duration tokens. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* The app shell replaces <body> as the flex column: it is toggled as a whole so
+ * the console can be hidden with a single `hidden` attribute. */
+#app {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+/* ==========================================================================
+   LOGIN GATE
+   Fixed and fully opaque. The app shell is also `hidden` while the gate is up,
+   so there are two independent reasons nothing behind it can be read; neither
+   one depends on the other still being right.
+   ========================================================================== */
+
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal);
+  background:
+    radial-gradient(120% 80% at 50% -10%, var(--brand-50), transparent 60%),
+    var(--surface-sunken);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-9) var(--space-7);
+  overflow: auto;
+}
+
+/* While gated, kill scrolling of anything underneath. */
+body.is-gated { overflow: hidden; }
+
+.auth-card {
+  width: 100%;
+  max-width: 448px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  padding: var(--space-10) var(--space-10) var(--space-9);
+  box-shadow: var(--shadow-lg);
+}
+
+/* ------------------------------------------------------------- brand block */
+
+.auth-brand {
+  text-align: center;
+  margin-bottom: var(--space-8);
+  padding-bottom: var(--space-7);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.auth-logo {
+  display: block;
+  width: 216px;
+  height: auto;
+  margin: 0 auto var(--space-4);
+}
+
+.auth-brand-text {
+  margin: 0;
+  font-family: var(--font-serif);
+  font-size: var(--text-lg);
+  line-height: var(--leading-tight);
+  color: var(--brand-700);
+  letter-spacing: .01em;
+}
+
+/* --------------------------------------------------------------- auth steps */
+
+.auth-step { display: block; }
+
+.auth-title {
+  font-family: var(--font-serif);
+  font-size: var(--text-xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  margin: 0 0 var(--space-2);
+  color: var(--ink);
+}
+
+.auth-lead {
+  margin: 0 0 var(--space-7);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  line-height: var(--leading-normal);
+}
+.auth-lead-flush { margin: 0; }
+
+.auth-checking-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) 0;
+}
+
+.auth-field-group { margin-bottom: var(--space-6); }
+
+.auth-field {
+  display: block;
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  color: var(--ink-muted);
+}
+
+.auth-input {
+  width: 100%;
+  font-family: var(--font-sans);
+  font-size: var(--text-base);
+  padding: var(--space-5) var(--space-6);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink);
+  transition: border-color var(--duration-fast) var(--ease),
+              box-shadow var(--duration-fast) var(--ease);
+}
+.auth-input::placeholder { color: var(--ink-muted); }
+.auth-input:hover { border-color: var(--line-strong); }
+.auth-input:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-color: var(--brand-600);
+  box-shadow: none;
+}
+
+.auth-submit {
+  width: 100%;
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-base);
+}
+
+.auth-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.auth-actions .btn-ghost { width: 100%; }
+
+/* Reserved space for the inline message.
+ * Without this the Đăng nhập button jumps up and down as the error appears and
+ * clears, and a student who is mid-click lands on nothing. min-height fits the
+ * two-line worst case (the lockout notice); the one-line generic sentence
+ * leaves the extra room empty rather than shifting the layout. */
+.auth-slot {
+  min-height: 62px;
+  margin: var(--space-2) 0 var(--space-5);
+  display: flex;
+  align-items: flex-start;
+}
+.auth-slot > * { width: 100%; margin: 0; }
+
+.auth-notice {
+  margin: 0 0 var(--space-7);
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  background: var(--info-bg);
+  border: 1px solid var(--info-line);
+  border-left: 3px solid var(--brand-600);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+}
+
+.auth-error {
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
+  border-left: 3px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: var(--danger-ink);
+}
+
+.auth-ok {
+  padding: var(--space-5) var(--space-6);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  background: var(--ok-bg);
+  border: 1px solid var(--ok-line);
+  border-left: 3px solid var(--brand-600);
+  border-radius: var(--radius-sm);
+  color: var(--brand-700);
+}
+
+.auth-foot {
+  margin: var(--space-7) 0 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-loose);
+  color: var(--ink-muted);
+}
+.auth-foot-tight { margin-top: var(--space-4); }
+
+.auth-rules {
+  list-style: none;
+  margin: var(--space-6) 0 0;
+  padding: var(--space-5) var(--space-6);
+  background: var(--surface-sunken);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+}
+.auth-rule {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  padding: var(--space-1) 0;
+}
+.auth-rule-mark {
+  width: 14px;
+  text-align: center;
+  flex: 0 0 auto;
+  font-weight: var(--weight-bold);
+}
+.auth-rule.is-ok { color: var(--brand-700); }
+
+.auth-spinner {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--brand-100);
+  border-top-color: var(--brand-600);
+  border-radius: 50%;
+  animation: auth-spin .8s linear infinite;
+}
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) {
+  .auth-spinner { animation: none; border-top-color: var(--brand-600); }
+}
+
+/* ==========================================================================
+   TOP BAR
+   ========================================================================== */
+
+/* Single row, always. The identity block, the health pills and the session
+ * controls each own a fixed corner of the bar; if the viewport cannot hold all
+ * three, health pills are dropped from the least important end (see the
+ * breakpoint ladder at the bottom of this file) rather than wrapping the
+ * session controls onto a second line where a student stops looking for them. */
+.topbar {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--space-7);
+  min-height: var(--topbar-h);
+  padding: var(--space-4) var(--space-7);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  box-shadow: var(--shadow-sm);
+  flex-wrap: nowrap;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.brand-mark {
+  flex: 0 0 auto;
+  width: 36px;
+  height: auto;
+  display: block;
+}
+
+.brand-word {
+  font-family: var(--font-serif);
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
+  color: var(--ink);
+  white-space: nowrap;
+}
+
+.brand-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--line);
+  flex: 0 0 auto;
+}
+
+.brand-text {
+  display: grid;
+  font-size: var(--text-sm);
+  color: var(--ink);
+  line-height: var(--leading-tight);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.brand-text strong { font-weight: var(--weight-bold); }
+.brand-text small { color: var(--ink-muted); font-size: var(--text-xs); }
+
+.icon-btn {
+  width: var(--control-h-sm);
+  height: var(--control-h-sm);
+  display: inline-grid;
+  place-items: center;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  color: var(--ink-muted);
+  cursor: pointer;
+  transition: color var(--duration-fast) var(--ease),
+              background-color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease);
+}
+.icon-btn:hover { color: var(--brand-700); background: var(--surface-hover); border-color: var(--line-strong); }
+.icon-btn svg, .reward-icon svg, .inline-icon {
+  width: 20px;
+  height: 20px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.schema-toggle, .sidebar-close { display: none; }
+
+.health {
+  margin-left: auto;
+  display: flex;
+  gap: var(--space-3);
+  flex-wrap: nowrap;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* ---------------------------------------------------------------- session --
+ * An instructor must never mistake their own session for a student's. Three
+ * things change at once — the badge, the whole top bar, and a full-width strip
+ * — so the mistake is not one missed detail away. The instructor colour is the
+ * amber warning token, deliberately NOT the brand green, because brand green
+ * is what a normal student session looks like.
+ */
+
+.session-box {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding-left: var(--space-7);
+  border-left: 1px solid var(--line);
+  flex: 0 0 auto;
+}
+
+.session-user {
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+  font-family: var(--font-mono);
+  color: var(--ink);
+  max-width: 160px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.role-badge {
+  font-size: var(--text-xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--ok-line);
+  background: var(--ok-bg);
+  color: var(--ok);
+  white-space: nowrap;
+}
+
+/* SAFETY, not decoration. Solid amber fill + white text (5.02:1), uppercase,
+ * wider tracking and a ring so it reads as a live warning from the back of a
+ * lecture room, and can never be confused with the green student badge. */
+.role-badge.is-instructor {
+  background: var(--warning);
+  border-color: var(--warning);
+  color: var(--on-brand);
+  text-transform: uppercase;
+  letter-spacing: var(--tracking-wider);
+  box-shadow: 0 0 0 3px var(--warning-bg);
+}
+
+body.role-instructor .topbar {
+  background: var(--warning-bg);
+  border-bottom: 3px solid var(--warning);
+}
+body.role-instructor .brand-word,
+body.role-instructor .brand-text { color: var(--ink); }
+
+/* -------------------------------------------------------------------- pills */
+
+.pill {
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-5);
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--line);
+  background: var(--surface-sunken);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.pill-ok  { background: var(--ok-bg);     border-color: var(--ok-line);     color: var(--ok); }
+.pill-err { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger-ink); }
+
+/* ==========================================================================
+   BANNERS
+   ========================================================================== */
+
+/* flex: 0 0 auto is load-bearing, not tidiness. #truncated is a flex child of
+ * .tabpanel; with the default flex-shrink: 1 a short viewport squeezes the
+ * "your result was cut" warning into a clipped line, which is exactly the
+ * failure rule §9.5 exists to prevent (see results.js). The grid may shrink.
+ * The warning may not. */
+.banner {
+  flex: 0 0 auto;
+  padding: var(--banner-pad-y) var(--space-7);
+  font-size: var(--text-md);
+  line-height: var(--leading-normal);
+  border-bottom: 1px solid transparent;
+}
+.banner-warn {
+  background: var(--warning-bg);
+  border-color: var(--warning-line);
+  border-left: 4px solid var(--warning);
+  color: var(--ink);
+}
+.banner-info {
+  background: var(--info-bg);
+  border: 1px solid var(--info-line);
+  border-left: 4px solid var(--brand-600);
+  border-radius: var(--radius-sm);
+  margin: var(--banner-mt) var(--space-6) 0;
+  color: var(--ink);
+}
+/* Two states of the same banner slot, told apart at a glance: a cut result is
+ * a warning (you are missing rows), a complete one is a confirmation. Reusing
+ * .banner-info keeps the geometry identical so the grid never shifts. */
+.banner-cut {
+  background: var(--warning-bg);
+  border-color: var(--warning-line);
+  border-left-color: var(--warning);
+}
+.banner-full {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  border-left-color: var(--brand-600);
+}
+
+/* ==========================================================================
+   LAYOUT
+   ========================================================================== */
+
+.layout {
+  /* Khoi chua cua .pane-sep (xem chu thich o do). */
+  position: relative;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  background: var(--surface-sunken);
+}
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+}
+
+/* -------------------------------------------------------------- thanh kéo */
+
+/* Thanh CHIA khung, kich thuoc 0 nhung vung bat 12px.
+ *
+ * Vi sao khong cho no mot lan grid rieng: `.layout`, `.sandbox`, `.workspace` va
+ * `.sandbox-main` deu bi ghi de o nam cho khac (body.results-max, va ba lan o
+ * cac diem gay <=900px), tat ca deu viet `minmax(0, 1fr)` mot lan duy nhat. Them
+ * mot lan la phai sua dung ca nam, va quen mot cho thi bo cuc vo o dung mot be
+ * ngang man hinh ma khong ai thu.
+ *
+ * Nen: thanh nam CHONG len o cua khung ben canh (`grid-column: 2` / `grid-row: 2`),
+ * kich thuoc 0 theo truc no chinh, va `::before` tao vung bat. Khong chiem cho,
+ * nen khong lan nao phai doi. */
+/* `position: absolute`, KHONG phai relative - va day la ca cai meo.
+ *
+ * Mot phan tu co vi tri grid TUONG MINH van la mot grid item: no chiem o, va
+ * thuat toan xep tu dong day cac khung con lai sang o khac. Voi `.workspace` thi
+ * ket qua la mot HANG NGAM thu ba, va o soan thao bi bop tu 220px xuong 36px -
+ * `ops_browser.py` bat duoc dung cho nay.
+ *
+ * Phan tu tuyet doi thi KHONG phai grid item: khong chiem o, khong doi kich
+ * thuoc gi. Nhung `grid-row`/`grid-column` van co tac dung - o grid duoc chi dinh
+ * tro thanh khoi chua cua no, mien la vung chua co `position: relative`. */
+.pane-sep {
+  position: absolute;
+  z-index: 2;
+}
+.pane-sep::before {
+  content: '';
+  position: absolute;
+  border-radius: var(--radius-pill, 999px);
+  transition: background-color var(--duration-fast) var(--ease);
+}
+.pane-sep:hover::before,
+.pane-sep:focus-visible::before,
+.pane-sep.is-dragging::before { background: var(--brand-400); }
+.pane-sep:focus-visible { outline: none; }
+.pane-sep:focus-visible::before { background: var(--brand-600); }
+
+.pane-sep-v {
+  grid-column: 2;
+  grid-row: 1;
+  top: 0;
+  bottom: 0;
+  left: 0;
+  width: 0;
+  cursor: col-resize;
+}
+.pane-sep-v::before { inset: 0 -6px; }
+
+.pane-sep-h {
+  grid-column: 1;
+  grid-row: 2;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  cursor: row-resize;
+  /* Nam giua khe giua hai khung, khong dinh vao mep khung ket qua. */
+  margin-top: calc(-0.5 * var(--workspace-gap));
+}
+.pane-sep-h::before { inset: -6px 0; }
+
+/* Trong luc keo, con tro giu nguyen hinh tren CA trang - neu khong no nhap nhay
+   moi lan di qua mot phan tu co cursor rieng - va khong boi den nham chu. */
+body.is-resizing { user-select: none; }
+
+/* Hai trang thai bo cuc thu ve mot cot/hang. De thanh lai se con hai vach lo
+   lung khong keo duoc gi. */
+body.results-max .pane-sep { display: none; }
+
+/* ------------------------------------------------------------------ sidebar */
+
+.sidebar {
+  background: var(--surface-brand);
+  border-right: 1px solid var(--line);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
+.sidebar-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7) var(--space-6) var(--space-4);
+}
+.section-kicker {
+  display: block;
+  margin-bottom: var(--space-1);
+  color: var(--brand-600);
+  font-size: var(--text-2xs);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wider);
+  line-height: var(--leading-tight);
+  text-transform: uppercase;
+}
+.sidebar-title {
+  font-size: var(--text-lg);
+  margin: 0;
+  letter-spacing: normal;
+  font-weight: var(--weight-bold);
+  color: var(--ink);
+}
+.sidebar-title .count {
+  color: var(--brand-700);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+}
+.sidebar-head .btn { margin-left: auto; }
+
+.filter-wrap {
+  position: relative;
+  margin: 0 var(--space-6) var(--space-3);
+}
+.filter-label {
+  display: block;
+  margin: 0 var(--space-6) var(--space-2);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+/* Magnifier drawn in CSS so it stays crisp and available offline. */
+.filter-icon {
+  position: absolute;
+  left: var(--space-5);
+  top: 50%;
+  width: 11px;
+  height: 11px;
+  margin-top: -7px;
+  border: 1.5px solid var(--ink-muted);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.filter-icon::after {
+  content: "";
+  position: absolute;
+  left: 8px;
+  top: 8px;
+  width: 5px;
+  height: 1.5px;
+  background: var(--ink-muted);
+  transform: rotate(45deg);
+  transform-origin: left center;
+}
+
+.filter {
+  width: 100%;
+  min-height: var(--control-h);
+  padding: var(--space-4) var(--space-5) var(--space-4) var(--space-10);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  color: var(--ink);
+  background: var(--surface);
+  transition: border-color var(--duration-fast) var(--ease),
+              box-shadow var(--duration-fast) var(--ease);
+}
+.filter::placeholder { color: var(--ink-muted); }
+.filter:hover { border-color: var(--line-strong); }
+.filter:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-color: var(--brand-600);
+  box-shadow: none;
+}
+
+.sidebar-note {
+  margin: 0 var(--space-6) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  line-height: var(--leading-normal);
+}
+
+.table-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 var(--space-4) var(--space-9);
+  border-top: 1px solid var(--line-soft);
+  scrollbar-color: var(--line-strong) transparent;
+}
+
+.tbl {
+  position: relative;
+  border-radius: var(--radius-sm);
+}
+.tbl:hover { background: var(--surface-hover); }
+
+.tbl-head {
+  width: 100%;
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding: var(--space-4) var(--space-10) var(--space-4) var(--space-4);
+  background: none;
+  border: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  border-radius: var(--radius-sm);
+}
+.caret {
+  flex: 0 0 auto;
+  width: 0;
+  height: 0;
+  border-left: 5px solid var(--ink-muted);
+  border-top: 4px solid transparent;
+  border-bottom: 4px solid transparent;
+  transition: transform var(--duration-fast) var(--ease);
+}
+.tbl-head[aria-expanded="true"] .caret { transform: rotate(90deg) translateX(-1px); }
+.tbl-head[aria-expanded="true"] .tbl-name { color: var(--brand-700); }
+
+.tbl-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.tbl-cols {
+  margin-left: auto;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tbl-insert {
+  position: absolute;
+  top: 0;
+  right: var(--space-2);
+  border: 0;
+  background: none;
+  color: var(--ink-muted);
+  cursor: pointer;
+  width: var(--touch-target);
+  height: var(--touch-target);
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border-radius: var(--radius-xs);
+  opacity: 1;
+  transition: opacity var(--duration-fast) var(--ease);
+}
+.tbl-insert:hover { background: var(--brand-600); color: var(--on-brand); }
+.tbl-insert svg {
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.col-list {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0 var(--space-4) 0 var(--space-8);
+  border-left: 2px solid var(--line-soft);
+  margin-left: var(--space-6);
+}
+.col {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-3);
+  min-height: var(--touch-target);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-xs);
+  cursor: pointer;
+  font-size: var(--text-sm);
+}
+.col:hover { background: var(--surface-hover); }
+.col-name {
+  font-family: var(--font-mono);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.col.is-pk .col-name { font-weight: var(--weight-bold); }
+.col-type {
+  margin-left: auto;
+  font-size: var(--text-2xs);
+  color: var(--ink-muted);
+  font-family: var(--font-mono);
+  white-space: nowrap;
+}
+
+.tag {
+  font-size: var(--text-2xs);
+  letter-spacing: .04em;
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-xs);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.tag-pk {
+  background: var(--warning-bg);
+  border-color: var(--warning-line);
+  color: var(--warning);
+  font-weight: var(--weight-bold);
+}
+/* "nothing was cut", stated in the meta row. Its loud counterpart, the
+ * truncation warning, stays a full-width banner — see results.js §9.5. */
+.tag-full {
+  background: var(--ok-bg);
+  border-color: var(--ok-line);
+  color: var(--ok);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-xs);
+  padding: var(--space-2) var(--space-4);
+}
+
+/* ==========================================================================
+   WORKSPACE
+   ========================================================================== */
+
+/* Row 1 is the editor, row 2 the results. The floor and the share both come
+ * from tokens.css, because on a short viewport a fixed floor here is what
+ * squeezes the result grid down to its sticky header. */
+.workspace {
+  /* Khoi chua cua .pane-sep (xem chu thich o do). */
+  position: relative;
+  display: grid;
+  grid-template-rows:
+    minmax(var(--editor-min-h), min(var(--editor-row-h), var(--editor-max-h)))
+    minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  gap: var(--workspace-gap);
+  padding: var(--workspace-pad);
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  min-height: var(--toolbar-h);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface-brand);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: var(--space-3);
+}
+.panel-context {
+  display: grid;
+  min-width: 160px;
+  margin-right: var(--space-4);
+  line-height: var(--leading-tight);
+}
+.panel-context strong { font-size: var(--text-base); }
+.spacer { flex: 1 1 auto; }
+
+/* -------------------------------------------------------------------- btns */
+
+.btn {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  min-height: var(--control-h);
+  padding: var(--space-4) var(--space-7);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease),
+              color var(--duration-fast) var(--ease);
+}
+.btn:hover { background: var(--surface-hover); border-color: var(--line-strong); }
+.btn:active { background: var(--surface-muted); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn:disabled:hover { background: var(--surface); border-color: var(--line); }
+
+.btn-primary {
+  background: var(--brand-600);
+  border-color: var(--brand-600);
+  color: var(--on-brand);
+  font-weight: var(--weight-bold);
+  box-shadow: var(--shadow-xs);
+}
+.btn-primary:hover { background: var(--brand-700); border-color: var(--brand-700); }
+.btn-primary:active { background: var(--brand-800); border-color: var(--brand-800); }
+.btn-primary:disabled:hover { background: var(--brand-600); border-color: var(--brand-600); }
+
+.btn-ghost { background: transparent; }
+.btn-sm { min-height: var(--control-h-sm); font-size: var(--text-sm); padding: var(--space-3) var(--space-5); }
+
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  background: var(--on-brand-inset);
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-3);
+  margin-left: var(--space-3);
+}
+
+.field {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.num {
+  width: 84px;
+  min-height: var(--control-h);
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  color: var(--ink);
+  background: var(--surface);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+.num:focus {
+  outline: var(--focus-ring);
+  outline-offset: var(--focus-offset);
+  border-color: var(--brand-600);
+  box-shadow: none;
+}
+
+.run-status {
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.run-status.is-running { color: var(--brand-700); font-weight: var(--weight-medium); }
+
+/* Thanh tien trinh khi nap file o khu vuc Thuc hanh SQL.
+ *
+ * Trinh duyet ve <progress> theo ba cach khac nhau, nen phai dat ca ba lop gia:
+ * `::-webkit-progress-bar` (nen), `::-webkit-progress-value` (phan da chay) va
+ * `::-moz-progress-bar`. Bo mot cai la Firefox hoac Chrome roi ve mau mac dinh
+ * cua he dieu hanh, lech han bang mau con lai. */
+.load-progress {
+  flex: 0 0 auto;
+  width: 160px;
+  height: 6px;
+  border: 0;
+  border-radius: var(--radius-pill, 999px);
+  background: var(--surface-sunken);
+  appearance: none;
+  -webkit-appearance: none;
+  overflow: hidden;
+}
+.load-progress::-webkit-progress-bar { background: var(--surface-sunken); }
+.load-progress::-webkit-progress-value { background: var(--brand-600); transition: width var(--duration-fast) linear; }
+.load-progress::-moz-progress-bar { background: var(--brand-600); }
+/* Khong co `value` = chua biet tong dung luong. Cho mot vach chay qua lai de no
+   khac han voi "0%", vi hai trang thai do noi hai dieu khac nhau. */
+.load-progress:not([value]) { background:
+    linear-gradient(90deg, var(--surface-sunken) 0 35%, var(--brand-400) 35% 65%, var(--surface-sunken) 65% 100%)
+    0 0 / 300% 100%;
+  animation: load-indeterminate 1.1s linear infinite;
+}
+@keyframes load-indeterminate { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) {
+  .load-progress:not([value]) { animation: none; background: var(--brand-100); }
+}
+
+.hint-line {
+  display: var(--hint-line-display);
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+  border-top: 1px solid var(--line-soft);
+  background: var(--surface-sunken);
+  flex: 0 0 auto;
+}
+
+/* ------------------------------------------------------------- CodeMirror */
+
+.CodeMirror {
+  flex: 1 1 auto;
+  height: auto;
+  min-height: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+  line-height: var(--leading-loose);
+  color: var(--ink);
+  background: var(--surface);
+  padding: var(--space-3) 0;
+}
+.CodeMirror-gutters {
+  background: var(--surface);
+  border-right: 1px solid var(--line-soft);
+}
+.CodeMirror-linenumber { color: var(--ink-muted); }
+.CodeMirror-placeholder { color: var(--ink-muted) !important; }
+.CodeMirror-activeline-background { background: var(--brand-50); }
+.CodeMirror-cursor { border-left: 2px solid var(--brand-700); }
+.CodeMirror-selected { background: var(--brand-100) !important; }
+.CodeMirror .cm-keyword { color: var(--brand-700); font-weight: var(--weight-bold); }
+.CodeMirror .cm-string  { color: var(--value-json); }
+.CodeMirror .cm-number  { color: var(--value-bool); }
+.CodeMirror .cm-comment { color: var(--ink-muted); font-style: italic; }
+.CodeMirror .cm-operator { color: var(--ink); }
+.CodeMirror-matchingbracket {
+  color: var(--brand-700) !important;
+  background: var(--brand-100);
+  font-weight: var(--weight-bold);
+}
+
+/* hint dropdown */
+.CodeMirror-hints {
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  z-index: 50;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--line);
+  box-shadow: var(--shadow-md);
+  background: var(--surface);
+  padding: var(--space-2);
+}
+.CodeMirror-hint {
+  display: flex;
+  gap: var(--space-6);
+  align-items: baseline;
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-xs);
+  color: var(--ink);
+}
+li.CodeMirror-hint-active { background: var(--brand-600); color: var(--on-brand); }
+.hint-name { font-family: var(--font-mono); }
+.hint-meta { margin-left: auto; font-size: var(--text-2xs); color: var(--ink-muted); }
+li.CodeMirror-hint-active .hint-meta { color: var(--brand-100); }
+.hint-table .hint-name { font-weight: var(--weight-medium); }
+.hint-kw .hint-name { color: var(--value-bool); }
+li.CodeMirror-hint-active .hint-name { color: var(--on-brand); }
+
+/* ==========================================================================
+   TABS
+   ========================================================================== */
+
+/* The expand button shares this row with the tablist but must stay OUTSIDE
+ * it: a button that is not a tab inside role="tablist" breaks arrow-key
+ * navigation for screen readers. Hence a wrapper, and the bottom border moves
+ * up here so the two sit on one continuous rule. */
+.results-head {
+  display: flex;
+  align-items: stretch;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface-brand);
+  flex: 0 0 auto;
+}
+.tabs {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  /* The tab row scrolls sideways rather than squeezing its labels — it shares
+   * the row with the expand button and shrinks first on a narrow window. */
+  overflow-x: auto;
+  overscroll-behavior-inline: contain;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar { display: none; }
+.tab { flex: 0 0 auto; }
+/* Tracks the tab height rather than --touch-target: a 44px button inside a
+ * 38px tab row would grow the row back and undo the height tier. */
+.expand-btn {
+  flex: 0 0 auto;
+  align-self: center;
+  width: var(--tab-h);
+  height: var(--tab-h);
+  margin-right: var(--space-4);
+}
+.expand-btn .icon-collapse { display: none; }
+body.results-max .expand-btn .icon-collapse { display: block; }
+body.results-max .expand-btn .icon-expand { display: none; }
+
+/* Fullscreen results: the editor and the table catalogue step aside so a wide
+ * result can be read on a small laptop. Display-only state — nothing is
+ * persisted, so a reload always comes back to the normal layout. */
+body.results-max .sidebar,
+body.results-max .editor-panel { display: none; }
+/* The drawer toggle would open a sidebar that is not there. */
+body.results-max .schema-toggle { display: none !important; }
+body.results-max .layout { grid-template-columns: minmax(0, 1fr); }
+body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
+.tab {
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  background: none;
+  border: 0;
+  min-height: var(--tab-h);
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  color: var(--ink-muted);
+  border-bottom: 2px solid transparent;
+  transition: color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease);
+}
+.tab:hover { color: var(--ink); }
+.tab.is-active {
+  color: var(--brand-700);
+  border-bottom-color: var(--brand-600);
+  font-weight: var(--weight-bold);
+  background: var(--surface);
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+}
+
+.tabpanel {
+  display: none;
+  flex: 1 1 auto;
+  min-height: 0;
+  min-width: 0;
+  flex-direction: column;
+}
+.tabpanel.is-active { display: flex; }
+
+/* ==========================================================================
+   RESULT GRID
+   ========================================================================== */
+
+.result-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-9);
+  padding: var(--meta-pad-y) var(--space-6);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  flex: 0 0 auto;
+  flex-wrap: wrap;
+  row-gap: var(--space-3);
+}
+.stat { display: flex; align-items: baseline; gap: var(--space-3); }
+.stat b {
+  font-size: var(--text-lg);
+  font-weight: var(--weight-bold);
+  font-variant-numeric: tabular-nums;
+  font-family: var(--font-mono);
+  color: var(--ink);
+}
+.stat i {
+  font-style: normal;
+  font-size: var(--text-xs);
+  color: var(--ink-muted);
+}
+
+.switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  font-size: var(--text-sm);
+  color: var(--ink-muted);
+  cursor: pointer;
+}
+.switch input { accent-color: var(--brand-600); }
+
+/* The one element allowed to scroll sideways. It is a grid/flex child with
+ * min-width:0 above it, so a 60-column result stays inside this frame instead
+ * of stretching the page. */
+.grid-wrap {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+  min-width: 0;
+}
+
+.grid {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: var(--text-sm);
+  width: max-content;
+  min-width: 100%;
+}
+
+.grid th, .grid td {
+  border-bottom: 1px solid var(--line-soft);
+  border-right: 1px solid var(--line-soft);
+  padding: var(--cell-pad-y) var(--space-5);
+  text-align: left;
+  vertical-align: top;
+  /* Controlled truncation: one line per cell, ellipsis at a fixed ceiling, and
+   * the full value stays reachable via the title attribute results.js sets. A
+   * wrapping cell would make every row a different height and destroy the
+   * scan-down-a-column reading that a result grid is for. */
+  max-width: var(--cell-max-w);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.grid thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--surface-brand);
+  border-bottom: 1px solid var(--line-strong);
+  display: table-cell;
+  padding: var(--colhead-pad-y) var(--space-5);
+  vertical-align: bottom;
+}
+.col-h-name {
+  font-family: var(--font-mono);
+  font-weight: var(--weight-bold);
+  display: var(--colhead-type-display);
+  color: var(--ink);
+}
+/* Stacked by default, name and type on one line on a short viewport: this
+ * header is sticky, so its height is spent on every screen, permanently. */
+.col-h-type {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--ink-muted);
+  font-weight: var(--weight-normal);
+  display: var(--colhead-type-display);
+  margin-left: var(--colhead-type-gap);
+  text-transform: uppercase;
+  letter-spacing: .03em;
+}
+
+.grid td { font-family: var(--font-mono); }
+.grid tbody tr:nth-child(even) { background: var(--surface-zebra); }
+.grid tbody tr:hover { background: var(--surface-hover); }
+
+/* Row numbers stay put when the grid scrolls sideways, so a student who has
+ * scrolled to column 40 still knows which row they are on. */
+.rownum {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  background: var(--surface-muted) !important;
+  color: var(--ink-muted);
+  text-align: right !important;
+  font-variant-numeric: tabular-nums;
+  font-size: var(--text-xs);
+  min-width: 48px;
+  border-right: 1px solid var(--line) !important;
+}
+.grid thead .rownum { z-index: 3; }
+
+/* Numbers right-aligned and tabular so digits line up column-wise; that is how
+ * an order-of-magnitude mistake becomes visible without reading every digit.
+ *
+ * Written as `.grid td.v-num`, not `.v-num`: the shared `.grid th, .grid td`
+ * rule above sets `text-align: left` at specificity (0,1,1), which silently
+ * beat a bare `.v-num` at (0,1,0). The result was that money columns rendered
+ * left-aligned and nobody noticed, because the class WAS on the cell. */
+.grid td.v-num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--value-num);
+}
+/* NULL must not look like an empty string: different colour, italic, and a
+ * dotted underline that an empty cell does not have. */
+.v-null {
+  color: var(--value-null);
+  font-style: italic;
+  font-size: var(--text-xs);
+  letter-spacing: .04em;
+  text-decoration: underline dotted var(--line-strong);
+  text-underline-offset: 3px;
+}
+.v-bool { color: var(--value-bool); }
+.v-temporal { color: var(--value-temporal); }
+.v-json { color: var(--value-json); }
+.v-blob { color: var(--value-blob); }
+.v-warn { background: var(--warning-bg); box-shadow: inset 2px 0 0 var(--warning); }
+
+/* ==========================================================================
+   EMPTY / LOADING / ERROR STATES
+   ========================================================================== */
+
+/* A blank rectangle is not a state. Every one of these says what happened and
+ * what to do next, centred in the space it owns. */
+.empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-4);
+  min-height: 140px;
+  margin: 0;
+  padding: var(--space-10) var(--space-7);
+  color: var(--ink-muted);
+  font-size: var(--text-md);
+  text-align: center;
+  line-height: var(--leading-loose);
+}
+/* Decorative glyph only, drawn with borders rather than a font character: a
+ * console that must work offline on three operating systems cannot depend on a
+ * particular symbol existing in the system font.
+ * --ink-faint is 3.59:1, which clears the 3:1 bar for non-text graphics but
+ * would NOT clear 4.5:1 for a sentence — hence it is used here and nowhere
+ * else. The sentence next to it is --ink-muted at 6.42:1. */
+.empty::before {
+  content: "";
+  flex: 0 0 auto;
+  width: 30px;
+  height: 24px;
+  border: 2px solid var(--ink-faint);
+  border-top-width: 8px;          /* reads as a table with a header row */
+  border-radius: var(--radius-xs);
+}
+.empty-loading::before {
+  width: 22px;
+  height: 22px;
+  border: 2px solid var(--brand-100);
+  border-top: 2px solid var(--brand-600);
+  border-radius: 50%;
+  animation: auth-spin .8s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .empty-loading::before { animation: none; }
+}
+.empty-error { color: var(--danger-ink); }
+.empty-error::before {
+  content: "!";
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--danger);
+  border-radius: 50%;
+  color: var(--danger);
+  font-weight: var(--weight-bold);
+  font-size: var(--text-md);
+  line-height: 20px;
+  text-align: center;
+}
+
+.muted { color: var(--ink-muted); }
+.small { font-size: var(--text-xs); }
+
+/* ==========================================================================
+   ERROR BOX
+   ========================================================================== */
+
+.errorbox {
+  margin: var(--space-5) var(--space-6) 0;
+  padding: var(--space-6) var(--space-6);
+  background: var(--danger-bg);
+  border: 1px solid var(--danger-line);
+  border-left: 4px solid var(--danger);
+  border-radius: var(--radius-sm);
+  flex: 0 0 auto;
+}
+.err-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-4);
+  flex-wrap: wrap;
+}
+.err-code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--danger-ink);
+  letter-spacing: .02em;
+}
+/* The backend message, verbatim, in its own block. Nothing is appended to it
+ * and nothing is inferred from it. */
+.err-msg {
+  margin: 0 0 var(--space-4);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--danger-line);
+  border-radius: var(--radius-xs);
+  padding: var(--space-4) var(--space-5);
+}
+.err-hint {
+  margin: 0 0 var(--space-4);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  color: var(--danger-ink);
+}
+
+/* ==========================================================================
+   HISTORY
+   ========================================================================== */
+
+.history-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--line-soft);
+  background: var(--surface);
+  font-size: var(--text-sm);
+  flex: 0 0 auto;
+}
+.history-head .btn { margin-left: auto; }
+/* min-height: 0 is what makes overflow: auto real. A flex child defaults to
+ * min-height: auto, so without it this list refuses to shrink below its own
+ * content and pushes the panel open instead of scrolling inside it. */
+.history-list {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-4) var(--space-6) var(--space-9);
+  min-height: 0;
+  min-width: 0;
+}
+
+.hist {
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--brand-300);
+  border-radius: var(--radius-sm);
+  padding: var(--space-4) var(--space-5);
+  margin-bottom: var(--space-4);
+  cursor: pointer;
+  min-height: var(--touch-target);
+  background: var(--surface);
+  transition: border-color var(--duration-base) var(--ease),
+              box-shadow var(--duration-base) var(--ease);
+}
+.hist:hover {
+  border-color: var(--brand-600);
+  border-left-color: var(--brand-600);
+  box-shadow: var(--shadow-sm);
+}
+.hist-err { border-left-color: var(--danger); }
+.hist-err:hover { border-left-color: var(--danger); border-color: var(--danger-line); }
+.hist-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  margin-bottom: var(--space-3);
+}
+.hist-sql {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 5.4em;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   RUN DETAIL
+   ========================================================================== */
+
+.detail-body {
+  flex: 1 1 auto;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: var(--space-6) var(--space-7) var(--space-9);
+  min-height: 0;   /* same reason as .history-list */
+  min-width: 0;
+}
+.detail-row {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: var(--space-6);
+  padding: var(--space-4) 0;
+  border-bottom: 1px solid var(--line-soft);
+}
+.detail-label { color: var(--ink-muted); font-size: var(--text-sm); }
+.detail-value { font-size: var(--text-md); min-width: 0; }
+.chips { display: flex; flex-wrap: wrap; gap: var(--space-3); }
+.chip {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xs);
+  padding: var(--space-1) var(--space-4);
+  color: var(--ink);
+}
+.sql-pre {
+  margin: 0;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  line-height: var(--leading-normal);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: var(--surface-code);
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  padding: var(--space-5) var(--space-6);
+  color: var(--ink);
+}
+
+/* ==========================================================================
+   RESPONSIVE
+   Target is >=1280. At 1024 the sidebar narrows and the least important health
+   pills drop out, but nothing wraps into a scrollbar: the page must never
+   scroll horizontally, only .grid-wrap may.
+   ========================================================================== */
+
+/* Health-pill ladder. app.js appends them most-important-first (server status,
+ * table count, row cap, timeout, version), so dropping from the end always
+ * keeps the ones a student needs to interpret a failed query. */
+@media (max-width: 1599px) {
+  .health .pill:nth-child(n + 5) { display: none; }
+}
+
+@media (max-width: 1439px) {
+  .health .pill:nth-child(n + 4) { display: none; }
+}
+
+@media (max-width: 1279px) {
+  :root { --sidebar-w: 280px; }
+  .brand-text { display: none; }
+  .brand-sep { display: none; }
+  .workspace { padding: var(--space-5) var(--space-6) var(--space-6); }
+  .topbar { gap: var(--space-5); padding-inline: var(--space-6); }
+  .health .pill:nth-child(n + 3) { display: none; }
+  .session-user { max-width: 120px; }
+}
+
+@media (max-width: 900px) {
+  .topbar { flex-wrap: wrap; row-gap: var(--space-3); }
+  .health { display: none; }
+  /* "E2E DATA ANALYTICS" is half again as wide as the old "AI VIETNAM", and
+     .brand-word cannot wrap. Drop the secondary label rather than let the
+     brand push the session box off the bar; the word itself goes at 600px. */
+  .brand-sep, .brand-text { display: none; }
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .sidebar { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--line); }
+  .session-box { border-left: 0; padding-left: 0; }
+}
+
+.mart-panel { min-width: 0; }
+.mart-head, .mart-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--line-soft); background: var(--surface); }
+.mart-head .btn { margin-left: auto; }
+.mart-title { margin: 0; font-size: var(--text-lg); }
+.mart-note { margin: var(--space-1) 0 0; color: var(--ink-muted); font-size: var(--text-sm); }
+.mart-tools { padding-block: var(--space-4); }
+.mart-field { display: grid; gap: var(--space-2); min-width: min(100%, 220px); color: var(--ink-muted); font-size: var(--text-sm); font-weight: var(--weight-medium); }
+.mart-select { max-width: 420px; padding-inline: var(--space-5); }
+.mart-search { max-width: 360px; padding-inline: var(--space-5); }
+.mart-tools #mart-summary { margin-left: auto; }
+.mart-grid { min-width: max-content; }
+
+/* Practice rewards and instructor analytics */
+/* Bang xep hang la KHU VUC (canh Finance Banking / Supply Chain / Thuc hanh
+   SQL), khong con la mot tabpanel. `.tabpanel` truoc day cap display:flex va
+   min-height:0; o day phai tu cap, neu khong thi vung cuon ben trong khong bao
+   gio co chieu cao va bang dai se tran ra ngoai trang. */
+.leaderboard-workspace {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-sunken);
+}
+.leaderboard-workspace .progress-panel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.progress-panel { gap: var(--space-7); padding: var(--space-7); overflow: auto; }
+.progress-head, .leaderboard-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); }
+.progress-title { margin: 0; font: var(--weight-bold) var(--text-xl)/var(--leading-tight) var(--font-serif); color: var(--ink); }
+.reward-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-5); }
+.reward-card { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-4); align-items: center; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-sunken); }
+.reward-card strong { font-size: var(--text-xl); color: var(--brand-700); }
+.reward-card span:last-child { grid-column: 2; color: var(--ink-muted); font-size: var(--text-xs); }
+.reward-icon { grid-row: span 2; width: var(--touch-target); height: var(--touch-target); display: grid; place-items: center; border-radius: var(--radius-md); background: var(--brand-100); color: var(--brand-700); }
+.reward-icon svg { width: 22px; height: 22px; }
+.leaderboard-block, .instructor-dashboard { border-top: 1px solid var(--line-soft); padding-top: var(--space-6); }
+.leaderboard-block h3, .instructor-dashboard h3 { margin: 0 0 var(--space-5); font-size: var(--text-base); color: var(--ink); }
+.leaderboard-list, .analytics-list { display: grid; gap: var(--space-3); }
+.leaderboard-row, .analytics-row { padding: var(--space-4) var(--space-5); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--text-sm); }
+.leaderboard-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto auto; gap: var(--space-5); align-items: center; }
+.leaderboard-row .rank { color: var(--brand-700); font-weight: var(--weight-bold); }
+.leaderboard-queries, .leaderboard-streak { color: var(--ink-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* Dong cua chinh minh. Vien trai chu khong phai to nen: bang nay doc theo cot,
+   mot mang mau lam lech thang hang cua cac con so ben canh. */
+.leaderboard-row.is-me { border-color: var(--brand-600); box-shadow: inset 3px 0 0 var(--brand-600); }
+.leaderboard-row.is-me strong { color: var(--brand-700); }
+.leaderboard-metric { display: inline-flex; align-items: center; gap: var(--space-2); }
+.leaderboard-metric .inline-icon { width: 16px; height: 16px; color: var(--brand-600); }
+.analytics-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
+.analytics-card { display: grid; gap: var(--space-2); padding: var(--space-5); border-radius: var(--radius-sm); background: var(--surface-muted); }
+.analytics-card strong { color: var(--brand-700); font-size: var(--text-lg); }
+.analytics-card span, .analytics-list h4 { color: var(--ink-muted); font-size: var(--text-xs); }
+@media (max-width: 900px) { .reward-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+/* Hep thi ba con so xuong dong duoi ten, van giu thu tu doc: diem, query, chuoi. */
+@media (max-width: 600px) {
+  .reward-grid, .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .leaderboard-row { grid-template-columns: 24px minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
+  .leaderboard-row .leaderboard-metric, .leaderboard-queries, .leaderboard-streak { grid-column: 2; }
+}
+
+/* ==========================================================================
+   MOBILE WORKSPACE
+   The schema becomes an off-canvas drawer so the editor and results retain
+   useful vertical space. The backdrop and drawer share the tokenized z-scale.
+   ========================================================================== */
+
+.schema-backdrop { display: none; }
+
+@media (max-width: 900px) {
+  .topbar {
+    flex-wrap: nowrap;
+    gap: var(--space-4);
+    min-height: var(--topbar-h);
+    padding-inline: var(--space-4);
+  }
+  .schema-toggle { display: inline-grid; }
+  .brand-sep, .brand-text, .health, .session-user { display: none; }
+  .brand { min-width: 0; }
+  .session-box { margin-left: auto; gap: var(--space-2); }
+  .layout { grid-template-columns: minmax(0, 1fr); position: relative; }
+  /* Sidebar la ngan keo o be ngang nay, khong con mep de keo. */
+  .pane-sep { display: none; }
+  /* Row heights, padding, gap and toolbar height for this width live in
+   * tokens.css now, next to the max-height tiers that have to override them. */
+  .workspace { grid-column: 1; }
+  .sidebar {
+    position: fixed;
+    z-index: var(--z-drawer);
+    inset: 0 auto 0 0;
+    width: min(86vw, var(--sidebar-w));
+    max-height: none;
+    border-right: 1px solid var(--line);
+    border-bottom: 0;
+    box-shadow: var(--shadow-lg);
+    transform: translateX(-105%);
+    transition: transform var(--duration-base) var(--ease);
+  }
+  body.is-schema-open { overflow: hidden; }
+  body.is-schema-open .sidebar { transform: translateX(0); }
+  .sidebar-close { display: inline-grid; }
+  .schema-backdrop {
+    display: block;
+    position: fixed;
+    z-index: calc(var(--z-drawer) - 1);
+    inset: 0;
+    background: var(--scrim);
+  }
+  .panel-context { display: none; }
+}
+
+@media (max-width: 600px) {
+  :root { --topbar-h: 60px; }
+  .brand-word { display: none; }
+  .brand-mark { width: 32px; }
+  .role-badge { display: none; }
+  .workspace { padding: var(--space-4); gap: var(--space-4); }
+  .toolbar { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
+  .toolbar .field { margin-left: auto; }
+  .num { width: 72px; }
+  .auth-input, .filter, .num, .CodeMirror { font-size: var(--text-lg); }
+  .hint-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tabs { gap: 0; padding-inline: var(--space-2); }
+  .tab { padding-inline: var(--space-5); }
+  .progress-panel { padding: var(--space-5); }
+  .progress-head { align-items: flex-start; }
+  .detail-row { grid-template-columns: 1fr; gap: var(--space-2); }
+  .mart-field, .mart-select, .mart-search { width: 100%; max-width: none; }
+  .mart-tools #mart-summary { margin-left: 0; }
+}
+
+/* =====================================================================
+   SECTION NAV — three top-level areas
+   =====================================================================
+   Finance Banking and Supply Chain are the same console pointed at
+   different teaching databases; Thực hành SQL runs in the browser and
+   never contacts the server. Deliberately a row of real tabs, not a
+   dropdown: a student should be able to see at a glance that the
+   sandbox is a different place with different rules.
+   ===================================================================== */
+
+.sections {
+  /* KHONG duoc co lai. #app la mot flex column va .layout mang flex: 1 1 auto,
+   * nen neu thanh nay de mac dinh (0 1 auto) thi .layout se ep no tu ~70px
+   * xuong con 13px - van "hien thi", van bam duoc, nhung khong doc duoc va
+   * khong ai nhan ra do la mot thanh dieu huong. Da xay ra dung nhu vay. */
+  flex: 0 0 auto;
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-1);
+  padding: 0 var(--space-6);
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.sections::-webkit-scrollbar { display: none; }
+
+.section-tab {
+  appearance: none;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: transparent;
+  color: var(--ink-muted);
+  font-family: inherit;
+  text-align: left;
+  padding: var(--space-4) var(--space-5);
+  cursor: pointer;
+  white-space: nowrap;
+  display: grid;
+  gap: var(--space-1);
+  transition: color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease),
+              background-color var(--duration-fast) var(--ease);
+}
+.section-tab:hover:not(:disabled) { background: var(--surface-hover); color: var(--ink); }
+.section-tab:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--focus-offset)); }
+
+.section-tab-name {
+  font-size: var(--text-base);
+  font-weight: var(--weight-bold);
+  letter-spacing: var(--tracking-wide);
+}
+.section-tab-sub { font-size: var(--text-xs); color: var(--ink-faint); }
+
+.section-tab.is-active {
+  color: var(--brand-700);
+  border-bottom-color: var(--brand-600);
+  background: var(--surface-brand);
+}
+.section-tab.is-active .section-tab-sub { color: var(--ink-muted); }
+
+.section-tab:disabled { cursor: not-allowed; opacity: 0.55; }
+
+/* An instructor session recolours the top bar; keep the section row legible
+   against it rather than letting brand green sit on amber. */
+body.role-instructor .section-tab.is-active {
+  border-bottom-color: var(--warning);
+  color: var(--ink);
+  background: var(--warning-bg);
+}
+
+/* =====================================================================
+   SANDBOX — SQL on the student's own file
+   ===================================================================== */
+
+.sandbox {
+  /* Khoi chua cua .pane-sep (xem chu thich o do). */
+  position: relative;
+  flex: 1 1 auto;
+  display: grid;
+  grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+  background: var(--surface-sunken);
+}
+
+.sandbox-left {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  border-right: 1px solid var(--line);
+  background: var(--surface-sunken);
+  overflow-y: auto;
+  min-height: 0;
+}
+
+.sandbox-main {
+  /* Khoi chua cua .pane-sep (xem chu thich o do). */
+  position: relative;
+  /* Cung cau truc hang voi .workspace, khong phai flex column. Voi flex column
+   * thi .editor-panel chi cao bang noi dung va .CodeMirror (height: auto) co
+   * ve DUNG MOT DONG - go duoc nhung khong dung duoc. San chieu cao phai den
+   * tu grid row, giong het console. */
+  display: grid;
+  grid-template-rows:
+    minmax(var(--editor-min-h), min(var(--editor-row-h), var(--editor-max-h)))
+    minmax(0, 1fr);
+  gap: var(--workspace-gap);
+  padding: var(--workspace-pad);
+  min-width: 0;
+  min-height: 0;
+}
+
+.dropzone {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-2);
+  padding: var(--space-7) var(--space-5);
+  border: 2px dashed var(--line-strong);
+  border-radius: var(--radius-md);
+  background: var(--surface);
+  cursor: pointer;
+  text-align: center;
+  transition: border-color var(--duration-fast) var(--ease),
+              background-color var(--duration-fast) var(--ease);
+}
+.dropzone:hover, .dropzone:focus-visible { border-color: var(--brand-400); background: var(--surface-brand); }
+.dropzone:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.dropzone.is-over { border-color: var(--brand-600); background: var(--brand-50); }
+.dropzone.is-busy { cursor: progress; opacity: 0.7; }
+
+.dropzone-icon {
+  width: var(--space-8);
+  height: var(--space-8);
+  fill: none;
+  stroke: var(--brand-600);
+  stroke-width: 1.6;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+.dropzone-lead { margin: 0; font-weight: var(--weight-medium); color: var(--ink); }
+.dropzone-hint { margin: 0; font-size: var(--text-xs); color: var(--ink-muted); }
+
+.sandbox-privacy {
+  margin: 0;
+  font-size: var(--text-xs);
+  line-height: var(--leading-normal);
+  color: var(--ink-muted);
+  padding: var(--space-3) var(--space-4);
+  border-left: 3px solid var(--ok);
+  background: var(--ok-bg);
+  border-radius: var(--radius-xs);
+}
+.sandbox-privacy strong { color: var(--ink); }
+
+.sandbox-tables { display: grid; gap: var(--space-3); }
+
+.sbtable {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  padding: var(--space-3) var(--space-4);
+  display: grid;
+  gap: var(--space-1);
+}
+.sbtable-head { display: flex; align-items: baseline; gap: var(--space-3); }
+.sbtable-name {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: var(--weight-bold);
+  color: var(--brand-700);
+  word-break: break-all;
+}
+.sbtable-rows { font-size: var(--text-2xs); color: var(--ink-muted); margin-left: auto; white-space: nowrap; }
+.sbtable-file { font-size: var(--text-2xs); color: var(--ink-faint); word-break: break-all; }
+.sbtable-cols { font-size: var(--text-2xs); color: var(--ink-muted); line-height: var(--leading-normal); }
+
+@media (max-width: 900px) {
+  .sandbox { grid-template-columns: minmax(0, 1fr); }
+  .sandbox-left { border-right: 0; border-bottom: 1px solid var(--line); max-height: 320px; }
+  .section-tab-sub { display: none; }
+}

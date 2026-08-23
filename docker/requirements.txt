@@ -1,0 +1,14 @@
+# Phụ thuộc LÚC CHẠY của app. Cố tình hẹp hơn `requirements.txt` ở gốc kho:
+# gốc kho gồm cả bộ sinh dữ liệu (DuckDB, pandas, pyarrow...), còn `app/` chỉ
+# cần những gì để phục vụ.
+#
+# KHÔNG có `duckdb` ở đây, và đó là chủ đích — `app/` nói chuyện với PostgreSQL.
+# DuckDB là engine dựng và nghiệm thu, thuộc về `generator/`.
+#
+# Ghim đúng dải như kho gốc để hai bên không trôi khỏi nhau.
+
+psycopg[binary,pool]>=3.2,<3.4
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+sqlglot>=25

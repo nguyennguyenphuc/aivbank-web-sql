@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  WinSW service cho Caddy — AIV Bank chạy tại nhà.
+  ===================================================================
+  Chép sang C:\ProgramData\AIVBank\bin\caddy-svc.xml (đúng tên, cạnh
+  caddy-svc.exe), rồi:
+
+      C:\ProgramData\AIVBank\bin\caddy-svc.exe install
+      Start-Service caddy
+
+  Vì sao chạy làm service: đường hầm SSH cũ chết mỗi lần khởi động máy và
+  phải chạy tay `aivb.ps1 up`. Lớp TLS không nên thừa hưởng nhược điểm đó
+  — nếu Caddy không lên, cả lớp không vào được, và triệu chứng ở phía học
+  viên chỉ là trang treo.
+
+  Hướng dẫn đầy đủ: docs/DEPLOY-ROUTER.md bước 3.3
+-->
+<service>
+  <id>caddy</id>
+  <name>AIV Bank — Caddy (HTTPS)</name>
+  <description>Cắt TLS cho console SQL và chuyển tiếp về uvicorn ở 127.0.0.1:8000.</description>
+
+  <executable>C:\ProgramData\AIVBank\bin\caddy.exe</executable>
+  <arguments>run --config C:\ProgramData\AIVBank\config\Caddyfile</arguments>
+
+  <workingdirectory>C:\ProgramData\AIVBank</workingdirectory>
+
+  <!--
+    Token DuckDNS đọc từ biến môi trường phạm vi Machine, không viết vào
+    file này. Đặt bằng:
+        [Environment]::SetEnvironmentVariable("DUCKDNS_TOKEN", "<TOKEN>", "Machine")
+    Service chạy dưới LocalSystem nên nó thấy biến phạm vi Machine.
+    Đổi biến xong phải Restart-Service caddy — tiến trình đang chạy giữ
+    bản sao môi trường từ lúc khởi động.
+  -->
+
+  <logpath>C:\ProgramData\AIVBank\logs</logpath>
+  <log mode="roll-by-size">
+    <sizeThreshold>10240</sizeThreshold>
+    <keepFiles>5</keepFiles>
+  </log>
+
+  <startmode>Automatic</startmode>
+
+  <!--
+    Chứng chỉ nằm ở %ProgramData%\Caddy. Caddy tự gia hạn khi còn 1/3 hạn,
+    nên service phải chạy liên tục chứ không chỉ lúc có lớp.
+  -->
+  <onfailure action="restart" delay="10 sec"/>
+  <onfailure action="restart" delay="30 sec"/>
+  <onfailure action="restart" delay="60 sec"/>
+
+  <resetfailure>1 hour</resetfailure>
+  <stoptimeout>15 sec</stoptimeout>
+</service>

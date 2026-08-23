@@ -1,0 +1,1380 @@
+{
+ "_meta": {
+  "dataset": "scm",
+  "schema": "scm",
+  "generated_at": "2026-08-19T14:35:40.842241+00:00",
+  "generated_by": "database/make_scm_contract.py",
+  "source": "information_schema cua scm.scm",
+  "note": "Moi cot deu STUDENT. SupplyChain khong co bang dap an trong du lieu - dap an nam o labs/vn/*.py, outputs/ va muc 6.7/10 cua MO-TA-BO-DU-LIEU.md, deu la file ngoai database. Phan vung cua `sales` bi loai vi chung la chi tiet luu tru, khong phai bang logic."
+ },
+ "MISSING": [],
+ "columns": [
+  {
+   "table_name": "city_geo",
+   "column_name": "city",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "city_geo",
+   "column_name": "lat",
+   "ordinal_position": 2,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "city_geo",
+   "column_name": "long",
+   "ordinal_position": 3,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "delivery_points",
+   "column_name": "point_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "delivery_points",
+   "column_name": "city",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "delivery_points",
+   "column_name": "lat",
+   "ordinal_position": 3,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "delivery_points",
+   "column_name": "long",
+   "ordinal_position": 4,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "delivery_points",
+   "column_name": "weight",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "event_calendar",
+   "column_name": "date",
+   "ordinal_position": 1,
+   "duckdb_type": "DATE",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "event_calendar",
+   "column_name": "event_name",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "event_calendar",
+   "column_name": "tier",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "event_calendar",
+   "column_name": "demand_multiplier",
+   "ordinal_position": 4,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "date",
+   "ordinal_position": 1,
+   "duckdb_type": "DATE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "type",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "locale",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "locale_name",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "description",
+   "ordinal_position": 5,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "holidays",
+   "column_name": "transferred",
+   "ordinal_position": 6,
+   "duckdb_type": "BOOLEAN",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "store_nbr",
+   "ordinal_position": 1,
+   "duckdb_type": "SMALLINT",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "item_nbr",
+   "ordinal_position": 2,
+   "duckdb_type": "INTEGER",
+   "nullable": false,
+   "pk_order": 2,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "ym",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 3,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "on_hand_begin",
+   "ordinal_position": 4,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "received",
+   "ordinal_position": 5,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "sold",
+   "ordinal_position": 6,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "on_hand_end",
+   "ordinal_position": 7,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "inventory_snapshots",
+   "column_name": "inventory_value",
+   "ordinal_position": 8,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "item_costs",
+   "column_name": "item_nbr",
+   "ordinal_position": 1,
+   "duckdb_type": "INTEGER",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "item_costs",
+   "column_name": "family",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "item_costs",
+   "column_name": "perishable",
+   "ordinal_position": 3,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "item_costs",
+   "column_name": "unit_price",
+   "ordinal_position": 4,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "item_costs",
+   "column_name": "unit_cost",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "items",
+   "column_name": "item_nbr",
+   "ordinal_position": 1,
+   "duckdb_type": "INTEGER",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "items",
+   "column_name": "family",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "items",
+   "column_name": "class",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "items",
+   "column_name": "perishable",
+   "ordinal_position": 4,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "oil",
+   "column_name": "date",
+   "ordinal_position": 1,
+   "duckdb_type": "DATE",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "oil",
+   "column_name": "dcoilwtico",
+   "ordinal_position": 2,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "order_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "order_date",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "region",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "origin_hub_id",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "dest_hub_id",
+   "ordinal_position": 5,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "dest_city",
+   "ordinal_position": 6,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "dest_point_id",
+   "ordinal_position": 7,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "family",
+   "ordinal_position": 8,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "weight_kg",
+   "ordinal_position": 9,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "order_value_usd",
+   "ordinal_position": 10,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "created_at",
+   "ordinal_position": 11,
+   "duckdb_type": "TIMESTAMP",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "picked_at",
+   "ordinal_position": 12,
+   "duckdb_type": "TIMESTAMP",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "dispatched_at",
+   "ordinal_position": 13,
+   "duckdb_type": "TIMESTAMP",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "hub_arrived_at",
+   "ordinal_position": 14,
+   "duckdb_type": "TIMESTAMP",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "delivered_at",
+   "ordinal_position": 15,
+   "duckdb_type": "TIMESTAMP",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "t1_tao_don_pick_h",
+   "ordinal_position": 16,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "t2_pick_xuat_h",
+   "ordinal_position": 17,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "t3a_di_chuyen_h",
+   "ordinal_position": 18,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "t3b_sorting_h",
+   "ordinal_position": 19,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "t4_kho_giao_h",
+   "ordinal_position": 20,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "lead_time_total_h",
+   "ordinal_position": 21,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "promised_h",
+   "ordinal_position": 22,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "on_time",
+   "ordinal_position": 23,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "checkout_group",
+   "ordinal_position": 24,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "voucher_manually_applied",
+   "ordinal_position": 25,
+   "duckdb_type": "BOOLEAN",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "voucher_applied",
+   "ordinal_position": 26,
+   "duckdb_type": "BOOLEAN",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "orders",
+   "column_name": "is_cancelled",
+   "ordinal_position": 27,
+   "duckdb_type": "BOOLEAN",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "po_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "supplier_id",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "item_nbr",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "po_date",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "qty_ordered",
+   "ordinal_position": 5,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "promised_lead_days",
+   "ordinal_position": 6,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "promised_date",
+   "ordinal_position": 7,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "received_date",
+   "ordinal_position": 8,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "purchase_orders",
+   "column_name": "km_supplier_to_dc",
+   "ordinal_position": 9,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sales",
+   "column_name": "date",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sales",
+   "column_name": "store_nbr",
+   "ordinal_position": 2,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sales",
+   "column_name": "item_nbr",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sales",
+   "column_name": "unit_sales",
+   "ordinal_position": 4,
+   "duckdb_type": "FLOAT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sales",
+   "column_name": "onpromotion",
+   "ordinal_position": 5,
+   "duckdb_type": "BOOLEAN",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "shipment_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "warehouse_id",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "store_nbr",
+   "ordinal_position": 3,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "week",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "km_to_dc",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "units_shipped",
+   "ordinal_position": 6,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "promised_days",
+   "ordinal_position": 7,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "actual_days",
+   "ordinal_position": 8,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "on_time",
+   "ordinal_position": 9,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "in_full",
+   "ordinal_position": 10,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "shipments",
+   "column_name": "otif",
+   "ordinal_position": 11,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "hub_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "dc_parent",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "city",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "role",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "lat",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "sorting_hubs",
+   "column_name": "long",
+   "ordinal_position": 6,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "staffing_plan",
+   "column_name": "hub_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "staffing_plan",
+   "column_name": "date",
+   "ordinal_position": 2,
+   "duckdb_type": "DATE",
+   "nullable": false,
+   "pk_order": 2,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "staffing_plan",
+   "column_name": "headcount_ke_hoach",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "store_nbr",
+   "ordinal_position": 1,
+   "duckdb_type": "SMALLINT",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "city",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "state",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "type",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "cluster",
+   "ordinal_position": 5,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "lat",
+   "ordinal_position": 6,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "long",
+   "ordinal_position": 7,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "area_m2",
+   "ordinal_position": 8,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "store_attributes",
+   "column_name": "rent_month_usd",
+   "ordinal_position": 9,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "stores",
+   "column_name": "store_nbr",
+   "ordinal_position": 1,
+   "duckdb_type": "SMALLINT",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "stores",
+   "column_name": "city",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "stores",
+   "column_name": "state",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "stores",
+   "column_name": "type",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "stores",
+   "column_name": "cluster",
+   "ordinal_position": 5,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "supplier_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "supplier_name",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "family",
+   "ordinal_position": 3,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "city",
+   "ordinal_position": 4,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "lat",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "long",
+   "ordinal_position": 6,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "promised_lead_days",
+   "ordinal_position": 7,
+   "duckdb_type": "SMALLINT",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "suppliers",
+   "column_name": "warehouse_id",
+   "ordinal_position": 8,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "transactions",
+   "column_name": "date",
+   "ordinal_position": 1,
+   "duckdb_type": "DATE",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "transactions",
+   "column_name": "store_nbr",
+   "ordinal_position": 2,
+   "duckdb_type": "SMALLINT",
+   "nullable": false,
+   "pk_order": 2,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "transactions",
+   "column_name": "transactions",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "hub_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "date",
+   "ordinal_position": 2,
+   "duckdb_type": "DATE",
+   "nullable": false,
+   "pk_order": 2,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "orders_to_process",
+   "ordinal_position": 3,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "backlog_dau_ngay",
+   "ordinal_position": 4,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "backlog_cuoi_ngay",
+   "ordinal_position": 5,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "headcount",
+   "ordinal_position": 6,
+   "duckdb_type": "INTEGER",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "total_weight_kg",
+   "ordinal_position": 7,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "avg_sort_time_min",
+   "ordinal_position": 8,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouse_daily_ops",
+   "column_name": "workload_ratio",
+   "ordinal_position": 9,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouses",
+   "column_name": "warehouse_id",
+   "ordinal_position": 1,
+   "duckdb_type": "VARCHAR",
+   "nullable": false,
+   "pk_order": 1,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouses",
+   "column_name": "city",
+   "ordinal_position": 2,
+   "duckdb_type": "VARCHAR",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouses",
+   "column_name": "lat",
+   "ordinal_position": 3,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  },
+  {
+   "table_name": "warehouses",
+   "column_name": "long",
+   "ordinal_position": 4,
+   "duckdb_type": "DOUBLE",
+   "nullable": true,
+   "pk_order": null,
+   "student_visibility": "STUDENT"
+  }
+ ],
+ "tables": {
+  "city_geo": {
+   "n_columns": 3,
+   "pk": [
+    "city"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "delivery_points": {
+   "n_columns": 5,
+   "pk": [
+    "point_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "event_calendar": {
+   "n_columns": 4,
+   "pk": [
+    "date"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "holidays": {
+   "n_columns": 6,
+   "pk": [],
+   "student_visibility": "STUDENT"
+  },
+  "inventory_snapshots": {
+   "n_columns": 8,
+   "pk": [
+    "store_nbr",
+    "item_nbr",
+    "ym"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "item_costs": {
+   "n_columns": 5,
+   "pk": [
+    "item_nbr"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "items": {
+   "n_columns": 4,
+   "pk": [
+    "item_nbr"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "oil": {
+   "n_columns": 2,
+   "pk": [
+    "date"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "orders": {
+   "n_columns": 27,
+   "pk": [
+    "order_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "purchase_orders": {
+   "n_columns": 9,
+   "pk": [
+    "po_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "sales": {
+   "n_columns": 5,
+   "pk": [],
+   "student_visibility": "STUDENT"
+  },
+  "shipments": {
+   "n_columns": 11,
+   "pk": [
+    "shipment_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "sorting_hubs": {
+   "n_columns": 6,
+   "pk": [
+    "hub_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "staffing_plan": {
+   "n_columns": 3,
+   "pk": [
+    "hub_id",
+    "date"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "store_attributes": {
+   "n_columns": 9,
+   "pk": [
+    "store_nbr"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "stores": {
+   "n_columns": 5,
+   "pk": [
+    "store_nbr"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "suppliers": {
+   "n_columns": 8,
+   "pk": [
+    "supplier_id"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "transactions": {
+   "n_columns": 3,
+   "pk": [
+    "date",
+    "store_nbr"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "warehouse_daily_ops": {
+   "n_columns": 9,
+   "pk": [
+    "hub_id",
+    "date"
+   ],
+   "student_visibility": "STUDENT"
+  },
+  "warehouses": {
+   "n_columns": 4,
+   "pk": [
+    "warehouse_id"
+   ],
+   "student_visibility": "STUDENT"
+  }
+ }
+}

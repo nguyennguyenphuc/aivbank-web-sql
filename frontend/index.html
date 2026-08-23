@@ -1,0 +1,454 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>E2E Data Analytics — Bảng điều khiển SQL học viên</title>
+<meta name="color-scheme" content="light" />
+<!-- Favicon is the real brand mark, served from web/assets. No CDN, no data-URI
+     placeholder: the tab icon should be the same logo as the one on screen. -->
+<link rel="icon" type="image/png" sizes="256x249" href="assets/logo-mark.png" />
+<link rel="apple-touch-icon" href="assets/logo-mark.png" />
+<link rel="stylesheet" href="vendor/codemirror/lib/codemirror.css" />
+<link rel="stylesheet" href="vendor/codemirror/addon/hint/show-hint.css" />
+<!-- tokens.css must load BEFORE styles.css: styles.css contains no literal
+     colour, spacing, radius or font stack of its own, only var() lookups. -->
+<link rel="stylesheet" href="tokens.css" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body class="is-gated">
+
+<!-- =====================================================================
+     LOGIN GATE
+     Visible in the markup by default and removed only after GET /auth/me
+     confirms a session. If app.js fails to load, what stays on screen is the
+     login form — never the console. Fail closed.
+     ===================================================================== -->
+<div id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-label="Xác thực E2E Data Analytics">
+  <div class="auth-card">
+
+    <div class="auth-brand">
+      <img class="auth-logo" src="assets/logo.png" alt="eDA — E2E Data Analytics, AI Vietnam" width="880" height="275" />
+      <p class="auth-brand-text">Bảng điều khiển SQL học viên</p>
+    </div>
+
+    <!-- step 1: asking the server whether we already have a session -->
+    <div id="auth-checking" class="auth-step">
+      <div class="auth-checking-row">
+        <div class="auth-spinner" aria-hidden="true"></div>
+        <p class="auth-lead auth-lead-flush" role="status">Đang kiểm tra phiên đăng nhập…</p>
+      </div>
+    </div>
+
+    <!-- step 2: login -->
+    <form id="auth-login" class="auth-step" hidden novalidate>
+      <h1 id="auth-title" class="auth-title">Đăng nhập</h1>
+      <p class="auth-lead">Bảng điều khiển chỉ mở sau khi máy chủ xác nhận phiên.</p>
+
+      <p id="auth-notice" class="auth-notice" hidden role="status"></p>
+
+      <div class="auth-field-group">
+        <label class="auth-field" for="login-username">Tên đăng nhập</label>
+        <input
+          id="login-username"
+          class="auth-input"
+          type="text"
+          name="username"
+          autocomplete="username"
+          autocapitalize="none"
+          autocorrect="off"
+          spellcheck="false"
+        />
+      </div>
+
+      <div class="auth-field-group">
+        <label class="auth-field" for="login-password">Mật khẩu</label>
+        <input
+          id="login-password"
+          class="auth-input"
+          type="password"
+          name="password"
+          autocomplete="current-password"
+        />
+      </div>
+
+      <!-- Reserved height: the error appears and disappears without moving the
+           button under the student's cursor. Two lines is the common worst
+           case (the generic sentence is one, the lockout notice is two). -->
+      <div class="auth-slot">
+        <p id="login-error" class="auth-error" hidden role="alert"></p>
+      </div>
+
+      <button id="login-submit" class="btn btn-primary auth-submit" type="submit">Đăng nhập</button>
+
+      <p class="auth-foot">
+        Dùng tài khoản do giảng viên cấp. Quên mật khẩu thì liên hệ giảng viên —
+        giao diện này không tự đặt lại được.
+      </p>
+    </form>
+
+    <!-- step 3: change password (forced on first login, or on demand) -->
+    <form id="auth-change" class="auth-step" hidden novalidate>
+      <h1 class="auth-title">Đổi mật khẩu</h1>
+      <p id="change-lead" class="auth-lead"></p>
+
+      <div class="auth-field-group">
+        <label class="auth-field" for="change-old">Mật khẩu hiện tại</label>
+        <input id="change-old" class="auth-input" type="password" autocomplete="current-password" />
+      </div>
+
+      <div class="auth-field-group">
+        <label class="auth-field" for="change-new">Mật khẩu mới</label>
+        <input id="change-new" class="auth-input" type="password" autocomplete="new-password" />
+      </div>
+
+      <div class="auth-field-group">
+        <label class="auth-field" for="change-new2">Nhập lại mật khẩu mới</label>
+        <input id="change-new2" class="auth-input" type="password" autocomplete="new-password" />
+      </div>
+
+      <ul id="change-rules" class="auth-rules"></ul>
+      <p class="auth-foot auth-foot-tight">
+        Máy chủ mới là nơi quyết định mật khẩu có được chấp nhận hay không; danh
+        sách trên chỉ là gợi ý để bạn đỡ phải thử lại nhiều lần.
+      </p>
+
+      <div class="auth-slot">
+        <p id="change-error" class="auth-error" hidden role="alert"></p>
+        <p id="change-ok" class="auth-ok" hidden role="status"></p>
+      </div>
+
+      <div class="auth-actions">
+        <button id="change-submit" class="btn btn-primary auth-submit" type="submit">Đổi mật khẩu</button>
+        <button id="change-cancel" class="btn btn-ghost" type="button" hidden>Huỷ</button>
+        <button id="change-signout" class="btn btn-ghost" type="button" hidden>Đăng xuất</button>
+      </div>
+    </form>
+
+  </div>
+</div>
+
+<!-- =====================================================================
+     APPLICATION SHELL — hidden until the server confirms a session.
+     ===================================================================== -->
+<div id="app" hidden>
+
+<a class="skip-link" href="#main-workspace">Bỏ qua điều hướng, đến vùng làm việc</a>
+
+<header class="topbar">
+  <button id="open-schema" class="icon-btn schema-toggle" type="button" aria-label="Mở danh sách bảng" aria-controls="schema-sidebar" aria-expanded="false">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
+  </button>
+  <div class="brand">
+    <img class="brand-mark" src="assets/logo-mark.png" alt="" width="256" height="249" aria-hidden="true" />
+    <span class="brand-word">E2E DATA ANALYTICS</span>
+    <span class="brand-sep" aria-hidden="true"></span>
+    <span class="brand-text"><strong>SQL Workspace</strong><small>Thực hành dữ liệu ngân hàng</small></span>
+  </div>
+  <div id="health" class="health" aria-live="polite">
+    <span class="pill pill-muted">Đang kết nối…</span>
+  </div>
+  <div id="session-box" class="session-box" hidden>
+    <span id="session-role" class="role-badge"></span>
+    <span id="session-user" class="session-user"></span>
+    <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
+    <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
+  </div>
+</header>
+
+<!-- ===================== SECTIONS =====================
+     Three top-level areas, not a dataset dropdown. The first two are the same
+     console pointed at different teaching databases; the third runs entirely
+     in this browser and never contacts the server.
+
+     Finance Banking and Supply Chain share one editor and one schema panel, so
+     switching between THEM must wipe schema, results and history -- otherwise
+     autocomplete would offer one dataset's table names inside the other's
+     query. The sandbox needs no such wipe: it owns a separate editor whose
+     only name source is the student's own files. -->
+<nav id="sections" class="sections" role="tablist" aria-label="Khu vực làm việc">
+  <button class="section-tab is-active" type="button" data-dataset-slot role="tab" data-section="finance"
+          id="section-tab-finance" aria-controls="main-workspace" aria-selected="true">
+    <span class="section-tab-name">Finance Banking</span>
+    <span class="section-tab-sub">Đang kết nối…</span>
+  </button>
+  <button class="section-tab" type="button" data-dataset-slot role="tab" data-section="scm"
+          id="section-tab-scm" aria-controls="main-workspace" aria-selected="false" tabindex="-1"
+          disabled aria-disabled="true">
+    <span class="section-tab-name">Supply Chain</span>
+    <span class="section-tab-sub">Đang kết nối…</span>
+  </button>
+  <button class="section-tab" type="button" role="tab" data-section="sandbox"
+          id="section-tab-sandbox" aria-controls="sandbox-workspace" aria-selected="false" tabindex="-1">
+    <span class="section-tab-name">Thực hành SQL</span>
+  </button>
+  <!-- Bang xep hang la khu vuc RIENG, khong phai mot tab trong vung ket qua: no
+       khong thuoc ve bo du lieu nao ca. De no trong vung ket qua thi doi bo du
+       lieu se xoa no di cung schema va lich su, dù diem thi khong doi. -->
+  <button class="section-tab" type="button" role="tab" data-section="leaderboard"
+          id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
+    <span class="section-tab-name">Bảng xếp hạng</span>
+  </button>
+</nav>
+
+<div id="service-banner" class="banner banner-warn" hidden></div>
+
+<main id="main-workspace" class="layout" tabindex="-1">
+  <h1 class="sr-only">Không gian thực hành SQL — E2E Data Analytics</h1>
+
+  <!-- ===================== SIDEBAR: schema explorer ===================== -->
+  <div id="schema-backdrop" class="schema-backdrop" hidden></div>
+  <aside id="schema-sidebar" class="sidebar" aria-label="Danh sách bảng">
+    <div class="sidebar-head">
+      <div>
+        <span class="section-kicker">Khám phá dữ liệu</span>
+        <h2 class="sidebar-title">Danh mục bảng <span id="table-count" class="count"></span></h2>
+      </div>
+      <button id="refresh-schema" class="btn btn-ghost btn-sm" type="button" title="Tải lại danh sách từ máy chủ">
+        Làm mới
+      </button>
+      <button id="close-schema" class="icon-btn sidebar-close" type="button" aria-label="Đóng danh sách bảng">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
+      </button>
+    </div>
+    <label class="filter-label" for="table-filter">Tìm bảng hoặc cột</label>
+    <div class="filter-wrap">
+      <span class="filter-icon" aria-hidden="true"></span>
+      <input
+        id="table-filter"
+        class="filter"
+        type="search"
+        placeholder="Nhập từ khoá…"
+        autocomplete="off"
+        spellcheck="false"
+      />
+    </div>
+    <p class="sidebar-note">
+      Danh sách này lấy trực tiếp từ máy chủ mỗi lần mở trang. Bấm tên bảng để xem cột.
+    </p>
+    <div id="table-list" class="table-list"></div>
+  </aside>
+
+  <!-- ===================== MAIN: editor + results ===================== -->
+  <!-- Kich thuoc 0, vung bat 12px do `::before` tao ra. Dat CHONG len mep khung
+       ben canh chu khong chiem mot lan grid rieng: them lan la phai sua ca 5 cho
+       ghi de grid (body.results-max va cac diem gay <=900px). -->
+  <div class="pane-sep pane-sep-v" data-resize="sidebar" role="separator"
+       aria-orientation="vertical" tabindex="0"
+       aria-label="Kéo để đổi bề rộng danh sách bảng — mũi tên trái/phải, nhấn đúp để về mặc định"></div>
+  <section class="workspace">
+
+    <div class="editor-panel panel">
+      <div class="toolbar">
+        <div class="panel-context">
+          <span class="section-kicker">Trình soạn thảo</span>
+          <strong>Viết truy vấn SQL</strong>
+        </div>
+        <button id="run" class="btn btn-primary" type="button">
+          Chạy <kbd id="run-kbd">Ctrl+Enter</kbd>
+        </button>
+        <button id="stop" class="btn btn-ghost" type="button" hidden>Dừng</button>
+        <label class="field">
+          Số dòng tối đa
+          <input id="max-rows" class="num" type="number" min="1" step="50" />
+        </label>
+        <span class="spacer"></span>
+        <span id="run-status" class="run-status"></span>
+      </div>
+      <label class="sr-only" for="sql">Câu truy vấn SQL</label>
+      <textarea id="sql"></textarea>
+      <p class="hint-line">
+        Mẹo: bôi đen một đoạn rồi nhấn Ctrl/Cmd + Enter để chỉ chạy đoạn đó ·
+        Ctrl + Space để gợi ý tên bảng/cột.
+      </p>
+    </div>
+
+    <div class="pane-sep pane-sep-h" data-resize="editor" role="separator"
+         aria-orientation="horizontal" tabindex="0"
+         aria-label="Kéo để đổi chiều cao ô soạn thảo — mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
+    <div class="results-panel panel">
+      <!-- The expand button shares this row with the tablist but stays outside
+           it: role="tablist" must contain nothing but tabs, or arrow-key
+           navigation lands on a control that is not a tab. -->
+      <div class="results-head">
+        <div class="tabs" role="tablist" aria-label="Nội dung vùng kết quả">
+          <button id="tab-button-result" class="tab is-active" data-tab="result" role="tab" aria-controls="tab-result" aria-selected="true">Kết quả</button>
+          <!-- Mac dinh AN, va chi hien khi syncMartTab() dem duoc mart that. Chieu
+                 nguoc lai (hien san roi an di) lam hoc vien thay mot tab loe ra roi bien
+                 mat sau ~5 giay - do la thoi gian /schema/marts tra ve qua duong ham. -->
+            <button id="tab-button-mart" class="tab" data-tab="mart" role="tab" aria-controls="tab-mart" aria-selected="false" tabindex="-1" hidden>Data mart</button>
+          <button id="tab-button-history" class="tab" data-tab="history" role="tab" aria-controls="tab-history" aria-selected="false" tabindex="-1">Lịch sử</button>
+          <button id="tab-button-detail" class="tab" data-tab="detail" role="tab" aria-controls="tab-detail" aria-selected="false" tabindex="-1">Chi tiết</button>
+        </div>
+        <button id="expand-results" class="icon-btn expand-btn" type="button" aria-pressed="false" aria-label="Phóng to vùng kết quả" title="Phóng to vùng kết quả (Esc để thoát)">
+          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
+          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /></svg>
+        </button>
+      </div>
+
+      <div id="tab-result" class="tabpanel is-active" role="tabpanel" aria-labelledby="tab-button-result">
+        <div id="error-box" class="errorbox" hidden></div>
+        <div id="result-meta" class="result-meta" hidden></div>
+        <div id="truncated" class="banner banner-info" hidden></div>
+        <div id="grid-wrap" class="grid-wrap">
+          <p class="empty">Chưa có kết quả. Gõ một câu SELECT rồi nhấn Chạy.</p>
+        </div>
+      </div>
+
+      <div id="tab-mart" class="tabpanel mart-panel" role="tabpanel" aria-labelledby="tab-button-mart" hidden>
+        <div class="mart-head">
+          <div><h2 class="mart-title">Khám phá data mart</h2></div>
+          <span id="mart-status" class="tag" role="status" aria-live="polite"></span>
+          <button id="mart-refresh" class="btn btn-ghost btn-sm" type="button" disabled>Làm mới</button>
+        </div>
+        <div class="mart-tools">
+          <label class="mart-field" for="mart-select"><span>Data mart</span><select id="mart-select" class="filter mart-select" disabled></select></label>
+          <label class="mart-field" for="mart-search"><span>Tìm trong kết quả</span><input id="mart-search" class="filter mart-search" type="search" placeholder="Nhập từ khoá…" autocomplete="off" disabled /></label>
+          <span id="mart-summary" class="muted" role="status" aria-live="polite"></span>
+        </div>
+        <div id="mart-grid" class="grid-wrap"><p class="empty">Đăng nhập để xem data mart.</p></div>
+      </div>
+
+      <div id="tab-history" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-history" hidden>
+        <div class="history-head">
+          <span class="muted">Các câu bạn đã chạy trong trình duyệt này.</span>
+          <button id="clear-history" class="btn btn-ghost btn-sm">Xoá lịch sử</button>
+        </div>
+        <div id="history-list" class="history-list"></div>
+      </div>
+
+      <div id="tab-detail" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-detail" hidden>
+        <div id="detail-body" class="detail-body">
+          <p class="empty">Chạy một câu truy vấn để xem chi tiết.</p>
+        </div>
+      </div>
+    </div>
+
+  </section>
+</main>
+
+<!-- ===================== SANDBOX: SQL on your own file =====================
+     Runs DuckDB-WASM in this browser. No upload, no session, no roles: the
+     file never leaves the machine. See frontend/sandbox.js for why the rules
+     that bind the console above do not all bind here. -->
+<section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
+  <div class="progress-panel">
+    <div class="progress-head">
+      <div><h2 class="progress-title">Luyện tập hôm nay</h2></div>
+      <button id="progress-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button>
+    </div>
+    <div class="reward-grid">
+      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" /></svg></span><strong id="reward-stars">0</strong><span>Điểm sao</span></div>
+      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 4-4h8l4 4-8 12L4 8Zm0 0h16M8 4l4 16 4-16" /></svg></span><strong id="reward-diamonds">0</strong><span>Kim cương</span></div>
+      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 3.5c.6 3.2-1.8 4.5-1.8 7.1 0 1.4.9 2.4 2.1 2.4 2.2 0 3.1-2.7 2.5-5.2 2.7 2 4.2 4.5 4.2 7.1A8.5 8.5 0 0 1 3.5 15c0-4.1 2.7-7.7 6.4-10-.1 2.7.9 4.2 2.1 4.8.3-2.7.4-4.3 1.5-6.3Z" /></svg></span><strong id="reward-streak">0</strong><span>Ngày liên tiếp</span></div>
+      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h7" /></svg></span><strong id="reward-today">0</strong><span>Query hôm nay</span></div>
+    </div>
+    <section class="leaderboard-block">
+      <div class="leaderboard-head"><h3>Bảng xếp hạng</h3><span id="leaderboard-status" class="muted" role="status" aria-live="polite"></span></div>
+      <div id="leaderboard-list" class="leaderboard-list"><p class="empty">Đang tải…</p></div>
+    </section>
+  </div>
+</section>
+
+<section id="sandbox-workspace" class="sandbox" aria-label="Thực hành SQL trên file của bạn" hidden>
+
+  <div class="sandbox-left">
+    <div class="sidebar-head">
+      <div>
+        <span class="section-kicker">Dữ liệu của bạn</span>
+        <h2 class="sidebar-title">File đã nạp <span id="sandbox-count" class="count"></span></h2>
+      </div>
+      <button id="sandbox-reset" class="btn btn-ghost btn-sm" type="button" hidden>Xoá hết</button>
+    </div>
+
+    <div id="sandbox-drop" class="dropzone" tabindex="0" role="button"
+         aria-label="Chọn hoặc kéo thả file dữ liệu">
+      <svg viewBox="0 0 24 24" aria-hidden="true" class="dropzone-icon">
+        <path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
+      </svg>
+      <p class="dropzone-lead">Kéo thả file vào đây</p>
+      <p class="dropzone-hint">hoặc bấm để chọn — CSV, TSV, Parquet, JSON</p>
+      <input id="sandbox-file" type="file" multiple hidden
+             accept=".csv,.tsv,.tab,.txt,.parquet,.pq,.json,.ndjson,.jsonl" />
+    </div>
+
+    <p class="sandbox-privacy">
+      File được đọc <strong>ngay trên máy bạn</strong>. Không có gì được tải lên máy chủ.
+    </p>
+
+    <div id="sandbox-tables" class="sandbox-tables"></div>
+  </div>
+
+  <!-- Kich thuoc 0, vung bat 12px do `::before` tao ra. Dat CHONG len mep khung
+       ben canh chu khong chiem mot lan grid rieng: them lan la phai sua ca 5 cho
+       ghi de grid (body.results-max va cac diem gay <=900px). -->
+  <div class="pane-sep pane-sep-v" data-resize="sidebar" role="separator"
+       aria-orientation="vertical" tabindex="0"
+       aria-label="Kéo để đổi bề rộng danh sách bảng — mũi tên trái/phải, nhấn đúp để về mặc định"></div>
+  <section class="sandbox-main" aria-label="Soạn và chạy truy vấn">
+    <div class="editor-panel panel">
+      <div class="toolbar">
+        <button id="sandbox-run" class="btn btn-primary" type="button" disabled>Chạy</button>
+        <span id="sandbox-status" class="run-status" aria-live="polite"></span>
+        <!-- The <progress> goc, khong phai mot <div> tu ve: no da co san ngu nghia cho
+             trinh doc man hinh, va BO thuoc tinh `value` la tu thanh dang chay vo dinh -
+             dung thu ma giai doan "dang tao bang" can, khong phai viet them gi. -->
+        <progress id="sandbox-progress" class="load-progress" max="1" hidden></progress>
+        <span class="spacer"></span>
+      </div>
+      <label class="sr-only" for="sandbox-sql">Câu lệnh SQL chạy trên file của bạn</label>
+      <textarea id="sandbox-sql" spellcheck="false"
+                placeholder="Nạp một file rồi gõ SELECT ở đây…"></textarea>
+      <p class="hint-line">
+        Mẹo: bôi đen một đoạn rồi nhấn <kbd id="sandbox-kbd">Ctrl+Enter</kbd> để chỉ chạy đoạn đó ·
+        Ctrl + Space để gợi ý tên bảng/cột của bạn.
+      </p>
+    </div>
+
+    <div class="pane-sep pane-sep-h" data-resize="editor" role="separator"
+         aria-orientation="horizontal" tabindex="0"
+         aria-label="Kéo để đổi chiều cao ô soạn thảo — mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
+    <div class="results-panel panel">
+      <div id="sandbox-error" class="errorbox" hidden></div>
+      <div id="sandbox-truncated" class="banner banner-info" hidden></div>
+      <div id="sandbox-meta" class="result-meta" hidden></div>
+      <div id="sandbox-grid" class="grid-wrap">
+        <p class="empty">Chưa có kết quả. Nạp một file rồi chạy một câu SELECT.</p>
+      </div>
+    </div>
+  </section>
+
+</section>
+
+</div><!-- /#app -->
+
+<!-- CodeMirror 5, vendored under web/vendor (no CDN, no build step) -->
+<script src="vendor/codemirror/lib/codemirror.js"></script>
+<script src="vendor/codemirror/mode/sql/sql.js"></script>
+<script src="vendor/codemirror/addon/hint/show-hint.js"></script>
+<script src="vendor/codemirror/addon/edit/matchbrackets.js"></script>
+<script src="vendor/codemirror/addon/edit/closebrackets.js"></script>
+<script src="vendor/codemirror/addon/display/placeholder.js"></script>
+<script src="vendor/codemirror/addon/selection/active-line.js"></script>
+
+<script src="config.js"></script>
+<script type="module" src="app.js"></script>
+<!-- Panel giang vien song trong <template> co chu dinh: phien HOC VIEN khong
+     duoc CO no, chu khong phai khong duoc THAY no. `hidden` chi la mot thuoc
+     tinh - mo devtools go ra la panel hien. Noi dung trong <template> thi khong
+     nam trong document: getElementById khong thay, phim Tab khong toi duoc, va
+     khong co gi de go ca.
+
+     Cung nguyen tac ma hai database vat ly dang dung (ARCHITECTURE.md muc 2):
+     bang dap an KHONG TON TAI, chu khong phai bi che.
+
+     Day la lop thu hai. Lop thu nhat la `require_instructor` tren
+     /admin/analytics/queries - du lieu chua bao gio roi may chu. -->
+<template id="tpl-instructor">
+  <button id="tab-button-instructor" class="tab" data-tab="instructor" role="tab" aria-controls="tab-instructor" aria-selected="false" tabindex="-1">Giảng viên</button>
+  <div id="tab-instructor" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-instructor" hidden>
+    <section class="instructor-dashboard"><div class="leaderboard-head"><h3>Bảng điều khiển giảng viên</h3><button id="analytics-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button></div><div id="analytics-summary" class="analytics-grid" aria-live="polite"></div><div id="analytics-tables" class="analytics-list"></div></section>
+  </div>
+</template>
+</body>
+</html>

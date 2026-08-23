@@ -1,0 +1,96 @@
+# Caddyfile — AIV Bank, chạy tại nhà sau port forwarding
+# =====================================================================
+# Chép sang C:\ProgramData\AIVBank\config\Caddyfile rồi thay <DOMAIN>.
+# Hướng dẫn đầy đủ: docs/DEPLOY-ROUTER.md
+#
+# File này CỐ Ý không chứa bí mật nào — token DuckDNS được đọc từ biến môi
+# trường DUCKDNS_TOKEN, đặt ở phạm vi Machine:
+#
+#     [Environment]::SetEnvironmentVariable("DUCKDNS_TOKEN", "<TOKEN>", "Machine")
+#
+# Nhờ vậy file này commit được, còn chìa khoá DNS thì không.
+# =====================================================================
+
+{
+	# Let's Encrypt gửi cảnh báo hết hạn về địa chỉ này.
+	email <email-cua-ban>
+
+	# Nhật ký ra đúng chỗ mà `aivb.ps1 logs` và docs/DEPLOY-ROUTER.md nhắc tới.
+	log {
+		output file C:\ProgramData\AIVBank\logs\caddy.log {
+			roll_size 10MiB
+			roll_keep 5
+		}
+		level INFO
+	}
+
+	# --- Khi gỡ rối, BẬT dòng dưới ------------------------------------
+	# Let's Encrypt chỉ cấp 5 chứng chỉ trùng tên mỗi tuần. Thử đi thử lại
+	# với máy chủ thật là hết hạn mức rồi phải chờ sang tuần. Máy chủ thử
+	# cấp chứng chỉ trình duyệt không tin, nhưng không tính vào hạn mức.
+	# acme_ca https://acme-staging-v02.api.letsencrypt.org/directory
+}
+
+<DOMAIN> {
+	# --- TLS bằng DNS-01 ----------------------------------------------
+	# DNS-01 chứ không phải HTTP-01, vì HTTP-01 đòi cổng 80 phải thông từ
+	# Internet vào — nhiều gói dân dụng ở Việt Nam chặn cổng đó. DNS-01 chỉ
+	# cần Caddy đặt được một bản ghi TXT, tức là chỉ cần token DuckDNS.
+	# Hệ quả: router chỉ phải mở đúng một cổng, 443.
+	tls {
+		dns duckdns {env.DUCKDNS_TOKEN}
+	}
+
+	# --- HSTS ---------------------------------------------------------
+	# Chưa nơi nào trong hệ thống đặt header này: không ở FastAPI, cũng không
+	# ở nginx trên VPS. Đây là chỗ hợp lý nhất.
+	#
+	# CẢNH BÁO: một khi trình duyệt đã ghi nhớ HSTS cho tên miền này, nó sẽ
+	# TỪ CHỐI mở bản HTTP trong đúng max-age, kể cả khi bạn muốn. Giữ max-age
+	# nhỏ (1 ngày) cho tới khi chắc chắn HTTPS đã ổn định, rồi mới nâng lên
+	# 31536000. Đừng bật `preload` — nó gần như không gỡ được.
+	header {
+		Strict-Transport-Security "max-age=86400"
+	}
+
+	# Nén những thứ backend không tự nén. Caddy bỏ qua các phản hồi đã có sẵn
+	# Content-Encoding, nên bản .gz dựng sẵn cho /vendor/ (backend/main.py
+	# dòng 1143-1173) vẫn đi qua nguyên vẹn, không bị nén hai lần.
+	encode zstd gzip
+
+	# Body tối đa 2 MB, khớp `client_max_body_size 2m` của nginx trên VPS.
+	# Console không nhận tải lên; CSV của khu vực sandbox được nạp hoàn toàn
+	# trong trình duyệt bằng DuckDB-WASM và không hề đi qua máy chủ.
+	request_body {
+		max_size 2MB
+	}
+
+	reverse_proxy 127.0.0.1:8000 {
+		# Một câu truy vấn nặng có thể chạy tới AIVB_QUERY_TIMEOUT_S rồi còn
+		# phải truyền kết quả về. 360s khớp proxy_read_timeout của nginx cũ.
+		transport http {
+			read_timeout 360s
+			write_timeout 360s
+		}
+
+		# Tắt đệm để kết quả chảy về ngay thay vì chờ gom đủ.
+		flush_interval -1
+
+		# backend/auth.py CỐ Ý bỏ qua X-Forwarded-For (nó do phía gọi đặt, mà
+		# nó lại nuôi bộ đếm khoá tài khoản). Thay vào đó uvicorn chạy với
+		# --proxy-headers --forwarded-allow-ips 127.0.0.1, tức là nó chỉ tin
+		# header này khi kết nối đến TỪ 127.0.0.1.
+		#
+		# Đó là lý do Caddy phải chạy CÙNG MÁY với uvicorn. Đem Caddy sang máy
+		# khác trong LAN thì IP thật của học viên sẽ mất, mọi người thành cùng
+		# một địa chỉ, và ngưỡng khoá theo IP (mặc định 20 lần sai) sẽ khoá
+		# nhầm cả lớp.
+		header_up X-Forwarded-Proto https
+	}
+}
+
+# --- Nếu ISP chặn cổng 443 -------------------------------------------
+# Đổi khối trên thành `<DOMAIN>:8443 { ... }`, forward 8443 trên router, và
+# sửa AIVB_CORS_ORIGINS trong api.env thành https://<DOMAIN>:8443 cho khớp.
+# Sai một chữ ở đó là trình duyệt chặn mọi lời gọi API, và thông báo lỗi sẽ
+# không nói gì về CORS.

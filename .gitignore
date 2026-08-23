@@ -1,0 +1,83 @@
+# =====================================================================
+# Web_SQL (app/) — những gì KHÔNG bao giờ vào git
+# =====================================================================
+# Trước tháng 8/2026 thư mục này không có .gitignore nào, và
+# backend/tests/test_auth.py::test_credential_files_are_git_ignored đã đỏ
+# suốt vì đúng lý do đó. Test ấy tồn tại vì một sự cố thật: một quy tắc
+# `*.parquet` được thêm SAU khi `git add -A` suýt commit meta_dirty_log.
+# Kho xác thực là cùng một hạng lỗi, nên nó có cùng một lớp bảo vệ.
+
+# ---------------------------------------------------------------------
+# 1. Bí mật và danh tính — mục quan trọng nhất trong file này
+# ---------------------------------------------------------------------
+# Kho credential, ở BẤT KỲ đâu trong cây, kèm mọi file phụ của SQLite.
+auth.sqlite3
+auth.sqlite3-*
+*/auth.sqlite3
+*/auth.sqlite3-*
+**/auth.sqlite3
+**/auth.sqlite3-*
+gamification.sqlite3
+gamification.sqlite3-*
+**/gamification.sqlite3
+**/gamification.sqlite3-*
+
+# Log audit chứa nguyên văn câu truy vấn của học viên, kèm ai chạy.
+audit.jsonl
+**/audit.jsonl
+
+# Toàn bộ config/ trừ đúng file mẫu. Đây là chỗ pg_secrets.env sống.
+config/*
+!config/.env.example
+
+# Mọi biến thể file bí mật khác.
+*.pem
+*.key
+*_secrets.env
+pg_superuser.txt
+
+# ---------------------------------------------------------------------
+# 2. Dữ liệu — quá lớn cho git, và một phần là đáp án chấm bài
+# ---------------------------------------------------------------------
+# Dump 1,5–2 GB mỗi file. README.md mục "Bản dump lấy ở đâu" giải thích
+# vì sao chúng đi bằng ổ cứng chứ không đi bằng git.
+database/dumps/
+*.dump
+
+# Tablespace PostgreSQL của SupplyChain — 9 GB dữ liệu vật lý sống
+# trong var/pgdata/. Kho đăng nhập của lớp sống ở var/auth/. Chặn cả var/
+# cho gọn: không có thứ gì trong đó là mã nguồn.
+var/
+
+# Bản sao dữ liệu nguồn nếu ai đó chép vào để nạp.
+database/source/
+*.parquet
+
+# ---------------------------------------------------------------------
+# 3. Thứ sinh ra được, không phải mã nguồn
+# ---------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+graphify-out/
+
+# Ảnh chụp màn hình lỗi trong lúc soạn bài — tư liệu làm việc, không phải
+# mã nguồn, và repo này công khai.
+Loi/
+
+# ---------------------------------------------------------------------
+# 4. Rác của hệ điều hành
+# ---------------------------------------------------------------------
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# ---------------------------------------------------------------------
+# KHÔNG bỏ qua: frontend/vendor/
+# ---------------------------------------------------------------------
+# CodeMirror và DuckDB-WASM được vendor CÓ CHỦ Ý (xem frontend/README.md
+# mục 3 và frontend/vendor/duckdb-wasm/PROVENANCE.md). Chúng phải đi cùng
+# kho, vì phòng máy có thể không ra được Internet và ở đây không có bước
+# build nào để tải chúng về.

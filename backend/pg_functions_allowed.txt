@@ -1,0 +1,219 @@
+# Danh sach ham PostgreSQL duoc phep trong truy van hoc vien.
+#
+# ==========================================================================
+# VI SAO LA DANH SACH CHO PHEP, KHONG PHAI DANH SACH CAM
+# ==========================================================================
+# Ban DuckDB suy ra tap ham an toan TU CHINH ENGINE (`duckdb_functions()`),
+# roi cam them mot nhum nho. Lam duoc vi DuckDB co ~1.200 ham va gan nhu tat
+# ca deu vo hai.
+#
+# `pg_proc` cua PostgreSQL 18 co ~3.300 dong, trong do hang tram ham doc file,
+# do catalog, hoac doi trang thai may chu. Neu port nguyen xi - doi
+# `duckdb_functions()` thanh `pg_proc` - thi nhanh fail-closed o
+# `api/guard.py` (cho `exp.Anonymous`) se AM THAM tro thanh fail-open cho
+# pg_read_file, pg_ls_dir, pg_sleep, to_regclass, pg_get_viewdef,
+# has_table_privilege va moi ham pg_stat_get_*.
+#
+# Vi vay chieu suy luan bi DAO NGUOC: file nay la nguon, con `pg_proc` chi
+# dung de KIEM CHUNG file nay (moi ten phai ton tai that; khong ten nao duoc
+# trung voi danh sach cam). Ca hai phep kiem chay luc khoi dong va lam API
+# KHONG khoi dong duoc neu that bai.
+#
+# Ba ly do danh sach cam khong du:
+#   1. PostgreSQL 18.1 co the them ham moi - danh sach cam nhan het theo mac
+#      dinh, danh sach cho phep tu choi het theo mac dinh.
+#   2. Mot lenh `CREATE EXTENSION` cua nguoi van hanh tuong lai them ca cum
+#      ham la - danh sach cam khong biet ten nao trong so do.
+#   3. Sot mot ten trong danh sach cam la mot lo hong; sot mot ten trong danh
+#      sach cho phep chi la mot hoc vien phai hoi giang vien.
+#
+# Them ten vao day la MO RONG be mat tan cong. Chi them khi co nhu cau day hoc
+# that, va kiem lai ham do khong doc file, khong do catalog, khong doi trang
+# thai.
+# ==========================================================================
+
+# --- Chuoi ---------------------------------------------------------------
+upper
+lower
+initcap
+substr
+substring
+length
+char_length
+character_length
+octet_length
+btrim
+ltrim
+rtrim
+lpad
+rpad
+replace
+translate
+split_part
+strpos
+position
+overlay
+left
+right
+repeat
+reverse
+concat
+concat_ws
+format
+to_char
+ascii
+chr
+md5
+starts_with
+regexp_replace
+regexp_match
+regexp_matches
+regexp_split_to_array
+regexp_split_to_table
+regexp_count
+regexp_instr
+regexp_like
+regexp_substr
+
+# --- So hoc --------------------------------------------------------------
+abs
+ceil
+ceiling
+floor
+round
+trunc
+sign
+mod
+power
+sqrt
+cbrt
+exp
+ln
+log
+log10
+div
+width_bucket
+random
+gcd
+lcm
+factorial
+
+# --- Ngay gio ------------------------------------------------------------
+date_trunc
+date_part
+date_bin
+extract
+age
+now
+statement_timestamp
+transaction_timestamp
+make_date
+make_time
+make_timestamp
+make_interval
+to_date
+to_timestamp
+to_number
+justify_days
+justify_hours
+justify_interval
+isfinite
+timezone
+
+# --- Ep kieu / dieu kien -------------------------------------------------
+to_json
+to_jsonb
+
+# KHONG liet ke o day (da kiem: chung khong co trong pg_proc):
+#     COALESCE  NULLIF  CAST  GREATEST  LEAST  TRIM
+#     CURRENT_DATE  CURRENT_TIME  CURRENT_TIMESTAMP  LOCALTIME  LOCALTIMESTAMP
+# Chung la CAU TRUC NGU PHAP cua SQL chu khong phai ham, nen PostgreSQL khong
+# co dong nao cho chung trong pg_proc, va sqlglot phan giai chung thanh lop
+# rieng (exp.Coalesce, exp.Cast, exp.Greatest, ...) chu khong phai exp.Anonymous.
+# Nhanh fail-closed o api/guard.py chi ap cho exp.Anonymous, nen chung khong
+# can - va khong duoc phep - nam trong file nay: moi dong o day phai la mot ten
+# that trong pg_proc, vi phep kiem luc khoi dong khang dinh dieu do.
+
+# --- Tong hop ------------------------------------------------------------
+count
+sum
+avg
+min
+max
+stddev
+stddev_pop
+stddev_samp
+variance
+var_pop
+var_samp
+mode
+percentile_cont
+percentile_disc
+string_agg
+array_agg
+json_agg
+jsonb_agg
+bool_and
+bool_or
+every
+corr
+covar_pop
+covar_samp
+regr_slope
+regr_intercept
+regr_r2
+regr_count
+regr_avgx
+regr_avgy
+regr_sxx
+regr_syy
+regr_sxy
+bit_and
+bit_or
+bit_xor
+
+# --- Ham cua so ----------------------------------------------------------
+row_number
+rank
+dense_rank
+percent_rank
+cume_dist
+ntile
+lag
+lead
+first_value
+last_value
+nth_value
+
+# --- Mang / JSON ---------------------------------------------------------
+array_length
+array_position
+array_positions
+array_to_string
+array_remove
+array_replace
+array_append
+array_prepend
+array_cat
+cardinality
+unnest
+string_to_array
+json_array_elements
+jsonb_array_elements
+json_array_elements_text
+jsonb_array_elements_text
+json_extract_path_text
+jsonb_extract_path_text
+json_object_keys
+jsonb_object_keys
+json_typeof
+jsonb_typeof
+json_build_object
+jsonb_build_object
+json_build_array
+jsonb_build_array
+
+# --- Ham tra ve tap hop AN TOAN ------------------------------------------
+# Chi sinh dong tu HANG SO, khong cham catalog hay he thong tap tin.
+generate_series
+generate_subscripts

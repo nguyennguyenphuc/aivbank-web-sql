@@ -1,0 +1,45 @@
+# =====================================================================
+# Build context của Docker — soi chiếu .gitignore, nhưng KHÔNG phải bản sao
+# =====================================================================
+# `docker/docker-compose.yml` đặt `context: ..`, tức là toàn bộ thư mục này
+# được gửi sang daemon trước khi Dockerfile chạy một dòng nào. Không có file
+# này thì context là **hơn 12 GB**:
+#
+#     var/pgdata/        9,2 GB   tablespace PostgreSQL của SupplyChain
+#     database/dumps/    2,7 GB   ba bản dump
+#     .venv/              85 MB
+#     graphify-out/       36 MB
+#
+# Và `COPY database/` trong Dockerfile sẽ nhét 2,7 GB dump vào image — hoàn
+# toàn thừa, vì compose đã mount `../database/dumps` vào service `restore`
+# dưới dạng volume chỉ-đọc. Image chỉ cần MÃ, không cần dữ liệu.
+
+# --- dữ liệu: không bao giờ vào image -------------------------------------
+var/
+database/dumps/
+database/source/
+*.dump
+*.parquet
+
+# --- bí mật ---------------------------------------------------------------
+# compose đưa chúng vào lúc chạy qua `env_file` và `secrets`, không qua image.
+config/
+!config/.env.example
+
+# --- thứ sinh ra được -----------------------------------------------------
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+graphify-out/
+
+# --- không liên quan đến lúc chạy -----------------------------------------
+Logo/
+CODEBASE_MAP.md
+.git/
+.gitignore
+
+# --- KHÔNG loại trừ: frontend/vendor/ -------------------------------------
+# CodeMirror và DuckDB-WASM (34 MB) phải nằm trong image. Không có bước build
+# nào tải chúng về, và phòng máy có thể không ra được Internet.

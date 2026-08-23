@@ -1,0 +1,308 @@
+/* =====================================================================
+   eDA (E2E Data Analytics) — design tokens
+   =====================================================================
+
+   The ONLY file in web/ that is allowed to contain a literal colour, a
+   literal spacing step, a literal radius, a literal shadow or a literal
+   font stack. styles.css consumes tokens and nothing else, so rebranding
+   this console means editing this file and only this file.
+
+   Brand source: assets/logo-mark.png (eDA — E2E Data Analytics, AI
+   Vietnam). The wordmark is a plain serif; the "DA" glyphs inside the
+   white disc measure #3D562A over 126,757 pixels (HSL 94° / 31% / 26%),
+   which is 8.19:1 on white — AAA for body text. The ramp below keeps H
+   and S and moves only lightness, so every step is the same hue as the
+   logo.
+
+   The 2026 rebrand from the "AI" mark to the "eDA" mark changed the
+   imagery but NOT the green: the new mark measures the same #3D562A, so
+   the ramp and every contrast figure below still hold as measured.
+   The mark's second colour — the sage "e" glyph, #95AE8D — is 2.41:1 on
+   white and is therefore NOT in the ramp: it is below even the 3:1 floor
+   and must never be used for text, icons or focus rings.
+
+   ACCESSIBILITY CONTRACT (verified numerically, not by eye):
+   every foreground/background pair actually used in styles.css is at
+   least 4.5:1 for normal text and 3:1 for >=18px text, icons and focus
+   rings. --ink-faint is 3.59:1 on white and is therefore restricted to
+   large decorative glyphs; it must never carry a sentence.
+   ===================================================================== */
+
+:root {
+
+  /* ---------------------------------------------------------------- brand */
+
+  --brand-50:  #F4F8F2;
+  --brand-100: #E4EDDE;
+  --brand-200: #CADCBC;
+  --brand-300: #A4C38D;
+  --brand-400: #7AA758;
+  --brand-500: #40582E;   /* centroid of the green pixel cluster */
+  --brand-600: #3D562A;   /* OFFICIAL logo colour — 8.19:1 on white */
+  --brand-700: #2C3E1E;   /* 11.57:1 on white */
+  --brand-800: #1D2815;
+  --brand-900: #131B0E;
+
+  /* ------------------------------------------------------------- neutrals */
+
+  --ink:       #1A1D18;   /* 17.03:1 on white — body copy            */
+  --ink-muted: #5A6154;   /*  6.42:1 on white — secondary copy       */
+  --ink-faint: #878787;   /*  3.59:1 on white — >=18px / icons ONLY  */
+  --on-brand:  #FFFFFF;   /* text that sits on a brand-600/700 fill  */
+  /* Translucent white for a <kbd> chip printed on a brand-filled button. Kept
+     translucent rather than solid so it reads as an inset, and light enough
+     that --on-brand text over it stays well past 4.5:1. */
+  --on-brand-inset: rgba(255, 255, 255, .22);
+  --scrim: rgba(19, 27, 14, .48);
+
+  /* ------------------------------------------------------------- surfaces */
+
+  --surface:         #FFFFFF;   /* panels, cards, the login card       */
+  --surface-sunken:  #F3F6F1;   /* page background behind the panels   */
+  --surface-muted:   #E4EDDE;   /* grid header, chips, quiet fills     */
+  --surface-zebra:   #FAFBF9;   /* even result rows                    */
+  --surface-hover:   #EDF3E9;   /* row / list-item hover               */
+  --surface-code:    #F7F9F5;   /* <pre> blocks, executed-SQL panel    */
+  --surface-raised:  #FFFFFF;
+  --surface-brand:   #F8FAF6;
+
+  /* ---------------------------------------------------------------- lines */
+
+  --line:        #D3DCCC;
+  --line-soft:   #E8EDE4;
+  --line-strong: #B6C4AC;
+
+  /* ------------------------------------------------------------- semantic */
+
+  --danger:      #B91C1C;   /* 6.47:1 on white                        */
+  --danger-ink:  #8F1616;   /* 8.05:1 on --danger-bg                  */
+  --danger-bg:   #FCEDED;
+  --danger-line: #EFC4C4;
+
+  --warning:      #B45309;  /* 5.02:1 on white; white on it is 5.02:1 */
+  --warning-bg:   #FDF2E4;
+  --warning-line: #E7B77A;
+
+  --info-bg:   #EAF1E5;
+  --info-line: #B6C4AC;
+
+  --ok:      var(--brand-700);
+  --ok-bg:   var(--brand-100);
+  --ok-line: var(--line-strong);
+
+  /* ------------------------------------------------- result-value accents
+     Type-coded cells help students read a wide grid fast. All measured
+     against both --surface and --surface-zebra (worst case >= 7.1:1). */
+
+  --value-num:      var(--ink);
+  --value-null:     var(--ink-muted);
+  --value-bool:     #5B21B6;   /* 8.98:1 on white */
+  --value-temporal: #0F5F5A;   /* 7.49:1 on white */
+  --value-json:     #7C4A03;   /* 7.40:1 on white */
+  --value-blob:     var(--ink-muted);
+
+  /* ------------------------------------------------------------ typography
+     System stacks only. Nothing is fetched from a CDN and no font file is
+     bundled, so the console behaves identically offline. */
+
+  /* Georgia DA BI GO KHOI DANH SACH NAY, va no phai o ngoai.
+   *
+   * Georgia khong co phan lon chu tieng Viet: chung nam o khoi Latin Extended
+   * Additional (U+1EXX), va Georgia bo trong gan het khoi do. Do bang canvas
+   * tren Windows 11, sau khi thay logo: Georgia phu 1/6 ky tu thu
+   * (e-de-u ngan, u-mo, o-nang, a-nang, e-hoi, a-nang-mu); Cambria, Constantia
+   * va Palatino Linotype phu 6/6; Times New Roman phu 5/6.
+   *
+   * Hau qua khi Georgia dung dau: trinh duyet lay chu cai tu Georgia roi di tim
+   * DAU o mot font khac va chong len - "dieu" hien ra thanh "die `u", dau huyen
+   * troi ben canh chu. Khong test nao bat duoc; no chi hien ra tren man hinh.
+   *
+   * Day la giao dien tieng Viet, nen mot font serif dep ma khong danh duoc dau
+   * thi khong dung duoc. Neu doi danh sach nay, do lai truoc khi doi. */
+  --font-serif: Cambria, Constantia, "Palatino Linotype", "Times New Roman",
+                "Liberation Serif", "Nimbus Roman", "Noto Serif", serif;
+  --font-sans:  -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+                "Helvetica Neue", "Noto Sans", Arial, sans-serif;
+  --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
+                "Liberation Mono", "DejaVu Sans Mono", monospace;
+
+  --text-2xs: 10.5px;
+  --text-xs:  11.5px;
+  --text-sm:  12.5px;
+  --text-md:  13.5px;
+  --text-base: 14.5px;
+  --text-lg:  16px;
+  --text-xl:  19px;
+  --text-2xl: 24px;
+
+  --leading-tight: 1.25;
+  --leading-normal: 1.5;
+  --leading-loose: 1.65;
+
+  --weight-normal: 400;
+  --weight-medium: 600;
+  --weight-bold: 700;
+
+  --tracking-wide: .06em;
+  --tracking-wider: .1em;
+
+  /* --------------------------------------------------------------- spacing
+     4px base step; every padding/margin/gap in styles.css picks from here. */
+
+  --space-0: 0;
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 6px;
+  --space-4: 8px;
+  --space-5: 10px;
+  --space-6: 12px;
+  --space-7: 16px;
+  --space-8: 20px;
+  --space-9: 24px;
+  --space-10: 32px;
+  --space-11: 40px;
+
+  /* ---------------------------------------------------------------- radius */
+
+  --radius-xs: 3px;
+  --radius-sm: 7px;
+  --radius-md: 10px;
+  --radius-lg: 16px;
+  --radius-pill: 999px;
+
+  /* --------------------------------------------------------------- shadows
+     Tinted with the brand hue rather than pure black, so panels sit on the
+     background instead of looking cut out of it. */
+
+  --shadow-xs: 0 1px 2px rgba(29, 40, 21, .05);
+  --shadow-sm: 0 2px 8px rgba(29, 40, 21, .07), 0 1px 2px rgba(29, 40, 21, .04);
+  --shadow-md: 0 8px 24px rgba(29, 40, 21, .10), 0 2px 6px rgba(29, 40, 21, .05);
+  --shadow-lg: 0 24px 64px rgba(29, 40, 21, .16), 0 4px 12px rgba(29, 40, 21, .07);
+
+  /* ----------------------------------------------------------------- focus
+     3px ring at 8.19:1 against every surface it can land on. Never removed
+     for mouse users either: a visible focus ring is not a style choice. */
+
+  --focus-ring: 2px solid var(--brand-600);
+  --focus-offset: 2px;
+
+  /* ------------------------------------------------------------------ misc */
+
+  --topbar-h: 64px;
+  --sidebar-w: 304px;
+  --control-h: 44px;
+  --control-h-sm: 44px;   /* .btn-sm and .icon-btn; shrinks on short screens */
+  --touch-target: 44px;   /* list rows a finger must hit; never shrinks       */
+
+  /* ------------------------------------------------------- vertical budget
+     A 13" laptop gives the page ~560-620 CSS px of viewport height. Every
+     band above the result grid is fixed-height, and .grid-wrap is the only
+     element that absorbs what is left, so on a short screen the grid is what
+     collapses — down to the sticky header alone. These tokens are the dials
+     the @media (max-height) tiers at the bottom of this file turn; styles.css
+     only reads them, so the whole vertical budget lives in one place. */
+
+  --editor-min-h: 220px;      /* floor of the editor row in .workspace     */
+  --editor-row-h: 40%;        /* editor's share once above the floor       */
+  --editor-max-h: 300px;      /* ceiling: past this the editor is just idle
+                                 whitespace and the rows below want it     */
+  --workspace-pad: var(--space-7);
+  --workspace-gap: var(--space-7);
+  --toolbar-h: 64px;
+  --tab-h: var(--touch-target);
+  --meta-pad-y: var(--space-4);
+  --banner-pad-y: var(--space-5);
+  --banner-mt: var(--space-5);
+  --cell-pad-y: var(--space-3);
+  --colhead-pad-y: var(--space-4);
+  --colhead-type-display: block;   /* column type sits under the name      */
+  --colhead-type-gap: var(--space-0);
+  --hint-line-display: block;
+  --z-base: 0;
+  --z-sticky: 10;
+  --z-drawer: 40;
+  --z-modal: 100;
+  --duration-fast: 120ms;
+  --duration-base: 180ms;
+  --ease: cubic-bezier(.4, 0, .2, 1);
+  --cell-max-w: 420px;
+}
+
+/* Motion is opt-out at the token level, so a component author cannot forget:
+   every transition/animation in styles.css resolves through these. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration-fast: 0ms;
+    --duration-base: 0ms;
+  }
+}
+
+/* =====================================================================
+   RESPONSIVE VERTICAL BUDGET
+
+   Order matters and is deliberate: the width tier comes first, the two
+   height tiers after it. Same specificity, so source order decides, and a
+   short screen must win over a narrow one — a 600x560 phone in landscape
+   needs the height tier, not the tablet layout.
+
+   The numbers are not taste. They are what it takes to leave the result
+   grid ~10 visible rows on the viewport heights a 13" laptop actually
+   produces (~560-620 CSS px after browser chrome and taskbar).
+   ===================================================================== */
+
+@media (max-width: 900px) {
+  :root {
+    /* Sidebar becomes a drawer here, so the editor can afford to be taller. */
+    --editor-min-h: 250px;
+    --editor-row-h: 44%;
+    --workspace-pad: var(--space-5);
+    --workspace-gap: var(--space-5);
+    --toolbar-h: 56px;
+  }
+}
+
+/* Tier 1 — 13"/14" laptops. The editor gives up its 220px floor: four lines
+   of SQL is enough to read a query, two rows of results is not enough to
+   read an answer. */
+@media (max-height: 800px) {
+  :root {
+    --topbar-h: 52px;
+    --editor-min-h: 156px;
+    --editor-row-h: 30%;
+    --workspace-pad: var(--space-5);
+    --workspace-gap: var(--space-5);
+    --toolbar-h: 48px;
+    /* Measured, not guessed: the top bar, the toolbar and the result-meta row
+       are all taller than their own min-height because a 44px control sets
+       their height. Three bands x ~12px is more than the editor gives back. */
+    --control-h: 36px;
+    --control-h-sm: 32px;
+    /* Below --touch-target on purpose. This tier is keyed on viewport HEIGHT,
+       which selects laptops driven by a mouse, not upright tablets; 38px is
+       still a comfortable pointer target. */
+    --tab-h: 38px;
+    --meta-pad-y: var(--space-2);
+    --banner-pad-y: var(--space-3);
+    --banner-mt: var(--space-3);
+    --cell-pad-y: var(--space-2);
+    --colhead-pad-y: var(--space-2);
+    /* "settlement_id VARCHAR" on one line: the sticky header was 52px, taller
+       than 1.6 result rows, and it is on screen permanently. */
+    --colhead-type-display: inline;
+    --colhead-type-gap: var(--space-3);
+  }
+}
+
+/* Tier 2 — 1366x768 with a bookmarks bar, or browser zoom >= 110%. */
+@media (max-height: 640px) {
+  :root {
+    --topbar-h: 46px;
+    --editor-min-h: 128px;
+    --editor-row-h: 26%;
+    --toolbar-h: 44px;
+    --tab-h: 34px;
+    --control-h: 34px;
+    --control-h-sm: 30px;
+    --hint-line-display: none;   /* the Ctrl+Enter tip yields its ~30px */
+  }
+}

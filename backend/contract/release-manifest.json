@@ -1,0 +1,70 @@
+{
+  "manifest_version": "AIV-RELEASE-MANIFEST-v1.1",
+  "package_id": "AIV_BANK_OWNER_V5164_INTERNAL",
+  "package_version": "5.1.6.4",
+  "status": "FINAL_STANDALONE_GENERATOR_CONTRACT",
+  "language": "vi-VN",
+  "parameter_book": "03_eDA_parameter_book_mini_core_banking_v5.1.6.4_FULL.xlsx",
+  "parameter_book_sheet_count": 47,
+  "normative_file": "01_cau_hinh_owner_v1.0.json",
+  "normative_file_sha256": "1ae03ebf95021252721516e2b2229ff7d294f9501236c2c5935eeaefde8dceee",
+  "hash_contract_id": "E-QA-HASHPLATFORM-v1.0",
+  "release_tree_sha256": "877530bcf8b9504d14be9a9b02ebcbfe98ec0a49c5332f38ba905718713f9db5",
+  "release_tree_record_count": 5,
+  "release_tree_self_excluded": true,
+  "content_summary": {
+    "physical_tables": 100,
+    "required_tables": 67,
+    "optional_or_derived_tables": 33,
+    "column_contracts": 611,
+    "dependency_records": 113,
+    "generation_rules": 33,
+    "validation_contracts": 81,
+    "duckdb_sql_validations": 80,
+    "config_audit_validations": 1,
+    "runtime_acceptance_gates": 49,
+    "blocking_runtime_gates": 48,
+    "advisory_runtime_gates": 1,
+    "generator_patch_records": 19,
+    "business_calendar_overrides": 51,
+    "approved_decisions": 10
+  },
+  "release_policy": {
+    "release_eligible": "computed only after fresh candidate QA",
+    "atomic_promotion": true,
+    "previous_release_retained": true
+  },
+  "files": [
+    {
+      "path": "00_README_FULL.md",
+      "sha256": "abf01f7e1676a36bb238b6a2b2d15ba2e5d7541cb66c8d72f544dc331175c535",
+      "size_bytes": 8215
+    },
+    {
+      "path": "01_cau_hinh_owner_v1.0.json",
+      "sha256": "1ae03ebf95021252721516e2b2229ff7d294f9501236c2c5935eeaefde8dceee",
+      "size_bytes": 203201
+    },
+    {
+      "path": "02_ref_business_calendar_override_v1.0.csv",
+      "sha256": "84a80ce7fbb989cc8c0f9700f2e06ea89705a018cbd70554c914ff7c8d6ccbf5",
+      "size_bytes": 6677
+    },
+    {
+      "path": "03_eDA_parameter_book_mini_core_banking_v5.1.6.4_FULL.xlsx",
+      "sha256": "cd9b5eb6a2ed3425165971f5c9692925fb6399c2255cd1607a931dc0fb4ee246",
+      "size_bytes": 288418
+    },
+    {
+      "path": "04_kiem_tra_va_tham_chieu.py",
+      "sha256": "c06d5e71250abdcaa726067d009f4dda7b572b76de88c1a7fd51bfa9f774da56",
+      "size_bytes": 35159
+    },
+    {
+      "path": "05_release_manifest_v5.1.6.4.json",
+      "sha256": null,
+      "size_bytes": 2844
+    }
+  ],
+  "calendar_coverage_semantics_vi": "Dữ liệu hoạt động/giao dịch chuẩn chỉ sinh đến 2026-12-31. Ngày 2027-01-04 chỉ là T+1 terminal để tất toán hoặc reversal clearing cuối kỳ. Lịch phủ đến 2027-01-15 là vùng đệm cho phép tính ngày làm việc và rerun; không mở rộng kỳ mô phỏng và không cho sinh giao dịch kinh doanh mới sau 2026-12-31."
+}

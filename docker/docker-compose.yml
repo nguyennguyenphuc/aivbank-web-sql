@@ -1,0 +1,127 @@
+# AIV Bank — dựng toàn bộ hệ thống bằng một lệnh.
+#
+#     cd app/docker && docker compose up
+#
+# Frontend KHÔNG có service riêng: nó là file tĩnh do backend phục vụ ở `/`.
+# Muốn thay frontend thì đổi `AIVB_FRONTEND_DIR` và mount thư mục build vào —
+# xem ../ARCHITECTURE.md mục 5.
+
+services:
+  postgres:
+    image: postgres:18
+    environment:
+      POSTGRES_PASSWORD_FILE: /run/secrets/pg_superuser
+      # BUILTIN_LOCALE 'C' là BẮT BUỘC, không phải tinh chỉnh. Sai collation
+      # làm `ORDER BY`/`min`/`max`/`LIKE` ra kết quả khác, tức là đáp án chấm
+      # bài sai — và phép kiểm md5 hoàn toàn mù với nó nên vẫn báo PASS.
+      # Ép ở đây vì `pg_restore` KHÔNG sửa được collation sau khi database
+      # đã tồn tại.
+      POSTGRES_INITDB_ARGS: "--locale-provider=builtin --builtin-locale=C --encoding=UTF8"
+    secrets:
+      - pg_superuser
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    # Không publish cổng ra ngoài ở đây. Muốn cho Power BI vào thì mở có chủ
+    # đích — phơi 5432 ra internet là phơi cả đường thực thi mã qua
+    # `COPY ... FROM PROGRAM` nếu ai đó vào được bằng superuser.
+    expose:
+      - "5432"
+
+  restore:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIVB_PG_HOST: postgres
+      PGPASSWORD_FILE: /run/secrets/pg_superuser
+    secrets:
+      - pg_superuser
+    volumes:
+      - ../database/dumps:/app/database/dumps:ro
+    # Chạy một lần rồi thoát. Tự nghiệm thu ở cuối: đủ 77/100 bảng, collation
+    # đúng, và đáp án chấm bài KHÔNG có trong database học viên.
+    command: ["python", "database/restore.py", "restore", "--host", "postgres"]
+    restart: "no"
+
+  # SupplyChain di duong RIENG, khong ghep vao `restore` o tren.
+  #
+  # `restore.py` la cong cu cua AIV Bank: no phuc hoi hai database tu dump va tu
+  # nghiem thu theo hop dong 77/100 bang. SupplyChain co hop dong khac (20 bang,
+  # 136.586.733 dong) va duoc dung boi `load_scm.py`. Nhet ca hai vao mot lenh se
+  # lam `restore.py restore` tuyen bo lo mot database ma no khong biet kiem - dung
+  # kieu doi tra ma lop nghiem thu nay ton tai de chan.
+  #
+  # Bo du lieu nay LA TUY CHON: khong co database/dumps/scm.dump thi service noi
+  # ra roi thoat 0, va backend van len voi mot bo du lieu.
+  restore-scm:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      AIVB_PG_HOST: postgres
+    secrets:
+      - pg_superuser
+    volumes:
+      - ../database/dumps:/app/database/dumps:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        if [ ! -f database/dumps/scm.dump ]; then
+          echo "khong co database/dumps/scm.dump - bo qua bo du lieu SupplyChain"
+          exit 0
+        fi
+        PGPASSWORD="$$(cat /run/secrets/pg_superuser)"; export PGPASSWORD
+        psql -h postgres -U postgres -f database/schema/10_scm_roles.sql
+        psql -h postgres -U postgres -f database/schema/11_scm_database.sql
+        pg_restore -h postgres -U postgres -d scm --no-owner --no-privileges              --jobs 4 database/dumps/scm.dump
+        psql -h postgres -U postgres -d scm -f database/schema/12_scm_schema_grants.sql
+        AIVB_SCM_LOAD_USER=postgres python database/load_scm.py verify
+    restart: "no"
+
+  backend:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    depends_on:
+      restore:
+        condition: service_completed_successfully
+      restore-scm:
+        condition: service_completed_successfully
+    env_file:
+      - ../config/app.env
+    environment:
+      AIVB_PG_HOST: postgres
+      # Trong container, backend nghe 0.0.0.0 vì biên mạng là chính container.
+      # Trên máy trần thì phải là 127.0.0.1 — xem ../scripts/setup.sh.
+      AIVB_PG_SSLMODE: disable
+    volumes:
+      - ../config:/app/config:ro
+      - appvar:/app/var
+    ports:
+      - "127.0.0.1:8000:8000"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/health')\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+secrets:
+  pg_superuser:
+    file: ../config/pg_superuser.txt
+
+volumes:
+  pgdata:
+  appvar:
