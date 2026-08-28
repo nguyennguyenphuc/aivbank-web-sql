@@ -5,10 +5,23 @@ FROM python:3.11-slim
 
 # postgresql-client: `restore.py` gọi pg_dump/pg_restore/psql thật, không tự
 # viết lại logic phục hồi. Phải khớp phiên bản server (18).
-RUN apt-get update \
- && apt-get install -y --no-install-recommends postgresql-client-18 curl ca-certificates \
- || (apt-get install -y --no-install-recommends postgresql-client curl ca-certificates) \
- && rm -rf /var/lib/apt/lists/*
+# Kho apt cua Debian KHONG co postgresql-client-18, nen nhanh du phong cu
+# (`|| apt-get install postgresql-client`) am tham cai ban 17 - va pg_restore 17
+# TU CHOI archive v1.16 do pg_dump 18 sinh ra. Phai lay tu kho PGDG, va neu
+# khong lay duoc thi DUNG BUILD, khong duoc am tham roi xuong ban thap hon.
+RUN set -eux; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends curl ca-certificates gnupg; \
+    install -d /usr/share/postgresql-common/pgdg; \
+    curl -fsSL https://www.postgresql.org/media/keys/ACCC4CF8.asc \
+        -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc; \
+    . /etc/os-release; \
+    echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $VERSION_CODENAME-pgdg main" \
+        > /etc/apt/sources.list.d/pgdg.list; \
+    apt-get update; \
+    apt-get install -y --no-install-recommends postgresql-client-18; \
+    pg_restore --version | grep -q " 18\." || (echo "KHONG lay duoc client 18" >&2; exit 1); \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
 

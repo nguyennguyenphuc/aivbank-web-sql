@@ -1,0 +1,57 @@
+# Vá ba chỗ của `docker-compose.yml` khiến `docker compose up` không chạy được.
+# Để riêng ra đây thay vì sửa file gốc: compose tự nạp override, và bản gốc vẫn
+# đối chiếu được với repo thượng nguồn.
+#
+#   D2  service `restore` đặt `PGPASSWORD_FILE`, nhưng libpq KHÔNG đọc biến đó
+#       (nó đọc `PGPASSWORD` / `PGPASSFILE`) nên `psql -U postgres` bị từ chối
+#       vì thiếu mật khẩu. `restore-scm` dòng 86 đã làm đúng — đây là chỗ sót.
+#   D3  `restore` không mount `../config`, nên không thấy `pg_secrets.env` —
+#       thứ mà `database/restore.py` cần để truyền `-v pw_*` cho `01_roles.sql`.
+#   D4  kho auth mặc định là `/app/var/auth/` nằm trong named volume `appvar`,
+#       nên `auth.sqlite3` của lớp không có đường vào. Bind mount thư mục thật.
+
+services:
+  # Lane Power BI: publish 5432 cua container ra cong 5433 cua host.
+  #
+  # 5433 chu khong phai 5432 vi PostgreSQL 16 cua Windows dang giu 127.0.0.1:5432.
+  # Muon dung cong 5432 cho gon thi phai tat PG16 truoc.
+  #
+  # AN TOAN CUA VIEC NAY NAM O pg_hba, KHONG PHAI O CHO KHONG AI BIET CONG:
+  # moi ket noi di qua cong publish deu toi PostgreSQL voi dia chi nguon
+  # 172.18.0.1 (gateway cua bridge), va database/schema/14_pg_hba_docker.conf
+  # chi cho DUNG ba vai tro BI di duong do, roi `reject` tat ca phan con lai.
+  # `postgres`, `aivb_owner`, `aivb_loader` va cac vai tro `*_api` khong bao gio
+  # dang nhap duoc tu ngoai, du co dung mat khau.
+  postgres:
+    ports:
+      - "5433:5432"
+
+  restore:
+    volumes:
+      - ../database/dumps:/app/database/dumps:ro
+      - ../config:/app/config:ro
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        PGPASSWORD="$$(cat /run/secrets/pg_superuser)"; export PGPASSWORD
+        exec python database/restore.py restore --host postgres
+
+  # D8  `load_scm.py verify` luon bao hong muc "tablespace nam ngoai Web_SQL" khi
+  #     bo tablespace theo dung khuyen nghi — duong tinh gia da ghi o MIGRATION.md
+  #     §3.3. Nhung no lam service thoat 1, ma `backend` depends_on
+  #     service_completed_successfully, nen backend khong bao gio khoi dong lai duoc.
+  #     Ngoai ra compose khong he dat mat khau cho 3 vai tro SCM (`10_scm_roles.sql`
+  #     tao chung voi PASSWORD NULL). Ca hai duoc xu ly trong restore-scm.sh.
+  restore-scm:
+    volumes:
+      - ../database/dumps:/app/database/dumps:ro
+      - ../config:/app/config:ro
+      - ../docker/restore-scm.sh:/app/restore-scm.sh:ro
+    command: ["sh", "/app/restore-scm.sh"]
+
+  backend:
+    volumes:
+      - ../config:/app/config:ro
+      - ../var/auth:/app/var/auth

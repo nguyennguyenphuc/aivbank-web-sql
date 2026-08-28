@@ -16,11 +16,29 @@ services:
       # bài sai — và phép kiểm md5 hoàn toàn mù với nó nên vẫn báo PASS.
       # Ép ở đây vì `pg_restore` KHÔNG sửa được collation sau khi database
       # đã tồn tại.
+      #
+      # ⚠ Dong nay CHI co tac dung o lan `initdb` DAU TIEN cua volume. Mot cum
+      # da duoc tao ra khong co no se giu collation sai VINH VIEN, va khong lan
+      # `docker compose up` nao sua duoc - do chinh la ly do `restore.py
+      # cmd_verify` co mot phep kiem HANH VI (`SELECT 'a' < 'B'`) chu khong chi
+      # doc cau hinh.
       POSTGRES_INITDB_ARGS: "--locale-provider=builtin --builtin-locale=C --encoding=UTF8"
     secrets:
       - pg_superuser
     volumes:
-      - pgdata:/var/lib/postgresql/data
+      # postgres:18 KHONG cho mount vao `/var/lib/postgresql/data` nua: tu 18 image
+      # luu du lieu theo thu muc rieng cho tung major version (`.../18/docker`) de
+      # `pg_upgrade --link` khong vuong ranh gioi mount. Mount vao dung
+      # `/var/lib/postgresql`. Dong cu la quy uoc cua postgres:16/17, va no lam
+      # container thoat 1 ngay khi khoi dong.
+      # https://github.com/docker-library/postgres/pull/1259
+      #
+      # ⚠ TREN MOT MAY DA CO `pgdata` TAO RA DUOI MOUNT CU: file PGDATA nam o
+      # GOC volume, nen mount vao diem moi se lam entrypoint thay `18/docker`
+      # trong, chay `initdb`, va cum cu tro thanh VO HINH - ke ca `aivb_app`.
+      # `scripts\Check-PgVolume.ps1` bat dung tinh huong do va `aivb.cmd up`
+      # goi no truoc khi len; `scripts\Migrate-PgVolume.ps1` doi tai cho.
+      - pgdata:/var/lib/postgresql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
