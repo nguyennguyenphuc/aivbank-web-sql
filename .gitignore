@@ -75,6 +75,36 @@ desktop.ini
 .DS_Store
 
 # ---------------------------------------------------------------------
+# 5. Rác lọt vào cây làm việc — KHÔNG phải mã nguồn
+# ---------------------------------------------------------------------
+# Tháng 8/2026 một thao tác chép nhầm đã đổ nguyên gốc ổ đĩa Windows vào
+# `scripts/`: ~600 MB thư mục hệ thống, cộng một bản cài Anaconda vài GB.
+# Cùng lúc hai archive Google Takeout 2,7 GB nằm ở thư mục gốc. Không rule
+# nào lúc đó chặn được chúng, nên một lần `git add -A` là đủ để đẩy cả
+# khối lên một repo CÔNG KHAI.
+#
+# `/*.zip` chứ không `*.zip`: rule không neo sẽ chặn cả zip trong
+# `frontend/vendor/`, nơi repo CỐ Ý vendor tài nguyên (xem khối cuối file).
+# `/Router.png` chứ không `*.png`: repo đang theo dõi 5 PNG hợp lệ trong
+# `Logo/` và `frontend/assets/`.
+#
+# `scripts/` không có thư mục con hợp lệ nào — mọi thứ trong đó là file
+# .ps1 phẳng. Vẫn liệt kê tường minh thay vì `scripts/*/`, để một thư mục
+# con hợp lệ trong tương lai không bị bỏ qua trong im lặng.
+/*.zip
+/Web_SQL/
+scripts/$Recycle.Bin/
+scripts/$SysReset/
+scripts/$WINDOWS.~BT/
+scripts/$Windows.~WS/
+scripts/adobeTemp/
+scripts/anaconda3/
+
+# Ảnh chụp trang cấu hình router — tư liệu làm việc, và nó lộ topology
+# mạng nhà. Cùng hạng với `Loi/` ở mục 3.
+/Router.png
+
+# ---------------------------------------------------------------------
 # KHÔNG bỏ qua: frontend/vendor/
 # ---------------------------------------------------------------------
 # CodeMirror và DuckDB-WASM được vendor CÓ CHỦ Ý (xem frontend/README.md
