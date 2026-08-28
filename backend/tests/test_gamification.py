@@ -3,8 +3,8 @@ from __future__ import annotations
 from backend.gamification import DAILY_STAR_CAP, GamificationStore
 
 
-def test_first_query_reward_is_idempotent(tmp_path):
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+def test_first_query_reward_is_idempotent(gami_store):
+    store = gami_store
     first = store.record_success("student", "SELECT 1", [])
     duplicate = store.record_success("student", "  select   1 ", [])
     assert first["stars_earned"] == 1
@@ -12,52 +12,48 @@ def test_first_query_reward_is_idempotent(tmp_path):
     assert duplicate["stars"] == 1
     assert duplicate["today_unique_queries"] == 1
     assert any(item["code"] == "first_query" for item in first["new_achievements"])
-    store.close()
 
 
-def test_daily_cap_and_query_count(tmp_path):
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+def test_daily_cap_and_query_count(gami_store):
+    store = gami_store
     for index in range(20):
         store.record_success("student", f"SELECT {index}", [])
     summary = store.record_success("student", "SELECT 999", [])
     assert summary["today_stars"] == DAILY_STAR_CAP
     assert summary["stars"] == DAILY_STAR_CAP
     assert summary["today_queries"] == 21
-    store.close()
 
 
-def test_leaderboard_orders_stars(tmp_path):
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+def test_leaderboard_orders_stars(gami_store):
+    store = gami_store
     store.record_success("alice", "SELECT 1", [])
     store.record_success("bob", "SELECT 2", [])
     store.record_success("bob", "SELECT 3", [])
-    board = store.leaderboard("day")
+    board = store.leaderboard("day", only=frozenset({"alice", "bob"}))
     assert board[0]["username"] == "bob"
     assert board[0]["stars"] > board[1]["stars"]
-    store.close()
 
 
-def test_all_time_leaderboard_carries_the_streak(tmp_path):
+def test_all_time_leaderboard_carries_the_streak(gami_store):
     """Ky `all` cong don tu truoc toi nay va mang them cot chuoi ngay.
 
     Cac ky theo lich chi doc `practice_daily` nen khong biet chuoi ngay; chung
     tra `streak = None` chu khong tra 0, de giao dien phan biet duoc "khong co so
     lieu" voi "chuoi bang khong".
     """
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+    store = gami_store
     store.record_success("alice", "SELECT 1", [])
     store.record_success("bob", "SELECT 2", [])
     store.record_success("bob", "SELECT 3", [])
 
-    board = store.leaderboard("all")
+    board = store.leaderboard("all", only=frozenset({"alice", "bob"}))
     assert [row["username"] for row in board] == ["bob", "alice"]
     assert board[0]["queries"] == 2
     assert board[0]["streak"] == 1
-    assert store.leaderboard("day")[0]["streak"] is None
-    store.close()
+    assert store.leaderboard("day", only=frozenset({"alice", "bob"}))[0]["streak"] is None
 
 
-def test_only_cuts_before_the_limit(tmp_path):
+def test_only_cuts_before_the_limit(gami_store):
     """`only` phai loc TRONG SQL, truoc `LIMIT`.
 
     Loc bang Python sau khi da lay ve la cach hong de mac nhat: xin 3 dong thi
@@ -65,7 +61,7 @@ def test_only_cuts_before_the_limit(tmp_path):
     loai thi cang cut. Phep kiem nay dat hai nguoi bi loai len DAU bang de kieu
     hong do lo ra ngay.
     """
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+    store = gami_store
     # gv1/gv2 nhieu diem nhat -> ho se chiem het cho neu loc sai thu tu.
     for name, runs in (("gv1", 5), ("gv2", 4), ("sv1", 3), ("sv2", 2), ("sv3", 1)):
         for index in range(runs):
@@ -76,36 +72,36 @@ def test_only_cuts_before_the_limit(tmp_path):
         names = [row["username"] for row in board]
         assert names == ["sv1", "sv2", "sv3"], f"ky {period}: {names}"
         assert [row["rank"] for row in board] == [1, 2, 3], f"ky {period} danh so sai"
-    store.close()
 
 
-def test_only_none_means_everyone_but_empty_means_nobody(tmp_path):
+def test_only_none_means_everyone_but_empty_means_nobody(gami_store):
     """`None` va `frozenset()` PHAI khac nhau.
 
     Neu lan nhau thi mot lop chua co hoc vien nao se hien ra TOAN BO diem con
     sot trong kho - ke ca cua tai khoan da xoa tu lau.
     """
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+    store = gami_store
     store.record_success("alice", "SELECT 1", [])
-    assert [row["username"] for row in store.leaderboard("all")] == ["alice"]
+    # `only=None` = KHONG gioi han. Khong khang dinh bang chi co alice nua:
+    # ca bo test dung chung mot database. Dieu can chung minh la None khac
+    # frozenset(), va no van duoc chung minh.
+    assert "alice" in [row["username"] for row in store.leaderboard("all")]
     assert store.leaderboard("all", only=frozenset()) == []
     assert store.leaderboard("day", only=frozenset()) == []
-    store.close()
 
 
-def test_only_hides_names_the_roster_no_longer_knows(tmp_path):
+def test_only_hides_names_the_roster_no_longer_knows(gami_store):
     """Diem cua tai khoan da xoa khong duoc o lai bang.
 
     Kho nay giu diem theo TEN, khong co khoa ngoai toi tai khoan - nen xoa tai
     khoan khong xoa diem. Mot danh sach LOAI TRU se bo sot dung truong hop nay:
     khong ai con biet `cuu_giang_vien` tung la giang vien de ma loai.
     """
-    store = GamificationStore(tmp_path / "rewards.sqlite3")
+    store = gami_store
     for name in ("cuu_giang_vien", "da_nghi_hoc", "sv_dang_hoc"):
         store.record_success(name, f"SELECT '{name}'", [])
     board = store.leaderboard("all", only=frozenset({"sv_dang_hoc"}))
     assert [row["username"] for row in board] == ["sv_dang_hoc"]
-    store.close()
 
 
 def test_gamification_requires_session(anon_client):

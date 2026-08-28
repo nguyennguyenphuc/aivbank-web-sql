@@ -10,8 +10,12 @@ EACH SIMULATED STUDENT SIGNS IN FIRST. That is not decoration: every data
 endpoint has required a session since API 1.3.0, and this script predated it -
 it was reporting "10 students -> {401: 10}, p50 0.00s" and calling it a result.
 An unauthenticated 401 costs nothing and measures nothing, so the numbers were
-silently meaningless. The throwaway credential store is created in a temp
-directory and deleted on exit; it never touches _workspace/auth/.
+silently meaningless.
+
+Tai khoan do KHONG con la file tam nua. Tu khi danh tinh chuyen sang
+`pg_authid`, `ops_load_probe` la mot VAI TRO PostgreSQL THAT va no SONG SOT qua
+moi lan chay. Vi vay lan chay thu hai phai dat lai mat khau chu khong duoc chet
+vi "already exists", va script don vai tro do khi xong.
 """
 
 from __future__ import annotations
@@ -30,17 +34,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO_ROOT))
 
-# Throwaway credential store, OUTSIDE any student-facing directory (the server
-# refuses to start otherwise - api/config.py::assert_auth_store_isolated).
+# Thu muc tam chi con giu `audit.jsonl`. Kho danh tinh nam trong PostgreSQL
+# tu 2026-08, khong con la file.
 _WORKDIR = Path(tempfile.mkdtemp(prefix="aivb_ops_http_"))
 atexit.register(shutil.rmtree, _WORKDIR, True)
-_AUTH_DB = _WORKDIR / "secrets" / "auth.sqlite3"
 
+# TODO(2026-08): tan du thoi DuckDB tren mot backend PostgreSQL. `AIVB_DB_PATH`
+# khong con duoc `Settings` dung vao viec gi tren duong PostgreSQL; giu lai o day
+# chi de khong doi hanh vi cua script trong cung mot lan sua, nhung dung tin no.
 os.environ["AIVB_DB_PATH"] = str(REPO_ROOT / "_workspace" / "output" / "student.duckdb")
 os.environ["AIVB_CONTRACT_PATH"] = str(
     REPO_ROOT / "_workspace" / "00_spec-reader_column-contract.json"
 )
-os.environ["AIVB_AUTH_DB_PATH"] = str(_AUTH_DB)
 os.environ["AIVB_AUDIT_LOG_PATH"] = str(_WORKDIR / "secrets" / "audit.jsonl")
 os.environ.setdefault("AIVB_LOG_LEVEL", "ERROR")
 
@@ -82,11 +87,30 @@ def main() -> None:
     from backend.main import app
     from backend.tests.live_client import LiveClient, LiveServer
 
-    store = AuthStore(_AUTH_DB)
-    store.create_user(
-        LOAD_USER, "STUDENT", password=LOAD_PASSWORD, must_change_password=False
+    from backend.config import settings
+
+    from backend.authstore import UserExistsError
+    from backend.pgadmin import admin_conninfo
+
+    # `admin_conninfo()` chu khong `os.environ.get('AIVB_ADMIN_DSN')`: khong cho
+    # nao trong kho dat bien do, nen ban cu luon truyen None va `AuthStore._admin`
+    # bao "can quyen quan tri vai tro (CREATEROLE)" - dung, nhung khong noi
+    # THIEU CAI GI. Ham kia in ca thu tu tim kiem khi khong thay.
+    store = AuthStore(
+        settings.pg_conninfo_app(),
+        user_conninfo=settings.pg_conninfo_as_user,
+        admin_conninfo=admin_conninfo(),
+        pool_max=2,  # script mot luong, khong can pool day du
     )
-    store.close()
+    try:
+        store.create_user(
+            LOAD_USER, "STUDENT", password=LOAD_PASSWORD, must_change_password=False
+        )
+    except UserExistsError:
+        # Vai tro song sot qua lan chay truoc - dat lai mat khau chu khong chet.
+        store.set_password(LOAD_USER, LOAD_PASSWORD, must_change_password=False)
+    finally:
+        store.close()
 
     print(
         f"settings: max_rows={settings.max_rows} timeout={settings.query_timeout_s}s "

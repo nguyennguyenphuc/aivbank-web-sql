@@ -3,10 +3,9 @@ from __future__ import annotations
 
 import datetime as dt
 import hashlib
-import sqlite3
-import threading
-from pathlib import Path
 from typing import Any
+
+from psycopg_pool import ConnectionPool
 
 DAILY_STAR_CAP = 20
 ACHIEVEMENTS = {
@@ -29,72 +28,59 @@ def _query_hash(sql: str) -> str:
 
 
 class GamificationStore:
-    """SQLite store kept separate from the read-only DuckDB datasets."""
+    """Kho diem tren PostgreSQL, trong database `aivb_app`.
 
-    def __init__(self, path: str | Path) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._local = threading.local()
-        self._write_lock = threading.Lock()
-        with self._connect() as con:
-            con.executescript(
-                """
-                CREATE TABLE IF NOT EXISTS practice_events (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    username TEXT NOT NULL,
-                    practice_date TEXT NOT NULL,
-                    query_hash TEXT NOT NULL,
-                    tables_used TEXT NOT NULL DEFAULT '',
-                    query_kind TEXT NOT NULL DEFAULT 'query',
-                    created_at TEXT NOT NULL,
-                    UNIQUE(username, practice_date, query_hash)
-                );
-                CREATE TABLE IF NOT EXISTS practice_daily (
-                    username TEXT NOT NULL,
-                    practice_date TEXT NOT NULL,
-                    successful_queries INTEGER NOT NULL DEFAULT 0,
-                    unique_queries INTEGER NOT NULL DEFAULT 0,
-                    stars_earned INTEGER NOT NULL DEFAULT 0,
-                    PRIMARY KEY(username, practice_date)
-                );
-                CREATE TABLE IF NOT EXISTS user_rewards (
-                    username TEXT PRIMARY KEY,
-                    stars INTEGER NOT NULL DEFAULT 0,
-                    diamonds INTEGER NOT NULL DEFAULT 0,
-                    current_streak INTEGER NOT NULL DEFAULT 0,
-                    longest_streak INTEGER NOT NULL DEFAULT 0,
-                    last_practice_date TEXT,
-                    updated_at TEXT NOT NULL
-                );
-                CREATE TABLE IF NOT EXISTS user_achievements (
-                    username TEXT NOT NULL,
-                    achievement_code TEXT NOT NULL,
-                    earned_at TEXT NOT NULL,
-                    PRIMARY KEY(username, achievement_code)
-                );
-                """
-            )
-            con.commit()
+    TACH khoi hai database du lieu co chu dinh: `restore.py` dung lai
+    `aivb_student` / `aivb_instructor` moi lan nap dump, nen de diem o do
+    la mat toan bo lich su luyen tap cua lop ma khong ai nhan ra cho toi
+    luc hoc vien hoi. Xem `database/schema/16_app_database.sql`.
+    """
 
-    def _connect(self) -> sqlite3.Connection:
-        con = sqlite3.connect(str(self.path), timeout=10.0)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA busy_timeout=10000")
-        return con
+    def __init__(self, conninfo: str, *, pool_max: int = 6, pool_min: int = 1) -> None:
+        """Pool that su, theo dung khuon `backend/db.py`.
 
-    @property
-    def _con(self) -> sqlite3.Connection:
-        con = getattr(self._local, "con", None)
-        if con is None:
-            con = self._connect()
-            self._local.con = con
-        return con
+        Ban cu giu MOT `psycopg.connect` tho cho MOI luong OS trong
+        `threading.local()`, khong bao gio dong va khong bao gio tai tao. FastAPI
+        chay endpoint dong bo tren threadpool cua anyio (mac dinh 40 luong), nen
+        moi luong tung phuc vu `/query` hay `/gamification/*` ghim VINH VIEN mot
+        ket noi. `aivb_app_rw` co `CONNECTION LIMIT`, va `AuthStore` cung an vao
+        do - ket cuc la `FATAL: too many connections for role "aivb_app_rw"`.
+        `close()` thi chi dong ket noi cua LUONG GOI, va no duoc goi mot lan luc
+        tat may tu luong event-loop, nen ca phan con lai ro sach.
+
+        `autocommit=True` la co y, KHONG phai `autocommit=False`: voi
+        autocommit tat thi mot `SELECT` tran cung mo giao dich, va ta phai trong
+        vao commit-luc-thoat cua pool. Dung, nhung do la CUNG HINH DANG voi con
+        bug - chi can mot `return` som trong khoi la quay lai "idle in
+        transaction". Voi `autocommit=True` duong DOC khong the de lai mot giao
+        dich mo du thoat kieu gi; duong GHI thi mo giao dich TUONG MINH bang
+        `con.transaction()`.
+        """
+        self.conninfo = conninfo
+        self._pool = ConnectionPool(
+            conninfo=conninfo,
+            min_size=max(1, pool_min),
+            max_size=max(1, pool_max),
+            timeout=5.0,
+            max_lifetime=1800.0,
+            max_idle=300.0,
+            # Duong tai tao khi ket noi chet (postgres restart, dut mang).
+            # Ban cu khong co gi tuong duong: handle chet nam mai trong
+            # `threading.local()` va moi loi goi sau do tren luong do deu hong.
+            check=ConnectionPool.check_connection,
+            kwargs={"autocommit": True},
+            open=False,
+            name="aivb-app-gamification",
+        )
+        # KHONG `wait=True`: diem so la thu co the thieu. `aivb_app` chua len thi
+        # dich vu van phai khoi dong duoc - `/query` quan trong hon `/gamification`.
+        self._pool.open()
 
     def close(self) -> None:
-        con = getattr(self._local, "con", None)
-        if con is not None:
-            con.close()
-            self._local.con = None
+        try:
+            self._pool.close()
+        except Exception:  # pragma: no cover - dang tat may
+            pass
 
     def record_success(self, username: str, sql: str, tables_used: list[str]) -> dict[str, Any]:
         today = _today()
@@ -102,31 +88,38 @@ class GamificationStore:
         query_hash = _query_hash(sql)
         lowered = " ".join(sql.lower().split())
         kind = "join" if " join " in f" {lowered} " else "aggregation" if "group by" in lowered else "query"
-        with self._write_lock:
-            con = self._con
-            con.execute("BEGIN IMMEDIATE")
-            try:
+        with self._pool.connection() as con:
+            # Giao dich TUONG MINH: pool phat ket noi `autocommit=True`, nen
+            # khong co giao dich ngam nao het.
+            #
+            # Khoa theo HANG (`FOR UPDATE`) thay cho `threading.Lock` toan tien
+            # trinh: khoa Python vo dung ngay khi uvicorn chay hon mot worker,
+            # va no xep hang ca lop sau lung mot hoc vien.
+            with con.transaction():
+                con.execute(
+                    "INSERT INTO app.user_rewards(username, updated_at) VALUES (%s, %s) "
+                    "ON CONFLICT (username) DO NOTHING",
+                    (username, now),
+                )
                 reward = con.execute(
                     "SELECT stars, diamonds, current_streak, longest_streak, last_practice_date "
-                    "FROM user_rewards WHERE username = ?",
+                    "FROM app.user_rewards WHERE username = %s FOR UPDATE",
                     (username,),
                 ).fetchone()
-                if reward is None:
-                    con.execute("INSERT INTO user_rewards(username, updated_at) VALUES (?, ?)", (username, now))
-                    reward = con.execute(
-                        "SELECT stars, diamonds, current_streak, longest_streak, last_practice_date "
-                        "FROM user_rewards WHERE username = ?", (username,)
-                    ).fetchone()
                 event = con.execute(
-                    "SELECT 1 FROM practice_events WHERE username=? AND practice_date=? AND query_hash=?",
+                    "SELECT 1 FROM app.practice_events WHERE username=%s AND practice_date=%s AND query_hash=%s",
                     (username, today, query_hash),
                 ).fetchone()
                 daily = con.execute(
-                    "SELECT successful_queries, unique_queries, stars_earned FROM practice_daily "
-                    "WHERE username=? AND practice_date=?", (username, today)
+                    "SELECT successful_queries, unique_queries, stars_earned FROM app.practice_daily "
+                    "WHERE username=%s AND practice_date=%s", (username, today)
                 ).fetchone()
                 if daily is None:
-                    con.execute("INSERT INTO practice_daily(username, practice_date) VALUES (?, ?)", (username, today))
+                    con.execute(
+                        "INSERT INTO app.practice_daily(username, practice_date) VALUES (%s, %s) "
+                        "ON CONFLICT DO NOTHING",
+                        (username, today),
+                    )
                     daily = (0, 0, 0)
                 successful, unique, earned = map(int, daily)
                 successful += 1
@@ -136,13 +129,13 @@ class GamificationStore:
                     if earned < DAILY_STAR_CAP:
                         stars_earned = min(1 if unique == 1 else 2, DAILY_STAR_CAP - earned)
                         con.execute(
-                            "INSERT INTO practice_events(username, practice_date, query_hash, tables_used, query_kind, created_at) "
-                            "VALUES (?, ?, ?, ?, ?, ?)",
+                            "INSERT INTO app.practice_events(username, practice_date, query_hash, tables_used, query_kind, created_at) "
+                            "VALUES (%s, %s, %s, %s, %s, %s)",
                             (username, today, query_hash, ",".join(sorted(tables_used)), kind, now),
                         )
                 con.execute(
-                    "UPDATE practice_daily SET successful_queries=?, unique_queries=?, stars_earned=? "
-                    "WHERE username=? AND practice_date=?",
+                    "UPDATE app.practice_daily SET successful_queries=%s, unique_queries=%s, stars_earned=%s "
+                    "WHERE username=%s AND practice_date=%s",
                     (successful, unique, earned + stars_earned, username, today),
                 )
                 current, longest, last_date = int(reward[2]), int(reward[3]), reward[4]
@@ -153,25 +146,41 @@ class GamificationStore:
                 total_stars = int(reward[0]) + stars_earned
                 diamonds = int(reward[1]) + (1 if total_stars // 100 > int(reward[0]) // 100 else 0)
                 con.execute(
-                    "UPDATE user_rewards SET stars=?, diamonds=?, current_streak=?, longest_streak=?, "
-                    "last_practice_date=?, updated_at=? WHERE username=?",
+                    "UPDATE app.user_rewards SET stars=%s, diamonds=%s, current_streak=%s, longest_streak=%s, "
+                    "last_practice_date=%s, updated_at=%s WHERE username=%s",
                     (total_stars, diamonds, current, longest, today, now, username),
                 )
                 unlocked = self._unlock_achievements(con, username, current, kind, now)
-                con.commit()
-            except Exception:
-                con.rollback()
-                raise
-        return self.summary(username, stars_earned=stars_earned, unlocked=unlocked)
+            # Da COMMIT (thoat `con.transaction()`). Doc lai tren CHINH ket noi
+            # nay - KHONG duoc goi `self.summary()` cong khai o day: do la muon
+            # ket noi THU HAI trong khi con giu cai thu nhat, va `pool_max` lan
+            # goi dong thoi moi cai giu mot cai roi cho cai nua = deadlock cho
+            # toi khi `timeout` no.
+            return self._summary_on(
+                con, username, stars_earned=stars_earned, unlocked=unlocked
+            )
 
-    def _unlock_achievements(self, con: sqlite3.Connection, username: str, streak: int, kind: str, now: str) -> list[dict[str, str]]:
+    def _unlock_achievements(self, con, username: str, streak: int, kind: str, now: str) -> list[dict[str, str]]:
         successful = con.execute(
-            "SELECT COALESCE(SUM(successful_queries), 0) FROM practice_daily WHERE username=?",
+            "SELECT COALESCE(SUM(successful_queries), 0) FROM app.practice_daily WHERE username=%s",
             (username,),
         ).fetchone()[0]
+        # Quet moi `practice_events` cua hoc vien CHI de dem so bang khac nhau -
+        # va chi de tra loi mot cau hoi da tra loi xong: da mo khoa
+        # `schema_explorer` chua. Mot hoc vien 5000 su kien phai tra gia cho
+        # phep quet do tren MOI lan Run neu khong co cho chan nay.
+        already_explorer = con.execute(
+            "SELECT 1 FROM app.user_achievements "
+            "WHERE username=%s AND achievement_code='schema_explorer'",
+            (username,),
+        ).fetchone() is not None
         table_names: set[str] = set()
-        for row in con.execute("SELECT tables_used FROM practice_events WHERE username=?", (username,)):
-            table_names.update(filter(None, row[0].split(",")))
+        if not already_explorer:
+            for row in con.execute(
+                "SELECT tables_used FROM app.practice_events WHERE username=%s",
+                (username,),
+            ):
+                table_names.update(filter(None, row[0].split(",")))
         candidates: list[str] = []
         if successful >= 1:
             candidates.append("first_query")
@@ -188,7 +197,8 @@ class GamificationStore:
         unlocked: list[dict[str, str]] = []
         for code in candidates:
             cur = con.execute(
-                "INSERT OR IGNORE INTO user_achievements(username, achievement_code, earned_at) VALUES (?, ?, ?)",
+                "INSERT INTO app.user_achievements(username, achievement_code, earned_at) "
+                "VALUES (%s, %s, %s) ON CONFLICT DO NOTHING",
                 (username, code, now),
             )
             if cur.rowcount:
@@ -196,17 +206,23 @@ class GamificationStore:
         return unlocked
 
     def summary(self, username: str, *, stars_earned: int = 0, unlocked: list[dict[str, str]] | None = None) -> dict[str, Any]:
+        with self._pool.connection() as con:
+            return self._summary_on(
+                con, username, stars_earned=stars_earned, unlocked=unlocked
+            )
+
+    def _summary_on(self, con, username: str, *, stars_earned: int = 0, unlocked: list[dict[str, str]] | None = None) -> dict[str, Any]:
         today = _today()
-        reward = self._con.execute(
-            "SELECT stars, diamonds, current_streak, longest_streak FROM user_rewards WHERE username=?",
+        reward = con.execute(
+            "SELECT stars, diamonds, current_streak, longest_streak FROM app.user_rewards WHERE username=%s",
             (username,),
         ).fetchone()
-        daily = self._con.execute(
-            "SELECT successful_queries, unique_queries, stars_earned FROM practice_daily "
-            "WHERE username=? AND practice_date=?", (username, today)
+        daily = con.execute(
+            "SELECT successful_queries, unique_queries, stars_earned FROM app.practice_daily "
+            "WHERE username=%s AND practice_date=%s", (username, today)
         ).fetchone()
-        achievements = self._con.execute(
-            "SELECT achievement_code, earned_at FROM user_achievements WHERE username=? ORDER BY earned_at DESC",
+        achievements = con.execute(
+            "SELECT achievement_code, earned_at FROM app.user_achievements WHERE username=%s ORDER BY earned_at DESC",
             (username,),
         ).fetchall()
         return {
@@ -253,43 +269,51 @@ class GamificationStore:
         # Placeholder dung so phan tu. Khong bao gio noi chuoi ten vao SQL: ten
         # dang nhap do nguoi khac dat, va `admin_cli import-csv` nhan ca file
         # danh sach lop tu ben ngoai.
-        holes = ",".join("?" * len(keep)) if keep else ""
+        # `["%s"] * n` chu KHONG phai `"%s" * n`: placeholder cua psycopg dai
+        # HAI ky tu, nen `",".join("%s%s%s")` se noi tung KY TU va ra
+        # `%,s,%,s,%,s`. Ban SQLite dung `?` mot ky tu nen khong dinh.
+        holes = ",".join(["%s"] * len(keep)) if keep else ""
 
-        if period == "all":
-            # Diem va chuoi ngay la so TICH LUY, nam o `user_rewards`, khong
-            # cong lai duoc tu `practice_daily`: mot ngay bo tap lam dut chuoi,
-            # va phep cong khong biet dieu do.
-            rows = self._con.execute(
-                "SELECT r.username, r.stars, COALESCE(d.queries, 0), r.current_streak "
-                "FROM user_rewards r "
-                "LEFT JOIN (SELECT username, SUM(successful_queries) AS queries "
-                "           FROM practice_daily GROUP BY username) d "
-                "  ON d.username = r.username "
-                + (f"WHERE r.username IN ({holes}) " if keep else "")
-                + "ORDER BY r.stars DESC, COALESCE(d.queries, 0) DESC, r.username ASC LIMIT ?",
-                (*(keep or ()), limit),
+        # MOT ket noi cho ca hai nhanh `period`, va tra lai pool khi thoat.
+        # Ban cu doc bang `self._con` - ket noi thread-local `autocommit=False`
+        # khong bao gio commit/rollback, nen moi luong nam "idle in
+        # transaction" vinh vien: ghim snapshot, chan VACUUM tren schema `app`.
+        with self._pool.connection() as con:
+            if period == "all":
+                # Diem va chuoi ngay la so TICH LUY, nam o `user_rewards`, khong
+                # cong lai duoc tu `practice_daily`: mot ngay bo tap lam dut chuoi,
+                # va phep cong khong biet dieu do.
+                rows = con.execute(
+                    "SELECT r.username, r.stars, COALESCE(d.queries, 0), r.current_streak "
+                    "FROM app.user_rewards r "
+                    "LEFT JOIN (SELECT username, SUM(successful_queries) AS queries "
+                    "           FROM app.practice_daily GROUP BY username) d "
+                    "  ON d.username = r.username "
+                    + (f"WHERE r.username IN ({holes}) " if keep else "")
+                    + "ORDER BY r.stars DESC, COALESCE(d.queries, 0) DESC, r.username ASC LIMIT %s",
+                    (*(keep or ()), limit),
+                ).fetchall()
+                return [
+                    {
+                        "rank": index,
+                        "username": row[0],
+                        "stars": int(row[1]),
+                        "queries": int(row[2]),
+                        "streak": int(row[3]),
+                    }
+                    for index, row in enumerate(rows, 1)
+                ]
+
+            today = dt.date.fromisoformat(_today())
+            start = today if period == "day" else today.replace(day=1) if period == "month" else today - dt.timedelta(days=today.weekday())
+            rows = con.execute(
+                "SELECT username, SUM(stars_earned) stars, SUM(successful_queries) queries "
+                "FROM app.practice_daily WHERE practice_date >= %s "
+                + (f"AND username IN ({holes}) " if keep else "")
+                + "GROUP BY username ORDER BY stars DESC, queries DESC, username ASC LIMIT %s",
+                (start.isoformat(), *(keep or ()), limit),
             ).fetchall()
             return [
-                {
-                    "rank": index,
-                    "username": row[0],
-                    "stars": int(row[1]),
-                    "queries": int(row[2]),
-                    "streak": int(row[3]),
-                }
+                {"rank": index, "username": row[0], "stars": int(row[1]), "queries": int(row[2]), "streak": None}
                 for index, row in enumerate(rows, 1)
             ]
-
-        today = dt.date.fromisoformat(_today())
-        start = today if period == "day" else today.replace(day=1) if period == "month" else today - dt.timedelta(days=today.weekday())
-        rows = self._con.execute(
-            "SELECT username, SUM(stars_earned) stars, SUM(successful_queries) queries "
-            "FROM practice_daily WHERE practice_date >= ? "
-            + (f"AND username IN ({holes}) " if keep else "")
-            + "GROUP BY username ORDER BY stars DESC, queries DESC, username ASC LIMIT ?",
-            (start.isoformat(), *(keep or ()), limit),
-        ).fetchall()
-        return [
-            {"rank": index, "username": row[0], "stars": int(row[1]), "queries": int(row[2]), "streak": None}
-            for index, row in enumerate(rows, 1)
-        ]

@@ -90,11 +90,9 @@ DELTA_P1_COLUMNS = (
     ("core_organization", "revenue_band"),
 )
 
-# The auth store lives in its own SUBDIRECTORY, never beside a dataset file -
-# api.config.assert_auth_store_isolated refuses to start otherwise, and the
-# test harness has to obey the same rule the server does.
+# Chi con `audit.jsonl` la file. Kho danh tinh nam trong PostgreSQL tu
+# 2026-08 nen khong con cho nao de dat nham - xem backend/authstore.py.
 AUTH_DIR = FIXTURE_DIR / "auth"
-AUTH_DB = AUTH_DIR / "auth.sqlite3"
 AUDIT_LOG = AUTH_DIR / "audit.jsonl"
 
 # Fixture accounts. The student password is what every pre-existing test
@@ -109,14 +107,7 @@ os.environ.setdefault("AIVB_PG_DB_STUDENT", HOSTILE_DB)
 os.environ.setdefault("AIVB_CONTRACT_PATH", str(CONTRACT))
 os.environ.setdefault("AIVB_QUERY_TIMEOUT_S", "5")
 os.environ.setdefault("AIVB_MAX_ROWS", "100")
-os.environ.setdefault("AIVB_AUTH_DB_PATH", str(AUTH_DB))
 os.environ.setdefault("AIVB_AUDIT_LOG_PATH", str(AUDIT_LOG))
-# Bat buoc, khong phai cho gon. `Settings.gamification_db_path` mac dinh la
-# DEFAULT_AUTH_DB_PATH.with_name(...) - tuc la CHOT CUNG vao C:\ProgramData, chu
-# khong di theo AIVB_AUTH_DB_PATH o tren. Thieu dong nay thi moi lan chay pytest
-# lai ghi diem vao kho THAT: `test_student` va `test_instructor` xuat hien tren
-# bang xep hang cua lop, va khong co gi bao.
-os.environ.setdefault("AIVB_GAMIFICATION_DB_PATH", str(AUTH_DIR / "gamification.sqlite3"))
 # The INSTRUCTOR dataset for the live app is the SAME hostile fixture the
 # student role is pointed at. That is the strongest possible arrangement: both
 # roles hit ONE database that really does contain meta_dirty_log, so "the
@@ -175,24 +166,194 @@ def student_db():
     db.close()
 
 
+# Tai khoan dung mot lan cua cac test don le. Danh sach TUONG MINH thay vi don
+# theo tien to: kho danh tinh bay gio la `pg_authid` dung chung, khong con la
+# mot file tam moi test mot ban, nen "don nham" nghia la xoa tai khoan that.
+THROWAWAY_USERS = (
+    "dup_a", "dup_b", "leaky", "paramcheck", "known_user",
+    "cli_sv01", "cli_a", "cli_b", "cli_c", "cli_rst",
+    "inject_a", "inject_b", "budget_x",
+)
+
+
+def _admin_dsn_or_skip() -> str:
+    """Chuoi ket noi superuser, hoac skip neu khong co.
+
+    Dung `backend.pgadmin.admin_conninfo` chu khong chep lai luat: ban chep tay
+    o day tung thieu `AIVB_PG_SUPERUSER_FILE`, nen bo test skip lang le tren
+    dung nhung may cau hinh bang bien do. No cung dung `make_conninfo`, nen mot
+    mat khau superuser co khoang trang khong con lam hong chuoi ket noi.
+    """
+    from backend.pgadmin import admin_conninfo
+
+    dsn = admin_conninfo(required=False)
+    if not dsn:
+        pytest.skip("khong co mat khau superuser PostgreSQL")
+    return dsn
+
+
+def _drop_throwaway(dsn: str) -> None:
+    import psycopg
+
+    from backend import pgroles
+
+    with psycopg.connect(dsn, autocommit=True) as con:
+        for name in THROWAWAY_USERS:
+            con.execute("DELETE FROM app.sessions WHERE username = %s", (name,))
+            con.execute("DELETE FROM app.throttle WHERE key = %s", (name,))
+            con.execute("DELETE FROM app.user_profile WHERE username = %s", (name,))
+            if pgroles.role_exists(con, name):
+                pgroles.drop_role(con, name)
+
+
+@pytest.fixture
+def pg_store():
+    """AuthStore tren PostgreSQL that, co quyen quan tri.
+
+    Thay cho `AuthStore(tmp_path / "auth.sqlite3")` cua ban SQLite: khong con
+    kho dung-mot-lan nao ca, moi thu chung mot `aivb_app`. Vi vay fixture nay
+    don sach cac tai khoan thu CA TRUOC LAN SAU - mot lan chay bi ngat giua
+    chung se de lai vai tro that trong cluster.
+    """
+    import psycopg
+
+    from backend.authstore import AuthStore
+    from backend.config import settings
+
+    dsn = _admin_dsn_or_skip()
+    try:
+        with psycopg.connect(dsn):
+            pass
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"khong noi duoc toi aivb_app ({exc})")
+
+    _drop_throwaway(dsn)
+    store = AuthStore(
+        settings.pg_conninfo_app(),
+        user_conninfo=settings.pg_conninfo_as_user,
+        admin_conninfo=dsn,
+    )
+    yield store
+    store.close()
+    _drop_throwaway(dsn)
+
+
+#: Ten dung trong test_gamification.py. Kho diem KHONG co khoa ngoai toi tai
+#: khoan (xem docstring cua `leaderboard`), nen day chi la ten, khong phai vai
+#: tro PostgreSQL.
+GAMI_TEST_USERS = (
+    "student", "alice", "bob", "gv1", "gv2",
+    "sv1", "sv2", "sv3", "sv_dang_hoc", "cuu_giang_vien", "da_nghi_hoc",
+)
+
+
+@pytest.fixture
+def gami_store():
+    """Kho diem tren PostgreSQL that.
+
+    Truoc day moi test mot file SQLite rieng nen tu cach ly. Bay gio ca bo test
+    dung chung `aivb_app`, nen fixture nay phai don ten thu CA TRUOC LAN SAU.
+
+    Ly do don TRUOC: mot lan chay bi ngat giua chung se de lai diem cua `alice`,
+    va test sau do se thay bang xep hang co san du lieu - dat hay truot vi ly do
+    sai.
+    """
+    import psycopg
+
+    from backend.config import settings
+    from backend.gamification import GamificationStore
+
+    dsn = settings.pg_conninfo_app()
+    try:
+        with psycopg.connect(dsn, connect_timeout=5):
+            pass
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"khong noi duoc toi aivb_app ({exc})")
+
+    def _wipe():
+        with psycopg.connect(dsn, autocommit=True) as con:
+            for table in (
+                "app.practice_events", "app.practice_daily",
+                "app.user_achievements", "app.user_rewards",
+            ):
+                con.execute(
+                    f"DELETE FROM {table} WHERE username = ANY(%s)",
+                    (list(GAMI_TEST_USERS),),
+                )
+
+    _wipe()
+    store = GamificationStore(dsn)
+    yield store
+    store.close()
+    _wipe()
+
+
+@pytest.fixture(scope="session")
+def admin_dsn():
+    return _admin_dsn_or_skip()
+
+
 @pytest.fixture(scope="session")
 def auth_store():
-    """A throwaway credential store with one student and one instructor.
+    """Kho danh tinh dung mot lan, co mot hoc vien va mot giang vien.
 
-    Rebuilt from scratch each session so lockout counters and sessions from a
-    previous run cannot make a test pass or fail for the wrong reason.
+    Tu 2026-08: danh tinh nam trong PostgreSQL (`pg_authid`), khong con la mot
+    file SQLite. Hai tai khoan fixture la VAI TRO PostgreSQL that, nen bo test
+    nay bay gio CAN mot may chu dang chay - truoc day no chi can mot file tam.
+    Do la he qua truc tiep cua viec Power BI phai xac thuc voi `pg_authid`.
+
+    Dung lai tu dau moi phien de bo dem khoa va phien cua lan chay truoc khong
+    lam mot phep thu dat hay truot vi ly do sai.
     """
-    from backend.authstore import AuthStore
+    import psycopg
 
-    AUTH_DIR.mkdir(parents=True, exist_ok=True)
-    for suffix in ("", "-wal", "-shm"):
-        candidate = Path(str(AUTH_DB) + suffix)
-        if candidate.exists():
-            candidate.unlink()
+    from backend.authstore import AuthStore
+    from backend.config import APP_ROOT, settings
+
+    admin_password = os.environ.get("PGPASSWORD", "")
+    if not admin_password:
+        for candidate in (
+            Path("/run/secrets/pg_superuser"),
+            APP_ROOT / "config" / "pg_superuser.txt",
+        ):
+            if candidate.is_file():
+                admin_password = candidate.read_text(encoding="utf-8").strip()
+                break
+    if not admin_password:
+        pytest.skip("khong co mat khau superuser PostgreSQL (PGPASSWORD hoac config/pg_superuser.txt)")
+
+    admin_dsn = (
+        f"host={settings.pg_host} port={settings.pg_port} dbname={settings.pg_db_app} "
+        f"user=postgres password={admin_password} sslmode={settings.pg_sslmode} "
+        "connect_timeout=5"
+    )
+    try:
+        with psycopg.connect(admin_dsn):
+            pass
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"khong noi duoc toi database {settings.pg_db_app} ({exc})")
+
+    # Xoa sach dau vet lan chay truoc TRUOC khi dung kho, khong phai sau: mot
+    # lan chay bi ngat giua chung se de lai vai tro va bo dem khoa.
+    from backend import pgroles
+
+    with psycopg.connect(admin_dsn, autocommit=True) as con:
+        for name in (STUDENT_USER, INSTRUCTOR_USER):
+            con.execute("DELETE FROM app.sessions WHERE username = %s", (name,))
+            con.execute("DELETE FROM app.throttle WHERE key = %s", (name,))
+            con.execute("DELETE FROM app.user_profile WHERE username = %s", (name,))
+            if pgroles.role_exists(con, name):
+                pgroles.drop_role(con, name)
+
     if AUDIT_LOG.exists():
         AUDIT_LOG.unlink()
+    AUTH_DIR.mkdir(parents=True, exist_ok=True)
 
-    store = AuthStore(AUTH_DB)
+    store = AuthStore(
+        settings.pg_conninfo_app(),
+        user_conninfo=settings.pg_conninfo_as_user,
+        admin_conninfo=admin_dsn,
+    )
     store.create_user(
         STUDENT_USER, "STUDENT", password=STUDENT_PASSWORD, must_change_password=False
     )
@@ -204,6 +365,12 @@ def auth_store():
     )
     yield store
     store.close()
+    with psycopg.connect(admin_dsn, autocommit=True) as con:
+        for name in (STUDENT_USER, INSTRUCTOR_USER):
+            con.execute("DELETE FROM app.sessions WHERE username = %s", (name,))
+            con.execute("DELETE FROM app.user_profile WHERE username = %s", (name,))
+            if pgroles.role_exists(con, name):
+                pgroles.drop_role(con, name)
 
 
 @pytest.fixture(scope="session")

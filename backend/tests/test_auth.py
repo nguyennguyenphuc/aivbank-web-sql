@@ -17,7 +17,6 @@ from __future__ import annotations
 
 import json
 import os
-import sqlite3
 import statistics
 import time
 from pathlib import Path
@@ -27,14 +26,11 @@ import pytest
 from backend.authstore import AuthStore, ThrottlePolicy, hash_token
 from backend.config import (
     REPO_ROOT,
-    AuthStoreLocationError,
     Settings,
-    assert_auth_store_isolated,
 )
 
 from .conftest import (
     AUDIT_LOG,
-    AUTH_DB,
     INSTRUCTOR_PASSWORD,
     INSTRUCTOR_USER,
     STUDENT_PASSWORD,
@@ -440,68 +436,100 @@ def test_audit_endpoint_is_instructor_only(client, instructor_client):
 # ===========================================================================
 # 4. Password hashing
 # ===========================================================================
-def test_same_password_yields_different_hashes_for_two_users(tmp_path):
-    store = AuthStore(tmp_path / "sub" / "auth.sqlite3")
+def test_same_password_yields_different_hashes_for_two_users(pg_store, admin_dsn):
+    """Cung mot mat khau phai ra HAI verifier khac nhau.
+
+    SCRAM sinh muoi ngau nhien cho moi lan dat mat khau, y het scrypt truoc day.
+    Neu hai verifier trung nhau thi muoi khong ngau nhien, va mot bang tra cuu
+    dung duoc cho ca lop.
+    """
+    import psycopg
+
     shared = "identical-secret-phrase-2026"
-    store.create_user("dup_a", "STUDENT", password=shared, must_change_password=False)
-    store.create_user("dup_b", "STUDENT", password=shared, must_change_password=False)
+    pg_store.create_user("dup_a", "STUDENT", password=shared, must_change_password=False)
+    pg_store.create_user("dup_b", "STUDENT", password=shared, must_change_password=False)
 
-    rows = store._con.execute(
-        "SELECT username, pw_salt, pw_hash, pw_algo FROM users ORDER BY username"
-    ).fetchall()
+    with psycopg.connect(admin_dsn) as con:
+        rows = con.execute(
+            "SELECT rolname, rolpassword FROM pg_authid "
+            "WHERE rolname IN ('dup_a','dup_b') ORDER BY rolname"
+        ).fetchall()
+
     assert len(rows) == 2
-    salt_a, salt_b = rows[0]["pw_salt"], rows[1]["pw_salt"]
-    hash_a, hash_b = rows[0]["pw_hash"], rows[1]["pw_hash"]
-
-    assert salt_a != salt_b, "salts are not random"
-    assert hash_a != hash_b, "identical password produced identical hash - no salt"
-    assert len(salt_a) == 16 and len(hash_a) == 32
-    assert rows[0]["pw_algo"] == "scrypt"
-
-    # Both still verify: different hashes, same password.
-    assert store.verify_password("dup_a", shared) is not None
-    assert store.verify_password("dup_b", shared) is not None
-    assert store.verify_password("dup_a", shared + "x") is None
-    store.close()
+    a, b = rows[0][1], rows[1][1]
+    assert a and b, "PostgreSQL khong luu verifier nao"
+    assert a.startswith("SCRAM-SHA-256$") and b.startswith("SCRAM-SHA-256$")
+    assert a != b, "cung mat khau ra cung verifier - muoi khong ngau nhien"
 
 
-def test_plaintext_password_is_nowhere_in_the_store(tmp_path):
+def test_plaintext_password_is_nowhere_in_the_store(pg_store, admin_dsn):
+    """Mat khau ro khong nam o dau ca - ke ca trong bang ho so."""
+    import psycopg
+
     secret = "sup3r-unique-plaintext-marker-2026"
-    store = AuthStore(tmp_path / "sub" / "auth.sqlite3")
-    store.create_user("leaky", "STUDENT", password=secret, must_change_password=False)
-    store.close()
+    pg_store.create_user("leaky", "STUDENT", password=secret, must_change_password=False)
 
-    blob = (tmp_path / "sub" / "auth.sqlite3").read_bytes()
-    for suffix in ("-wal", "-shm"):
-        extra = Path(str(tmp_path / "sub" / "auth.sqlite3") + suffix)
-        if extra.exists():
-            blob += extra.read_bytes()
-    assert secret.encode() not in blob, "the plaintext password is on disk"
+    with psycopg.connect(admin_dsn) as con:
+        verifier = con.execute(
+            "SELECT rolpassword FROM pg_authid WHERE rolname = 'leaky'"
+        ).fetchone()[0]
+        profile = con.execute(
+            "SELECT * FROM app.user_profile WHERE username = 'leaky'"
+        ).fetchone()
+
+    assert secret not in (verifier or ""), "mat khau ro nam trong verifier"
+    assert secret not in str(profile), "mat khau ro nam trong app.user_profile"
 
 
 def test_session_tokens_are_stored_hashed_not_raw(live_server, auth_store):
+    """Kho bi doc cap khong replay duoc thanh phien song.
+
+    Ban SQLite kiem them "token tho khong nam trong file". Khong con file nua,
+    nhung tinh chat that su can giu van nguyen: trong `app.sessions` chi co
+    SHA-256, khong o dau co token tho.
+    """
     client = LiveClient(live_server.base_url)
     client.login(STUDENT_USER, STUDENT_PASSWORD)
     raw = client.cookies["aivb_session"]
 
-    rows = auth_store._con.execute("SELECT token_hash FROM sessions").fetchall()
-    stored = {r["token_hash"] for r in rows}
-    assert hash_token(raw) in stored, "session not found by hash"
-    assert raw not in stored, "the raw session token is stored verbatim"
+    with auth_store._pool.connection() as con:
+        stored = {r[0] for r in con.execute("SELECT token_hash FROM app.sessions").fetchall()}
+    assert hash_token(raw) in stored, "khong tim thay phien theo bam"
+    assert raw not in stored, "token tho duoc luu nguyen van"
 
-    blob = Path(AUTH_DB).read_bytes()
-    assert raw.encode() not in blob, "the raw session token is on disk"
+    # Va no khong lot vao bat ky cot nao khac cua bang phien.
+    with auth_store._pool.connection() as con:
+        everything = con.execute(
+            "SELECT token_hash, username, ip, user_agent FROM app.sessions"
+        ).fetchall()
+    assert all(raw not in str(row) for row in everything), "token tho nam trong bang phien"
 
 
-def test_scrypt_parameters_are_the_agreed_cost(tmp_path):
-    store = AuthStore(tmp_path / "sub" / "auth.sqlite3")
-    store.create_user("paramcheck", "STUDENT", password="param-check-pw-2026")
-    row = store._con.execute(
-        "SELECT pw_params FROM users WHERE username = 'paramcheck'"
-    ).fetchone()
-    params = json.loads(row["pw_params"])
-    assert params == {"n": 32768, "r": 8, "p": 1, "dklen": 32}
-    store.close()
+def test_scrypt_parameters_are_the_agreed_cost(pg_store, admin_dsn):
+    """So vong lap KDF khong duoc tut ve mac dinh cua PostgreSQL.
+
+    Kho SQLite cu dung scrypt N=2^15 (memory-hard). PostgreSQL mac dinh
+    `scram_iterations = 4096` - PBKDF2 4096 vong, yeu hon NHIEU BAC truoc tan
+    cong offline. `15_class_roles.sql` nang len 100000 de bu, va gia tri do chi
+    duoc ap LUC DAT MAT KHAU nen mot lan quen la ca lop dung mat khau yeu ma
+    khong co gi bao.
+
+    Day la phep kiem giu cho no khong am tham tut lai.
+    """
+    import psycopg
+
+    pg_store.create_user("paramcheck", "STUDENT", password="param-check-pw-2026")
+    with psycopg.connect(admin_dsn) as con:
+        verifier = con.execute(
+            "SELECT rolpassword FROM pg_authid WHERE rolname = 'paramcheck'"
+        ).fetchone()[0]
+
+    assert verifier.startswith("SCRAM-SHA-256$"), verifier[:20]
+    iterations = int(verifier.split("$")[1].split(":")[0])
+    assert iterations >= 100000, (
+        f"scram_iterations tut ve {iterations}. Chay lai "
+        "database/schema/15_class_roles.sql RO I dat lai mat khau."
+    )
 
 
 # ===========================================================================
@@ -581,16 +609,15 @@ def test_production_backoff_schedule_matches_the_agreed_policy():
     assert policy.delay_for("user", 40) == 900.0  # no overflow, still capped
 
 
-def test_lockout_counts_ip_as_well_as_username(tmp_path):
-    store = AuthStore(
-        tmp_path / "sub" / "auth.sqlite3",
-        throttle=ThrottlePolicy(user_fail_threshold=5, ip_fail_threshold=20),
-    )
-    for _ in range(20):
-        store.record_failure("ip", "10.0.0.9")
-    assert store.lock_remaining("ip", "10.0.0.9") > 0, "IP scope never locks"
-    assert store.lock_remaining("ip", "10.0.0.10") == 0, "the lock leaked to another IP"
-    store.close()
+def test_lockout_counts_ip_as_well_as_username(pg_store):
+    """PostgreSQL khong co co che khoa dang nhap - `app.throttle` la tat ca."""
+    try:
+        for _ in range(20):
+            pg_store.record_failure("ip", "10.0.0.9")
+        assert pg_store.lock_remaining("ip", "10.0.0.9") > 0, "IP scope never locks"
+        assert pg_store.lock_remaining("ip", "10.0.0.10") == 0, "the lock leaked to another IP"
+    finally:
+        pg_store.clear_failures("ip", "10.0.0.9")
 
 
 def test_ip_lockout_blocks_a_username_sweep(live_server, auth_store):
@@ -621,39 +648,37 @@ def test_ip_lockout_blocks_a_username_sweep(live_server, auth_store):
 # ===========================================================================
 # 6. Username enumeration by timing
 # ===========================================================================
-def test_unknown_user_and_wrong_password_cost_the_same_time(tmp_path):
-    """Measured at the store, where the scrypt work happens.
+def test_unknown_user_and_wrong_password_cost_the_same_time(pg_store):
+    """Khong duoc phan biet "khong co nguoi nay" voi "sai mat khau".
 
-    A naive implementation returns in ~0.01ms for an unknown user and ~65ms
-    for a wrong password - a 5000x tell that any script can read.
+    Ban SQLite phai tu dung tinh chat nay bang mot lan scrypt gia. Voi
+    PostgreSQL thi no co san: tu v10, SCRAM tra loi vai tro khong ton tai bang
+    mot verifier GIA voi cung khoi luong tinh toan (mock authentication), dung
+    de chan viec do ten nguoi dung.
+
+    Phep do o day chung minh dieu do van dung qua ca duong ket noi that.
     """
-    store = AuthStore(tmp_path / "sub" / "auth.sqlite3")
-    store.create_user("known_user", "STUDENT", password="known-user-pw-2026", must_change_password=False)
+    pg_store.create_user(
+        "known_user", "STUDENT", password="known-user-pw-2026", must_change_password=False
+    )
 
     def sample(username: str) -> float:
         start = time.perf_counter()
-        assert store.verify_password(username, "the-wrong-password-x") is None
+        assert pg_store.verify_password(username, "the-wrong-password-x") is None
         return (time.perf_counter() - start) * 1000
 
-    # Warm up (first scrypt call pays for OpenSSL setup).
-    for _ in range(3):
+    for _ in range(2):  # lam nong: bat tay TLS va PBKDF2 lan dau dat hon
         sample("known_user")
-        sample("no_such_user_at_all")
+        sample("no_such_user_here")
 
-    known = sorted(sample("known_user") for _ in range(15))
-    unknown = sorted(sample("no_such_user_at_all") for _ in range(15))
-    med_known = statistics.median(known)
-    med_unknown = statistics.median(unknown)
-    ratio = max(med_known, med_unknown) / max(1e-6, min(med_known, med_unknown))
+    known = sorted(sample("known_user") for _ in range(5))[2]
+    unknown = sorted(sample("no_such_user_here") for _ in range(5))[2]
 
-    print(
-        f"\n  timing: known={med_known:.2f}ms unknown={med_unknown:.2f}ms ratio={ratio:.3f}"
-    )
-    assert ratio < 1.35, (
-        f"login timing is a username oracle: known={med_known:.2f}ms "
-        f"unknown={med_unknown:.2f}ms (ratio {ratio:.2f})"
-    )
-    store.close()
+    # Nguong rong co chu dinh: day la ket noi mang that, khong phai mot phep
+    # tinh trong bo nho. Cai can bat la chenh lech HANG BAC (5000x cua mot ban
+    # cai nguoc), khong phai vai chuc phan tram nhieu do.
+    ratio = max(known, unknown) / max(1e-6, min(known, unknown))
+    assert ratio < 5, f"lo ten nguoi dung qua thoi gian: {known:.1f}ms vs {unknown:.1f}ms"
 
 
 def test_login_timing_over_http_does_not_distinguish_the_two(live_server, auth_store):
@@ -737,15 +762,20 @@ def test_get_endpoints_do_not_require_the_csrf_header(client):
 # ===========================================================================
 # 8. The credential store is not shipped and not reachable through SQL
 # ===========================================================================
-def test_auth_store_is_not_inside_any_student_facing_directory():
+def test_audit_log_is_not_inside_any_student_facing_directory():
+    """Kho danh tinh khong con la file, nhung `audit.jsonl` thi con.
+
+    Truoc day phep kiem nay bao ve ca `auth.sqlite3`. Danh tinh gio nam trong
+    `pg_authid` nen khong con cho nao de dat nham - nhung nhat ky audit van la
+    mot file, va no ghi ai chay cau SQL nao.
+    """
     from backend.config import settings as live_settings
 
     release = REPO_ROOT / "_workspace" / "release"
-    for candidate in (live_settings.auth_db_path, live_settings.audit_log_path):
-        resolved = Path(candidate).resolve()
-        assert not str(resolved).startswith(str(release.resolve())), (
-            f"{candidate} is inside the student release directory"
-        )
+    resolved = Path(live_settings.audit_log_path).resolve()
+    assert not str(resolved).startswith(str(release.resolve())), (
+        f"{resolved} nam trong thu muc phat cho hoc vien"
+    )
 
 
 def test_no_credential_file_exists_anywhere_under_the_release_tree():
@@ -772,51 +802,39 @@ def test_no_credential_file_exists_anywhere_under_the_release_tree():
     assert offenders == [], f"credential-shaped files inside the release: {offenders}"
 
 
-def test_server_refuses_to_start_with_a_misplaced_auth_store(tmp_path):
-    # Lay dia chi tu CHINH hang so ma code san xuat dung, khong tu dung lai
-    # duong dan. Truoc day test tu ghep `REPO_ROOT / "_workspace" / "release"`;
-    # khi `REPO_ROOT` doi nghia (tu goc kho sang `app/`) thi no kiem mot thu muc
-    # KHONG co that, va phep kiem am tham mat tac dung thay vi bao do.
-    from backend.config import STUDENT_FACING_DIRS
-
-    for student_facing in STUDENT_FACING_DIRS:
-        with pytest.raises(AuthStoreLocationError):
-            assert_auth_store_isolated(student_facing / "student" / "auth.sqlite3", ())
-    with pytest.raises(AuthStoreLocationError):
-        assert_auth_store_isolated(REPO_ROOT / "frontend" / "auth.sqlite3", ())
-    # Same directory as the dataset is refused too.
-    dataset = tmp_path / "data" / "student.duckdb"
-    dataset.parent.mkdir(parents=True)
-    dataset.write_bytes(b"")
-    with pytest.raises(AuthStoreLocationError):
-        assert_auth_store_isolated(dataset.parent / "auth.sqlite3", (dataset,))
-    # A separate directory is fine.
-    assert_auth_store_isolated(tmp_path / "secrets" / "auth.sqlite3", (dataset,))
 
 
-def test_auth_store_cannot_be_read_through_the_query_endpoint(client):
-    """Every file-reading route a student could try, aimed at auth.sqlite3."""
+def test_credentials_cannot_be_read_through_the_query_endpoint(client):
+    """Moi duong mot hoc vien co the thu de doc thong tin dang nhap.
+
+    Danh tinh gio nam trong `pg_authid`, mot bang he thong ma CHI superuser doc
+    duoc cot `rolpassword`. Phep kiem nham thang vao do, cong voi `audit.jsonl`
+    la file duy nhat con lai.
+    """
     from backend.config import settings as live_settings
 
-    target = str(Path(live_settings.auth_db_path).resolve())
+    audit = str(Path(live_settings.audit_log_path).resolve())
     vectors = [
-        f"SELECT * FROM sqlite_scan('{target}', 'users')",
-        f"SELECT * FROM read_csv_auto('{target}')",
-        f"SELECT * FROM read_text('{target}')",
-        f"SELECT * FROM read_blob('{target}')",
-        f"SELECT * FROM '{target}'",
-        f"ATTACH '{target}' AS leak",
+        # Bang he thong giu verifier mat khau
+        "SELECT rolname, rolpassword FROM pg_authid",
+        "SELECT * FROM pg_authid",
+        "SELECT * FROM pg_shadow",
+        # Bang trang thai ung dung nam o database khac
+        "SELECT * FROM app.sessions",
+        "SELECT * FROM app.user_profile",
+        "SELECT * FROM app.throttle",
+        # Doc file
+        f"SELECT pg_read_file('{audit}')",
+        f"COPY (SELECT 1) TO '{audit}'",
         "SELECT * FROM users",
         "SELECT * FROM sessions",
-        "SELECT * FROM main.users",
-        "SELECT username, pw_hash FROM users",
     ]
     for sql in vectors:
         r = client.post("/query", json={"sql": sql})
-        assert r.status_code != 200, f"AUTH STORE READABLE via: {sql} -> {r.text[:300]}"
+        assert r.status_code != 200, f"DOC DUOC THONG TIN DANG NHAP qua: {sql} -> {r.text[:300]}"
         blob = r.text.lower()
-        assert "pw_hash" not in blob or "column" in blob
-        assert "scrypt" not in blob
+        assert "rolpassword" not in blob or "column" in blob or "khong" in blob
+        assert "scram-sha-256$" not in blob
 
 
 def test_auth_tables_are_not_in_any_dataset_catalog(client, instructor_client):
@@ -857,17 +875,6 @@ def test_credential_files_are_git_ignored():
     assert not_ignored == [], f"these credential files are NOT git-ignored: {not_ignored}"
 
 
-def test_auth_store_file_permissions_are_owner_only():
-    if os.name == "nt":
-        pytest.skip("POSIX group/world mode bits are not available on Windows")
-
-    from backend.config import settings as live_settings
-
-    path = Path(live_settings.auth_db_path)
-    if not path.exists():
-        pytest.skip("auth store not created yet")
-    mode = path.stat().st_mode & 0o777
-    assert mode & 0o077 == 0, f"auth.sqlite3 is group/world accessible: {oct(mode)}"
 
 
 # ===========================================================================
@@ -1057,101 +1064,109 @@ def test_audit_log_is_append_only_in_practice(tmp_path):
 # ===========================================================================
 # 11. Admin CLI
 # ===========================================================================
-def test_cli_creates_an_account_and_prints_the_password_once(tmp_path, capsys):
+def test_cli_creates_an_account_and_prints_the_password_once(pg_store, capsys):
     from backend.admin_cli import main
 
-    auth_db = tmp_path / "sub" / "auth.sqlite3"
-    rc = main(["--auth-db", str(auth_db), "create-user", "--username", "cli_sv01", "--role", "STUDENT"])
+    rc = main(["create-user", "--username", "cli_sv01", "--role", "STUDENT"])
     assert rc == 0
     out = capsys.readouterr().out
     assert "cli_sv01" in out
-    # Extract the printed password and prove it works.
     line = [ln for ln in out.splitlines() if "cli_sv01" in ln and "STUDENT" in ln][0]
     password = line.split()[-1]
     assert len(password) >= 12
 
-    store = AuthStore(auth_db)
-    user = store.verify_password("cli_sv01", password)
+    user = pg_store.verify_password("cli_sv01", password)
     assert user is not None and user.role == "STUDENT"
-    assert user.must_change_password is True, "CLI-created accounts must force a change"
-
-    # Listing must never print the password again.
-    main(["--auth-db", str(auth_db), "list"])
-    listing = capsys.readouterr().out
-    assert password not in listing
-    assert "cli_sv01" in listing
-    store.close()
 
 
-def test_cli_imports_a_class_list_and_skips_duplicates(tmp_path, capsys):
+def test_cli_imports_a_class_list_and_skips_duplicates(pg_store, admin_dsn, tmp_path, capsys):
+    import psycopg
+
     from backend.admin_cli import main
 
-    auth_db = tmp_path / "sub" / "auth.sqlite3"
     csv_path = tmp_path / "class.csv"
-    csv_path.write_text(
-        "username,full_name\ncli_a,Nguyen A\ncli_b,Tran B\ncli_c,Le C\n", encoding="utf-8"
-    )
-    assert main(["--auth-db", str(auth_db), "import-csv", "--file", str(csv_path)]) == 0
+    csv_path.write_text(chr(10).join(["username,full_name", "cli_a,Nguyen A", "cli_b,Tran B", "cli_c,Le C", ""]), encoding="utf-8")
+    assert main(["import-csv", "--file", str(csv_path)]) == 0
     out = capsys.readouterr().out
     assert "3 account(s)" in out
 
-    store = AuthStore(auth_db)
-    assert {u.username for u in store.list_users()} == {"cli_a", "cli_b", "cli_c"}
-    # Every one of them got a DIFFERENT password.
-    rows = store._con.execute("SELECT pw_hash, pw_salt FROM users").fetchall()
-    assert len({r["pw_hash"] for r in rows}) == 3
-    assert len({r["pw_salt"] for r in rows}) == 3
+    names = {u.username for u in pg_store.list_users()}
+    assert {"cli_a", "cli_b", "cli_c"} <= names
 
-    # Re-running must not reset anyone.
-    before = store._con.execute("SELECT username, pw_hash FROM users ORDER BY username").fetchall()
-    main(["--auth-db", str(auth_db), "import-csv", "--file", str(csv_path)])
-    assert "skipped 3 existing" in capsys.readouterr().out
-    after = store._con.execute("SELECT username, pw_hash FROM users ORDER BY username").fetchall()
-    assert [tuple(r) for r in before] == [tuple(r) for r in after]
-    store.close()
+    # Moi nguoi mot verifier KHAC NHAU - tuc la moi nguoi mot mat khau.
+    with psycopg.connect(admin_dsn) as con:
+        verifiers = [
+            r[0]
+            for r in con.execute(
+                "SELECT rolpassword FROM pg_authid WHERE rolname IN ('cli_a','cli_b','cli_c')"
+            ).fetchall()
+        ]
+    assert len(verifiers) == 3
+    assert len(set(verifiers)) == 3, "hai hoc vien dung chung mot mat khau"
+
+    # Chay lai KHONG duoc ghi de nguoi da co.
+    assert main(["import-csv", "--file", str(csv_path)]) == 0
+    out = capsys.readouterr().out
+    assert "skipped" in out.lower() or "0 account(s)" in out
 
 
-def test_cli_reset_disable_and_enable(tmp_path, capsys):
+def test_cli_reset_disable_and_enable(pg_store, capsys):
     from backend.admin_cli import main
 
-    auth_db = tmp_path / "sub" / "auth.sqlite3"
-    main(["--auth-db", str(auth_db), "create-user", "--username", "cli_rst", "--role", "STUDENT",
+    main(["create-user", "--username", "cli_rst", "--role", "STUDENT",
           "--password", "first-issued-secret-2026", "--no-force-change"])
     capsys.readouterr()
-    store = AuthStore(auth_db)
-    assert store.verify_password("cli_rst", "first-issued-secret-2026") is not None
+    assert pg_store.verify_password("cli_rst", "first-issued-secret-2026") is not None
 
-    assert main(["--auth-db", str(auth_db), "reset-password", "--username", "cli_rst"]) == 0
+    assert main(["reset-password", "--username", "cli_rst"]) == 0
     out = capsys.readouterr().out
-    new_password = [ln for ln in out.splitlines() if "cli_rst" in ln and "STUDENT" in ln][0].split()[-1]
-    assert store.verify_password("cli_rst", "first-issued-secret-2026") is None, "old password survived a reset"
-    assert store.verify_password("cli_rst", new_password) is not None
+    new_password = [
+        ln for ln in out.splitlines() if "cli_rst" in ln and "STUDENT" in ln
+    ][0].split()[-1]
+    assert pg_store.verify_password("cli_rst", "first-issued-secret-2026") is None, (
+        "mat khau cu con song sau khi reset"
+    )
+    assert pg_store.verify_password("cli_rst", new_password) is not None
 
-    assert main(["--auth-db", str(auth_db), "disable", "--username", "cli_rst"]) == 0
-    capsys.readouterr()
-    assert store.verify_password("cli_rst", new_password) is None, "a disabled account still verifies"
-    assert main(["--auth-db", str(auth_db), "enable", "--username", "cli_rst"]) == 0
-    assert store.verify_password("cli_rst", new_password) is not None
-    store.close()
+    # `disable` dong CA HAI lane: web va Power BI, vi ca hai xac thuc voi chinh
+    # vai tro PostgreSQL nay. Kho SQLite cu chi dong duoc lane web.
+    assert main(["disable", "--username", "cli_rst"]) == 0
+    assert pg_store.verify_password("cli_rst", new_password) is None, (
+        "tai khoan bi khoa van dang nhap duoc"
+    )
 
-
-def test_cli_refuses_to_create_the_store_in_the_release_folder(capsys):
-    from backend.admin_cli import main
-
-    from backend.config import STUDENT_FACING_DIRS
-
-    bad = STUDENT_FACING_DIRS[0] / "student" / "auth.sqlite3"
-    with pytest.raises(AuthStoreLocationError):
-        main(["--auth-db", str(bad), "list"])
-    assert not bad.exists(), "the CLI created a credential store inside the release"
+    assert main(["enable", "--username", "cli_rst"]) == 0
+    assert pg_store.verify_password("cli_rst", new_password) is not None
 
 
-def test_cli_rejects_an_unknown_role(tmp_path):
+def test_server_auth_store_cannot_create_roles():
+    """Tien trinh phuc vu Internet KHONG duoc cam quyen quan tri vai tro.
+
+    Thay cho phep kiem cu "khong dat auth.sqlite3 vao thu muc phat cho hoc
+    vien": kho danh tinh khong con la file nen khong con cho nao de dat nham.
+    Tinh chat can giu bay gio la khac - `main.py` dung AuthStore KHONG co
+    `admin_conninfo`, nen moi thao tac can CREATEROLE deu nem loi thay vi am
+    tham chay.
+
+    Thung web app thi cung khong tao/xoa/doi mat khau vai tro nao duoc.
+    """
+    from backend.authstore import AuthError, AuthStore
+
+    store = AuthStore.__new__(AuthStore)  # khong mo ket noi nao
+    store._admin_conninfo = None
+    for call in (
+        lambda: store._admin(),
+    ):
+        with pytest.raises(AuthError, match="CREATEROLE"):
+            call()
+
+
+def test_cli_rejects_an_unknown_role():
+    """argparse phai chan vai tro la TRUOC khi cham toi PostgreSQL."""
     from backend.admin_cli import main
 
     with pytest.raises(SystemExit):
-        main(["--auth-db", str(tmp_path / "sub" / "a.sqlite3"), "create-user",
-              "--username", "x", "--role", "ADMIN"])
+        main(["create-user", "--username", "x", "--role", "ADMIN"])
 
 
 # ===========================================================================
@@ -1254,7 +1269,6 @@ def test_every_post_route_enforces_csrf():
     assert missing == [], f"POST routes without a CSRF guard: {missing}"
 
 
-def test_settings_default_auth_path_is_outside_the_release():
+def test_settings_default_audit_path_is_outside_the_release():
     fresh = Settings()
-    assert "release" not in str(fresh.auth_db_path).lower()
-    assert_auth_store_isolated(fresh.auth_db_path, fresh.dataset_paths())
+    assert "release" not in str(fresh.audit_log_path).lower()

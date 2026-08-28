@@ -66,11 +66,13 @@ from .auth import (
     set_session_cookie,
     unauthenticated,
 )
+from . import pgroles
 from .authstore import (
     ROLE_INSTRUCTOR,
     ROLE_STUDENT,
     AuthError,
     AuthStore,
+    AuthUnavailable,
     SessionPolicy,
     ThrottlePolicy,
     validate_password_strength,
@@ -78,7 +80,6 @@ from .authstore import (
 from .config import (
     CONTENT_SECURITY_POLICY,
     REPO_ROOT,
-    assert_auth_store_isolated,
     cors_policy_from_env,
     settings,
 )
@@ -138,18 +139,33 @@ def _size_request_threadpool() -> None:
 
     Every endpoint here is a sync `def`, so each in-flight request occupies one
     anyio worker thread. Requests waiting for a query slot hold their thread
-    while they wait. If the pool (default 40) were not comfortably larger than
+    while they wait. If the pool were not comfortably larger than
     `max_concurrent_queries + max_queued_queries`, a burst of /query would
     consume every worker and /health and /schema would stall behind it - the
     exact starvation the bounded queue exists to prevent.
+
+    Dat DUNG BANG `needed`, ca len LAN xuong. Hai ly do, va ly do thu hai moi
+    la cai quan trong:
+
+      1. Nhanh cu la `if limiter.total_tokens < needed`, ma `needed` mac dinh
+         la 4+16+8 = 28 con mac dinh cua anyio la 40. Nen no CHUA BAO GIO chay:
+         phep sizing nay la mot no-op ke tu luc duoc viet.
+      2. Moi worker thread phuc vu `/auth/login` giu MOT ket noi PostgreSQL mo
+         bang chinh vai tro cua hoc vien (`AuthStore.verify_password`). So luong
+         vi the LA mot ngan sach ket noi, khong chi la mot num CPU. De no o 40
+         nghia la cho phep 40 phien dang nhap dong thoi, va cong voi pool cua
+         `aivb_app_rw` thi vuot `max_connections` cua cum.
+
+    Bat bien phai giu: `needed >= max_concurrent_queries + max_queued_queries`,
+    khong thi luong tro thanh rang buoc chat hon va hang doi cua `db.slot()`
+    khong bao gio day. An toan ha o day vi `lifespan` chay truoc moi request.
     """
     needed = settings.max_concurrent_queries + settings.max_queued_queries + 8
     try:
         import anyio.to_thread
 
         limiter = anyio.to_thread.current_default_thread_limiter()
-        if limiter.total_tokens < needed:
-            limiter.total_tokens = needed
+        limiter.total_tokens = needed
         log.info(
             "request threadpool: %d workers (queue capacity %d+%d)",
             limiter.total_tokens,
@@ -164,15 +180,15 @@ def _size_request_threadpool() -> None:
 async def lifespan(app: FastAPI):
     _size_request_threadpool()
 
-    # Fail-closed BEFORE anything is served: if the credential store has been
-    # put somewhere students can reach, refuse to start at all. A running
-    # service with a misplaced auth.sqlite3 is worse than a service that will
-    # not boot, because nobody notices the first one.
-    assert_auth_store_isolated(settings.auth_db_path, settings.dataset_paths())
-    assert_auth_store_isolated(settings.gamification_db_path, settings.dataset_paths())
-
+    # Kho danh tinh khong con la mot FILE nen khong con cho nao de dat nham -
+    # `assert_auth_store_isolated` da bi go cung `AIVB_AUTH_DB_PATH`. Danh tinh
+    # song trong `pg_authid`, con phien/throttle trong database `aivb_app`.
+    #
+    # `admin_conninfo` CO Y de trong: tien trinh phuc vu Internet nay khong bao
+    # gio duoc cam `CREATEROLE`. Tao/xoa tai khoan la viec cua `admin_cli`.
     _state["auth"] = AuthStore(
-        settings.auth_db_path,
+        settings.pg_conninfo_app(),
+        user_conninfo=settings.pg_conninfo_as_user,
         throttle=ThrottlePolicy(
             user_fail_threshold=settings.login_fail_threshold,
             ip_fail_threshold=settings.login_ip_fail_threshold,
@@ -183,10 +199,21 @@ async def lifespan(app: FastAPI):
             idle_timeout_s=settings.session_idle_timeout_s,
             absolute_timeout_s=settings.session_absolute_timeout_s,
         ),
+        pool_min=settings.pg_auth_pool_min,
+        pool_max=settings.pg_auth_pool_max,
     )
     _state["audit"] = AuditLog(settings.audit_log_path, enabled=settings.audit_enabled)
-    _state["gamification"] = GamificationStore(settings.gamification_db_path)
-    log.info("auth store: %s", settings.auth_db_path)
+    # Phong thu nhu cac dataset: kho diem hong thi `/query` van phai chay.
+    # Truoc day `/gamification/*` deref thang `_state["gamification"]`, nen mot
+    # store hong la `AttributeError` -> 500 thay vi mot 503 noi ro chuyen gi.
+    try:
+        _state["gamification"] = GamificationStore(
+            settings.pg_conninfo_app(), pool_max=settings.pg_gamification_pool_max
+        )
+    except Exception as exc:  # pragma: no cover - phu thuoc may chu
+        log.error("kho diem khong mo duoc: %s", exc)
+        _state["gamification"] = None
+    log.info("kho danh tinh: PostgreSQL %s", settings.pg_db_app)
     if not settings.cookie_secure:
         log.warning(
             "SECURITY: session cookies are NOT marked Secure "
@@ -351,6 +378,35 @@ async def _api_error_handler(request: Request, exc: ApiError) -> JSONResponse:
     return api_error_response(exc)
 
 
+@app.exception_handler(AuthUnavailable)
+async def _auth_unavailable_handler(
+    request: Request, exc: AuthUnavailable
+) -> JSONResponse:
+    """May chu danh tinh khong tra loi -> 503, KHONG phai 401.
+
+    Luoi an toan phu cho moi duong goi vao `AuthStore`, khong rieng `/auth/login`:
+    `require_session`, `/auth/password`, va bat ky cho nao ve sau. `_api_error_
+    handler` chi log cho 401/403/429 nen 503 can dong log rieng cua no.
+    """
+    log.error(
+        "auth store unavailable %s %s client=%s detail=%s",
+        request.method,
+        request.url.path,
+        client_ip(request),
+        exc,
+    )
+    return api_error_response(
+        ApiError(
+            503,
+            "E_AUTH_UNAVAILABLE",
+            "The sign-in service is temporarily unavailable. Please try again "
+            "in a moment.",
+            headers={"Retry-After": "5"},
+            internal=str(exc),
+        )
+    )
+
+
 def _err(status: int, code: str, message: str) -> JSONResponse:
     return JSONResponse(
         status_code=status,
@@ -376,6 +432,22 @@ def _audit() -> AuditLog:
     if audit is None:  # pragma: no cover
         return AuditLog(settings.audit_log_path, enabled=False)
     return audit
+
+
+def _gamification() -> GamificationStore:
+    """Kho diem, hoac 503 neu no khong mo duoc luc khoi dong.
+
+    Doi xung voi `_auth()`. Truoc day ba diem goi deref thang
+    `_state["gamification"]`, nen mot kho diem hong la `AttributeError` -> 500.
+    """
+    store = _state.get("gamification")
+    if store is None:
+        raise ApiError(
+            503,
+            "E_GAMIFICATION_UNAVAILABLE",
+            "The practice-rewards service is not available.",
+        )
+    return store
 
 
 # ---------------------------------------------------------------------------
@@ -547,7 +619,7 @@ def login(req: LoginRequest, request: Request, _csrf: None = Depends(csrf_guard)
     store = _auth()
     audit = _audit()
     ip = client_ip(request)
-    username = (req.username or "").strip().lower()
+    username = pgroles.normalise_username(req.username)
 
     # Lockout is checked BEFORE the password is verified, so a locked account
     # costs an attacker a round trip and no scrypt work on our side.
@@ -570,11 +642,27 @@ def login(req: LoginRequest, request: Request, _csrf: None = Depends(csrf_guard)
                 internal=f"locked scope={scope} key={key}",
             )
 
-    user = store.verify_password(username, req.password)
+    # `AuthUnavailable` bay thang ra `_auth_unavailable_handler` -> 503. Bat o
+    # day CHI de ghi mot dong audit rieng; tinh chat quan trong la CAU TRUC:
+    # exception bay ra nghia la hai `record_failure` ben duoi khong bao gio chay
+    # toi. PostgreSQL restart, hay mot vai tro cham `CONNECTION LIMIT` vi Power
+    # BI, khong duoc tinh thanh mot lan go sai mat khau. Dung them `finally`.
+    try:
+        user = store.verify_password(username, req.password)
+    except AuthUnavailable:
+        audit.write("login_unavailable", username=username, ip=ip)
+        raise
     if user is None:
         # Identical response and identical work for "no such user", "disabled"
         # and "wrong password" - see AuthStore.verify_password.
-        store.record_failure("user", username)
+        #
+        # Chi ghi throttle theo username khi cai ten CO THE la mot tai khoan:
+        # `app.throttle` khong co khoa nao chan, va truoc day mot ke goi bat ky
+        # co the chen mot hang moi request bang mot username rac 64 ky tu, tren
+        # duong CHUA xac thuc. Throttle theo IP thi VAN luon ghi, nen mot luot
+        # quet ten rac van cham nguong IP.
+        if pgroles.is_valid_username(username):
+            store.record_failure("user", username)
         store.record_failure("ip", ip)
         audit.write("login_failed", username=username, ip=ip)
         raise ApiError(
@@ -689,13 +777,6 @@ def change_password(
             headers={"Retry-After": str(int(remaining) + 1)},
         )
 
-    if store.verify_password(principal.username, req.current_password) is None:
-        # Same counter as /auth/login: this endpoint must not be a way to
-        # brute-force a password around the login lockout.
-        store.record_failure("user", principal.username)
-        audit.write("password_change_failed", username=principal.username, ip=ip)
-        raise ApiError(401, "E_BAD_CREDENTIALS", "Your current password is incorrect.")
-
     if req.new_password == req.current_password:
         raise ApiError(
             400, "E_WEAK_PASSWORD", "The new password must differ from the current one."
@@ -705,7 +786,22 @@ def change_password(
     except AuthError as exc:
         raise ApiError(400, "E_WEAK_PASSWORD", str(exc)) from exc
 
-    store.set_password(principal.username, req.new_password, must_change_password=False)
+    # `change_own_password` mo mot ket noi PostgreSQL bang CHINH tai khoan nay
+    # roi chay `ALTER ROLE CURRENT_USER PASSWORD`. Mot vai tro luon tu doi duoc
+    # mat khau cua no, nen tien trinh nay KHONG can `CREATEROLE` - do la ly do
+    # bo SQLite khong keo theo viec phai cap quyen quan tri cho web app.
+    #
+    # Ket noi do dong thoi la phep kiem mat khau hien tai: khong noi duoc nghia
+    # la sai. Vi vay khong con loi goi `verify_password` rieng o day.
+    if not store.change_own_password(
+        principal.username, req.current_password, req.new_password
+    ):
+        # Cung bo dem voi /auth/login: endpoint nay khong duoc tro thanh duong
+        # do mat khau vong qua khoa dang nhap.
+        store.record_failure("user", principal.username)
+        audit.write("password_change_failed", username=principal.username, ip=ip)
+        raise ApiError(401, "E_BAD_CREDENTIALS", "Your current password is incorrect.")
+
     store.clear_failures("user", principal.username)
 
     # Rotate: every session that existed under the old password dies, including
@@ -752,7 +848,7 @@ def recent_audit(
 
 @app.get("/gamification/me", response_model=GamificationResponse)
 def gamification_me(principal: Principal = Depends(require_active_session)) -> Any:
-    return GamificationResponse(summary=_state["gamification"].summary(principal.username))
+    return GamificationResponse(summary=_gamification().summary(principal.username))
 
 @app.get("/gamification/leaderboard", response_model=LeaderboardResponse)
 def gamification_leaderboard(period: str = "all", principal: Principal = Depends(require_active_session)) -> Any:
@@ -763,7 +859,7 @@ def gamification_leaderboard(period: str = "all", principal: Principal = Depends
     #
     #   - Giang vien luyen tap tren cung he thong (va phai the, de thu bai truoc
     #     khi giao), nen ho CO diem. Diem do khong thuoc ve bang thi dua cua lop.
-    #   - `gamification.sqlite3` giu diem theo TEN, khong co khoa ngoai toi tai
+    #   - kho diem giu theo TEN, khong co khoa ngoai toi tai
     #     khoan. Xoa mot tai khoan khong xoa diem cua no. Mot danh sach loai tru
     #     chi chan duoc nhung ai auth store CON BIET, nen ten mo coi - ke ca ten
     #     cua giang vien cu - se o lai bang mai mai.
@@ -772,16 +868,14 @@ def gamification_leaderboard(period: str = "all", principal: Principal = Depends
     # vai tro. De giao dien tu loc thi hai phien hien hai bang khac nhau va khong
     # ai biet ben nao dung.
     #
-    # `gamification` khong tu tra duoc dieu nay: no doc gamification.sqlite3, con
-    # vai tro nam trong auth.sqlite3. Chinh sach thuoc ve endpoint.
-    students = frozenset(
-        user.username
-        for user in _state["auth"].list_users()
-        if user.role == "STUDENT" and not user.disabled
-    )
+    # `gamification` khong tu tra duoc dieu nay: no doc bang diem trong schema
+    # `app`, con vai tro suy tu `pg_auth_members`. Chinh sach thuoc ve endpoint.
+    # MOT truy van co chi muc, thay cho `list_users()` + mot `get_user` cho tung
+    # nguoi (moi cai muon mot ket noi rieng) tren MOI request bang xep hang.
+    students = _auth().active_usernames(ROLE_STUDENT)
     return LeaderboardResponse(
         period=period,
-        entries=_state["gamification"].leaderboard(period, only=students),
+        entries=_gamification().leaderboard(period, only=students),
     )
 
 @app.get("/admin/analytics/queries", response_model=InstructorAnalyticsResponse)
@@ -1076,7 +1170,7 @@ def run_query(
     )
 
     try:
-        gamification = _state["gamification"].record_success(principal.username, req.sql, list(validated.tables))
+        gamification = _gamification().record_success(principal.username, req.sql, list(validated.tables))
     except Exception:
         log.exception("gamification write failed; query result remains successful")
         gamification = None

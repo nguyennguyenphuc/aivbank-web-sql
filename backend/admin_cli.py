@@ -26,16 +26,34 @@ import csv
 import sys
 from pathlib import Path
 
-from .authstore import ROLES, AuthError, AuthStore
-from .config import assert_auth_store_isolated, settings
+from .authstore import ROLES, AuthStore, UserExistsError
+from .config import settings
+from .errors import OperatorError
+from .pgadmin import admin_conninfo
+
+#: Chuoi ket noi superuser. CHI file nay dung - backend co y KHONG co no.
+def _admin_conninfo(args: argparse.Namespace) -> str:
+    """Ket noi co quyen CREATEROLE, dung de tao/xoa/khoa vai tro PostgreSQL.
+
+    Tach hoan toan khoi ket noi ma web app dung. Web app chua bao gio can
+    quyen nay: hoc vien tu doi mat khau bang `ALTER ROLE CURRENT_USER`, mot
+    thao tac moi vai tro deu lam duoc voi chinh no.
+
+    Luat tim mat khau nam o `backend/pgadmin.py`, MOT ban cho ca CLI lan test.
+    """
+    return admin_conninfo(args.admin_dsn)
 
 
 def _store(args: argparse.Namespace) -> AuthStore:
-    path = Path(args.auth_db or settings.auth_db_path)
-    # Same fail-closed check the server runs: never create a credential store
-    # inside a student-facing directory, even from the CLI.
-    assert_auth_store_isolated(path, settings.dataset_paths())
-    return AuthStore(path)
+    return AuthStore(
+        settings.pg_conninfo_app(),
+        user_conninfo=settings.pg_conninfo_as_user,
+        admin_conninfo=_admin_conninfo(args),
+        # CLI mot luong: 2 la du. Ngan sach cua `aivb_app_rw` chia cho pool xac
+        # thuc cua backend (4), pool diem so (6), va phan con lai - xem khoi chu
+        # thich canh `pg_auth_pool_max` trong `backend/config.py`.
+        pool_max=2,
+    )
 
 
 def _print_credentials(rows: list[tuple[str, str, str]]) -> None:
@@ -63,7 +81,7 @@ def cmd_create_user(args: argparse.Namespace) -> int:
             full_name=args.full_name or "",
             must_change_password=not args.no_force_change,
         )
-    except AuthError as exc:
+    except OperatorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     if args.password:
@@ -90,37 +108,48 @@ def cmd_import_csv(args: argparse.Namespace) -> int:
     created: list[tuple[str, str, str]] = []
     skipped: list[str] = []
     failed: list[str] = []
-    with path.open("r", encoding="utf-8-sig", newline="") as fh:
-        reader = csv.DictReader(fh)
-        if not reader.fieldnames or "username" not in [
-            (f or "").strip().lower() for f in reader.fieldnames
-        ]:
-            print("error: CSV must have a 'username' column", file=sys.stderr)
-            return 2
-        for row in reader:
-            row = {(k or "").strip().lower(): (v or "").strip() for k, v in row.items()}
-            username = row.get("username", "")
-            if not username:
-                continue
-            role = (row.get("role") or args.role or "STUDENT").upper()
-            if role not in ROLES:
-                failed.append(f"{username}: bad role {role!r}")
-                continue
-            try:
-                user, password = store.create_user(
-                    username=username,
-                    role=role,
-                    full_name=row.get("full_name", ""),
-                    must_change_password=True,
-                )
-                created.append((user.username, user.role, password))
-            except AuthError as exc:
-                if "already exists" in str(exc):
+    try:
+        with path.open("r", encoding="utf-8-sig", newline="") as fh:
+            reader = csv.DictReader(fh)
+            if not reader.fieldnames or "username" not in [
+                (f or "").strip().lower() for f in reader.fieldnames
+            ]:
+                print("error: CSV must have a 'username' column", file=sys.stderr)
+                return 2
+            for row in reader:
+                row = {
+                    (k or "").strip().lower(): (v or "").strip()
+                    for k, v in row.items()
+                }
+                username = row.get("username", "")
+                if not username:
+                    continue
+                role = (row.get("role") or args.role or "STUDENT").upper()
+                if role not in ROLES:
+                    failed.append(f"{username}: bad role {role!r}")
+                    continue
+                try:
+                    user, password = store.create_user(
+                        username=username,
+                        role=role,
+                        full_name=row.get("full_name", ""),
+                        must_change_password=True,
+                    )
+                    created.append((user.username, user.role, password))
+                except UserExistsError:
                     skipped.append(username)
-                else:
+                except OperatorError as exc:
                     failed.append(f"{username}: {exc}")
-
-    _print_credentials(created)
+                except Exception as exc:  # noqa: BLE001
+                    # KHONG de mot loi khong luong truoc lam mat mat khau cua
+                    # nhung nguoi da tao xong trong chinh lan chay nay.
+                    failed.append(f"{username}: loi khong luong truoc: {exc!r}")
+    finally:
+        # In NGAY CA khi vong lap vo, ke ca Ctrl-C. Mat khau mot lan khong lay
+        # lai duoc: vai tro PostgreSQL da ton tai nen lan chay sau bao "da co"
+        # roi bo qua, con mat khau thi mat vinh vien. `finally` MOI la ban va;
+        # cac lop ngoai le o tren la thu khien no khong phai dung toi.
+        _print_credentials(created)
     if skipped:
         print(f"\nskipped {len(skipped)} existing account(s): {', '.join(skipped[:20])}"
               + (" ..." if len(skipped) > 20 else ""))
@@ -137,7 +166,11 @@ def cmd_reset_password(args: argparse.Namespace) -> int:
     if user is None:
         print(f"error: no such user: {args.username}", file=sys.stderr)
         return 2
-    password = store.reset_password(args.username)
+    try:
+        password = store.reset_password(args.username)
+    except OperatorError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 2
     print(f"all sessions for {user.username} were revoked")
     _print_credentials([(user.username, user.role, password)])
     return 0
@@ -147,7 +180,7 @@ def cmd_disable(args: argparse.Namespace) -> int:
     store = _store(args)
     try:
         store.set_disabled(args.username, True)
-    except AuthError as exc:
+    except OperatorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"{args.username} disabled; live sessions revoked")
@@ -158,7 +191,7 @@ def cmd_enable(args: argparse.Namespace) -> int:
     store = _store(args)
     try:
         store.set_disabled(args.username, False)
-    except AuthError as exc:
+    except OperatorError as exc:
         print(f"error: {exc}", file=sys.stderr)
         return 2
     print(f"{args.username} enabled")
@@ -179,7 +212,7 @@ def cmd_list(args: argparse.Namespace) -> int:
             f"{user.username:<24} {user.role:<11} {state:<10} "
             f"{store.active_session_count(user.username):>8}  {user.last_login_at or '-'}"
         )
-    print(f"\n{len(users)} account(s) in {store.path}")
+    print(chr(10) + f"{len(users)} account(s) in PostgreSQL {settings.pg_db_app}")
     return 0
 
 
@@ -201,9 +234,10 @@ def build_parser() -> argparse.ArgumentParser:
         description="Manage AIV Bank SQL-interface accounts.",
     )
     parser.add_argument(
-        "--auth-db",
+        "--admin-dsn",
         default=None,
-        help=f"auth store path (default: {settings.auth_db_path})",
+        help="chuoi ket noi PostgreSQL co quyen CREATEROLE "
+        "(mac dinh: superuser doc tu PGPASSWORD / config/pg_superuser.txt)",
     )
     sub = parser.add_subparsers(dest="command", required=True)
 

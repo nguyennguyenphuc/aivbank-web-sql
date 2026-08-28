@@ -1,71 +1,162 @@
-"""Authentication store for the AIV Bank student SQL interface.
+"""Kho danh tính và phiên — PostgreSQL.
 
-WHY THIS IS A SEPARATE FILE ON DISK
------------------------------------
-Students execute arbitrary SELECT statements against `student.duckdb`. Any
-table living in that database is, for practical purposes, public to them. A
-`users` table there would hand out the password-hash corpus of the whole
-cohort - salts, parameters and all - to anybody who typed `SELECT * FROM
-users`. So the credential store is a *different file*, in a *different engine*
-(SQLite), opened by a *different code path*, and never attached to the DuckDB
-connection. `api/config.py::assert_auth_store_isolated` refuses to start the
-service if that file is ever placed inside a student-facing directory.
+===========================================================================
+CÁI GÌ NẰM Ở ĐÂU, VÀ VÌ SAO
+===========================================================================
 
-WHAT IS STORED
---------------
-* `users`     - one row per person. Password: scrypt(N=2^15, r=8, p=1) over a
-                fresh 16-byte salt. The plaintext is never written anywhere.
-* `sessions`  - the SHA-256 of the session token, never the token itself. A
-                stolen store therefore cannot be replayed as a live session.
-* `throttle`  - failed-login counters, keyed independently by username and by
-                client IP, with exponential backoff.
+* MẬT KHẨU và VAI TRÒ nằm trong `pg_authid` / `pg_auth_members`, do chính
+  PostgreSQL quản lý. Module này KHÔNG băm mật khẩu và KHÔNG lưu mật khẩu.
 
-TIMING
-------
-`verify_password` performs exactly one scrypt derivation whether or not the
-user exists, whether or not the account is disabled, and whether or not the
-password is right. Without that, "unknown user" would return in microseconds
-and "wrong password" in ~65ms, which is a username oracle any script can read.
+  Đó là cả điểm của việc bỏ SQLite: Power BI xác thực với `pg_authid`, nên
+  nếu danh tính nằm ở nơi khác thì hai lane không bao giờ đồng bộ được. Một
+  người = một vai trò PostgreSQL, dùng chung cho web và Power BI.
+
+* PHIÊN, CHẶN ĐĂNG NHẬP SAI và HỒ SƠ nằm trong `aivb_app` (schema `app`).
+  Đó là state ghi được của ứng dụng, tách khỏi hai database dữ liệu vì
+  `restore.py` dựng lại chúng — xem `16_app_database.sql`.
+
+===========================================================================
+XÁC THỰC HOẠT ĐỘNG THẾ NÀO
+===========================================================================
+
+`verify_password` MỞ MỘT KẾT NỐI PostgreSQL bằng chính tài khoản đó. Nối
+được nghĩa là mật khẩu đúng. Không có bản sao mật khẩu nào để so.
+
+Hệ quả tốt, và chúng là lý do chọn cách này:
+
+  * Ứng dụng KHÔNG cần `CREATEROLE` hay superuser. Nó chưa bao giờ đọc được
+    `pg_authid.rolpassword`, nên thủng web app cũng không lấy được verifier
+    để bẻ offline.
+  * Tài khoản bị `NOLOGIN` là hỏng ngay ở tầng PostgreSQL — web và Power BI
+    đóng cùng lúc, không phải nhớ khoá hai chỗ.
+  * PostgreSQL từ v10 làm *mock authentication* cho SCRAM: vai trò không tồn
+    tại được trả lời bằng một verifier giả với cùng khối lượng tính toán, nên
+    "không có người này" và "sai mật khẩu" không phân biệt được. Bản SQLite
+    phải tự dựng tính chất đó bằng một lần scrypt giả; ở đây nó có sẵn.
+
+Cái giá: mỗi lần đăng nhập tốn một kết nối và một lần PBKDF2 100000 vòng
+phía client (~30-60 ms). `app.throttle` chặn dò mật khẩu TRƯỚC khi thử nối,
+nên chi phí đó không thành đường làm nghẽn dịch vụ.
 """
-
 from __future__ import annotations
 
-import hashlib
 import hmac
-import json
-import os
 import secrets
-import sqlite3
-import threading
+import contextlib
+import string
 import time
 from dataclasses import dataclass
-from pathlib import Path
+
+import psycopg
+from psycopg import sql
+from psycopg_pool import ConnectionPool, PoolTimeout
+
+from . import pgroles
+from .errors import OperatorError
 
 ROLE_STUDENT = "STUDENT"
 ROLE_INSTRUCTOR = "INSTRUCTOR"
 ROLES = (ROLE_STUDENT, ROLE_INSTRUCTOR)
 
-# --- scrypt parameters -------------------------------------------------------
-# 128 * N * r = 32MiB of memory per derivation, ~65ms on the dev box. maxmem
-# must be passed explicitly: OpenSSL's default ceiling is 32MiB and rejects
-# exactly this combination ("memory limit exceeded").
-SCRYPT_N = 1 << 15
-SCRYPT_R = 8
-SCRYPT_P = 1
-SCRYPT_DKLEN = 32
-SCRYPT_MAXMEM = 132 * 1024 * 1024
-
 MIN_PASSWORD_LENGTH = 12
 MAX_PASSWORD_LENGTH = 256
 
-# A password that cannot be entered (no user has this hash) but that costs the
-# same scrypt work as a real one. Used for the unknown-user branch.
-_DUMMY_SALT = b"\x00" * 16
-_DUMMY_SECRET = b"aivb-nonexistent-account-timing-equaliser"
+
+#: Than SELECT dung chung cho `get_user` va `list_users`. MOT ban, de hai
+#: duong doc khong the troi khoi nhau.
+_USER_SELECT = """
+    SELECT r.rolname,
+           app.role_of(r.rolname)         AS role,
+           COALESCE(p.full_name, '')      AS full_name,
+           COALESCE(p.must_change_password, true) AS must_change_password,
+           NOT r.rolcanlogin              AS disabled,
+           COALESCE(p.created_at, '')     AS created_at,
+           p.password_changed_at,
+           p.last_login_at
+    FROM pg_roles r
+    LEFT JOIN app.user_profile p ON p.username = r.rolname
+"""
 
 
-class AuthError(RuntimeError):
-    """Programming / operator error in the auth store (never student facing)."""
+class AuthError(OperatorError):
+    """Sai sót của người vận hành, không bao giờ hiện ra cho học viên."""
+
+
+class UserExistsError(AuthError):
+    """Vai trò đã tồn tại.
+
+    Một LỚP RIÊNG chứ không phải một thông điệp: `admin_cli.cmd_import_csv`
+    trước đây so `"already exists" in str(exc)`, tức biến nguyên văn một dòng
+    thông báo thành giao diện - sửa chính tả là "bỏ qua" lặng lẽ thành "hỏng".
+    """
+
+
+#: SQLSTATE cua PostgreSQL cho hai nhom that bai luc bat tay xac thuc.
+_SQLSTATE_INVALID_PASSWORD = "28P01"
+_SQLSTATE_INVALID_AUTHORIZATION = "28000"
+
+#: Manh thong bao cua libpq khi khong co sqlstate di kem (xem `_is_bad_credentials`).
+_BAD_CREDENTIAL_HINTS = (
+    "password authentication failed",
+    "is not permitted to log in",
+    "role does not exist",
+)
+
+
+def _classify_connect_failure(sqlstate: str | None, message: str) -> bool:
+    """True = that bai cua NGUOI DUNG (sai mat khau). False = su co HA TANG.
+
+    Ham THUAN, tach rieng de bang quyet dinh nay unit-test duoc ma khong can
+    mot may chu that: `psycopg.Error.sqlstate` la property chi-doc dua tren
+    pgresult, nen khong dung duoc mot exception tong hop voi sqlstate tuy chon.
+
+    ⚠ `28000` KHONG duoc xep het vao "sai mat khau". `FATAL: no pg_hba.conf
+    entry for host ...` CUNG la 28000. Xep ca 28000 vao nhom nguoi dung thi mot
+    lan sua hong `14_pg_hba_docker.conf` - dung loai thay doi lop nay hay lam
+    khi phong may doi dai chi - se bien moi lan dang nhap thanh "sai mat khau"
+    va khoa ca lop 15 phut. Dung cai su co ma `AuthUnavailable` sinh ra de diet.
+    """
+    text = (message or "").lower()
+    if sqlstate == _SQLSTATE_INVALID_PASSWORD:
+        # Ke ca khi vai tro khong ton tai: PostgreSQL tra loi gia (mock
+        # authentication) de khong lo danh sach tai khoan.
+        return True
+    if sqlstate == _SQLSTATE_INVALID_AUTHORIZATION:
+        return "pg_hba" not in text
+    if sqlstate is not None:
+        # 53300 too_many_connections, 57P03 cannot_connect_now, 3D000, ...
+        return False
+    # Khong co sqlstate: psycopg khong gan no on dinh cho loi nem tu
+    # `psycopg.connect()` tren toan dai pin `>=3.2,<3.4` - vai duong ma dung
+    # thang `PQerrorMessage`. Doc van ban la duong lui BAT BUOC, dung xoa vi
+    # "psycopg gio co sqlstate roi".
+    if "pg_hba" in text:
+        return False
+    return any(hint in text for hint in _BAD_CREDENTIAL_HINTS)
+
+
+def _is_bad_credentials(exc: BaseException) -> bool:
+    """Boc `_classify_connect_failure` cho mot exception that."""
+    return _classify_connect_failure(
+        getattr(exc, "sqlstate", None), str(exc)
+    )
+
+
+class AuthUnavailable(RuntimeError):
+    """Máy chủ danh tính đang không trả lời. KHÔNG phải "sai mật khẩu".
+
+    Phân biệt này là load-bearing, không phải chuyện gọn gàng. Trước đây
+    `verify_password` gộp mọi `OperationalError` thành `None`, và `main.py` đọc
+    `None` là sai mật khẩu rồi ghi hai lượt `record_failure`. Hai hậu quả THẬT:
+
+      - PostgreSQL restart giữa buổi học: cả phòng gõ lại, mỗi lần gõ lại là
+        một strike, và cả lớp tự khoá mình tới 15 phút.
+      - Vai trò học viên có `CONNECTION LIMIT 4`. Một lần Power BI refresh mở
+        4-8 kết nối là chạm trần; trong lúc đó đăng nhập web báo "sai mật khẩu"
+        trên một mật khẩu ĐÚNG, và vẫn đốt strike.
+
+    Đừng gộp lại khi dọn dẹp.
+    """
 
 
 @dataclass(frozen=True)
@@ -93,20 +184,35 @@ class Session:
 
     @property
     def session_id(self) -> str:
-        """Short, non-reversible handle safe to write to the audit log."""
+        """Định danh ngắn, không đảo ngược được, an toàn để ghi vào nhật ký."""
         return self.token_hash[:12]
+
+
+def _user_from_row(row) -> User:
+    """Mot hang cua `_USER_SELECT` -> `User`."""
+    return User(
+        username=row[0],
+        role=row[1],
+        full_name=row[2],
+        must_change_password=bool(row[3]),
+        disabled=bool(row[4]),
+        created_at=row[5],
+        password_changed_at=row[6],
+        last_login_at=row[7],
+    )
 
 
 @dataclass(frozen=True)
 class ThrottlePolicy:
-    """Exponential lockout, applied to usernames and client IPs separately.
+    """Khoá luỹ tiến, áp riêng cho username và cho IP.
 
-    The username threshold is the tight one (5 failures -> 30s, doubling, 15min
-    ceiling) because it is the credential actually being guessed. The IP
-    threshold is deliberately looser: a classroom behind one NAT shares a single
-    source address, and a 5-strike IP rule would let one student with a typo
-    lock out the whole room. It still bounds a distributed username sweep from
-    a single host.
+    Ngưỡng theo username là ngưỡng chặt (5 lần -> 30s, nhân đôi, trần 15 phút)
+    vì đó mới là thứ đang bị đoán. Ngưỡng theo IP cố ý lỏng hơn: cả phòng máy
+    ngồi sau một NAT dùng chung một địa chỉ nguồn, và luật 5 lần theo IP sẽ để
+    một học viên gõ nhầm khoá cả lớp.
+
+    PostgreSQL KHÔNG có cơ chế nào tương đương. Lớp này là thứ duy nhất chặn
+    dò mật khẩu, nên đừng bỏ nó khi dọn dẹp.
     """
 
     user_fail_threshold: int = 5
@@ -121,7 +227,6 @@ class ThrottlePolicy:
         if fail_count < threshold:
             return 0.0
         exponent = fail_count - threshold
-        # Cheap guard against 2**huge before min() ever sees it.
         if exponent > 32:
             return self.max_delay_s
         return min(self.max_delay_s, self.base_delay_s * (2**exponent))
@@ -133,166 +238,154 @@ class SessionPolicy:
     absolute_timeout_s: float = 12 * 3600.0
 
 
-# --- password primitives -----------------------------------------------------
-def _derive(password: str, salt: bytes, params: dict[str, int]) -> bytes:
-    return hashlib.scrypt(
-        password.encode("utf-8"),
-        salt=salt,
-        n=params["n"],
-        r=params["r"],
-        p=params["p"],
-        dklen=params["dklen"],
-        maxmem=SCRYPT_MAXMEM,
-    )
-
-
-def default_params() -> dict[str, int]:
-    return {"n": SCRYPT_N, "r": SCRYPT_R, "p": SCRYPT_P, "dklen": SCRYPT_DKLEN}
-
-
-def hash_password(password: str) -> tuple[bytes, bytes, str]:
-    """-> (salt, hash, params_json). A fresh 16-byte salt every single call."""
-    salt = secrets.token_bytes(16)
-    params = default_params()
-    return salt, _derive(password, salt, params), json.dumps(params, sort_keys=True)
-
-
+# --- tiện ích -----------------------------------------------------------
 def validate_password_strength(password: str, username: str = "") -> None:
-    """Raise AuthError with a human message if the password is unacceptable."""
     if not isinstance(password, str):
-        raise AuthError("Password must be text.")
+        raise AuthError("Password must be a string.")
     if len(password) < MIN_PASSWORD_LENGTH:
         raise AuthError(
             f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
         )
     if len(password) > MAX_PASSWORD_LENGTH:
         raise AuthError(f"Password must be at most {MAX_PASSWORD_LENGTH} characters.")
-    if password.strip() == "":
-        raise AuthError("Password must not be only whitespace.")
     if username and password.lower() == username.lower():
-        raise AuthError("Password must not be the same as the username.")
-    lowered = password.lower()
-    for weak in ("password", "123456789", "qwerty", "aivbank", "letmein"):
-        if weak in lowered:
-            raise AuthError(f"Password must not contain '{weak}'.")
+        raise AuthError("Password must not be the username.")
+    # Ràng buộc là SASLprep, không phải cú pháp chuỗi kết nối — xem
+    # `pgroles._is_saslprep_safe`. Nhân bản luật ở đây để `/auth/password` trả
+    # `E_WEAK_PASSWORD` gọn gàng thay vì một 500 từ sâu trong `pgroles`.
+    #
+    # KHOẢNG TRẮNG ĐƯỢC PHÉP, và đừng "khôi phục" lệnh cấm nó: bản SQLite cấm
+    # khoảng trắng vì chuỗi kết nối nối tay, mà `Settings._pg_dsn` đã đóng lỗ đó
+    # bằng `make_conninfo`. Cấm khoảng trắng bây giờ chỉ là chặn passphrase.
+    if not pgroles._is_saslprep_safe(password):
+        raise AuthError(
+            "Password must use printable ASCII characters only "
+            "(no accented letters, tabs or newlines)."
+        )
 
 
 def generate_password(length: int = 16) -> str:
-    """A one-shot initial password. Printed once by the CLI, never stored."""
-    # token_urlsafe(n) yields ~1.34*n characters; ask for enough, then trim.
-    raw = secrets.token_urlsafe(max(12, int(length * 0.8) + 4))
-    return raw[:length]
+    alphabet = string.ascii_letters + string.digits
+    return "".join(secrets.choice(alphabet) for _ in range(length))
 
 
 def hash_token(raw_token: str) -> str:
+    import hashlib
+
     return hashlib.sha256(raw_token.encode("utf-8")).hexdigest()
 
 
 def normalise_username(username: str) -> str:
-    return (username or "").strip().lower()
+    return pgroles.normalise_username(username)
 
 
-_SCHEMA = """
-PRAGMA journal_mode=WAL;
-CREATE TABLE IF NOT EXISTS users (
-    username             TEXT PRIMARY KEY,
-    role                 TEXT NOT NULL,
-    full_name            TEXT NOT NULL DEFAULT '',
-    pw_algo              TEXT NOT NULL,
-    pw_salt              BLOB NOT NULL,
-    pw_hash              BLOB NOT NULL,
-    pw_params            TEXT NOT NULL,
-    must_change_password INTEGER NOT NULL DEFAULT 1,
-    disabled             INTEGER NOT NULL DEFAULT 0,
-    created_at           TEXT NOT NULL,
-    password_changed_at  TEXT,
-    last_login_at        TEXT
-);
-CREATE TABLE IF NOT EXISTS sessions (
-    token_hash          TEXT PRIMARY KEY,
-    username            TEXT NOT NULL,
-    role                TEXT NOT NULL,
-    created_at          REAL NOT NULL,
-    last_seen_at        REAL NOT NULL,
-    absolute_expires_at REAL NOT NULL,
-    revoked             INTEGER NOT NULL DEFAULT 0,
-    ip                  TEXT,
-    user_agent          TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_sessions_username ON sessions(username);
-CREATE TABLE IF NOT EXISTS throttle (
-    scope        TEXT NOT NULL,
-    key          TEXT NOT NULL,
-    fail_count   INTEGER NOT NULL DEFAULT 0,
-    locked_until REAL NOT NULL DEFAULT 0,
-    updated_at   REAL NOT NULL,
-    PRIMARY KEY (scope, key)
-);
-CREATE TABLE IF NOT EXISTS meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
-"""
+def _utc_now() -> str:
+    import datetime as _dt
+
+    return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
 class AuthStore:
-    """SQLite-backed credential + session store. Safe for concurrent threads."""
+    """Kho danh tính trên PostgreSQL. An toàn với nhiều luồng."""
 
     def __init__(
         self,
-        path: str | Path,
+        conninfo: str,
+        *,
+        user_conninfo=None,
+        admin_conninfo: str | None = None,
         throttle: ThrottlePolicy | None = None,
         sessions: SessionPolicy | None = None,
+        pool_min: int = 1,
+        pool_max: int = 4,
     ) -> None:
-        self.path = Path(path)
-        self.path.parent.mkdir(parents=True, exist_ok=True)
+        """
+        conninfo        chuỗi nối `aivb_app` bằng `aivb_app_rw` — state ứng dụng
+        user_conninfo   callable(username, password) -> chuỗi nối, dùng để XÁC THỰC
+        admin_conninfo  chuỗi nối superuser. CHỈ `admin_cli` truyền vào.
+                        Backend để None, và khi đó mọi thao tác cần `CREATEROLE`
+                        đều ném lỗi thay vì âm thầm chạy — đó là hàng rào giữ cho
+                        tiến trình phục vụ Internet không cầm quyền quản trị vai trò.
+        """
+        self.conninfo = conninfo
+        self._user_conninfo = user_conninfo
+        self._admin_conninfo = admin_conninfo
         self.throttle = throttle or ThrottlePolicy()
         self.session_policy = sessions or SessionPolicy()
-        self._local = threading.local()
-        self._write_lock = threading.Lock()
-        with self._connect_new() as con:
-            con.executescript(_SCHEMA)
-            con.execute(
-                "INSERT OR IGNORE INTO meta(k, v) VALUES ('schema_version', '1')"
-            )
-            con.commit()
-        self._restrict_permissions()
-
-    # -- plumbing ---------------------------------------------------------
-    def _connect_new(self) -> sqlite3.Connection:
-        con = sqlite3.connect(str(self.path), timeout=10.0)
-        con.row_factory = sqlite3.Row
-        con.execute("PRAGMA foreign_keys=ON")
-        con.execute("PRAGMA busy_timeout=10000")
-        return con
-
-    @property
-    def _con(self) -> sqlite3.Connection:
-        con = getattr(self._local, "con", None)
-        if con is None:
-            con = self._connect_new()
-            self._local.con = con
-        return con
-
-    def _restrict_permissions(self) -> None:
-        """0600 on the store and its WAL siblings. Best effort (no-op on FS
-        that do not support it) - the isolation check in config.py is the
-        control that actually matters."""
-        for suffix in ("", "-wal", "-shm"):
-            target = Path(str(self.path) + suffix)
-            try:
-                if target.exists():
-                    os.chmod(target, 0o600)
-            except OSError:  # pragma: no cover - platform dependent
-                pass
+        # `timeout=5.0` chu khong 15.0: pool bao hoa truoc day la treo mot request
+        # dang nhap 15 giay roi 500. Nay `PoolTimeout` duoc dich thanh
+        # `AuthUnavailable` (xem `_conn`), tuc mot 503 nhanh kem `Retry-After`.
+        #
+        # `max_lifetime`/`max_idle`: tra ket noi nhan roi ve lai ngan sach cua
+        # `aivb_app_rw`, thay vi giu den het doi tien trinh.
+        self._pool = ConnectionPool(
+            conninfo,
+            min_size=max(1, pool_min),
+            max_size=max(max(1, pool_min), pool_max),
+            open=True,
+            timeout=5.0,
+            max_lifetime=1800.0,
+            max_idle=300.0,
+            name="aivb-app-auth",
+        )
 
     def close(self) -> None:
-        con = getattr(self._local, "con", None)
-        if con is not None:
-            try:
-                con.close()
-            except Exception:  # pragma: no cover
-                pass
-            self._local.con = None
+        try:
+            self._pool.close()
+        except Exception:  # pragma: no cover - đóng hai lần không được làm hỏng gì
+            pass
 
-    # -- users ------------------------------------------------------------
+    # -- kết nối ----------------------------------------------------------
+    @contextlib.contextmanager
+    def _conn(self):
+        """Muon mot ket noi tu pool, dich `PoolTimeout` thanh `AuthUnavailable`.
+
+        Pool bao hoa la mot su co HA TANG, khong phai mot cau tra loi ve mat
+        khau. Khong co lop dich nay thi no noi len thanh 500 (hoac te hon, bi
+        mot `except` rong nao do o tren nuot thanh "sai mat khau").
+        """
+        try:
+            with self._pool.connection() as con:
+                yield con
+        except PoolTimeout as exc:
+            raise AuthUnavailable(
+                f"het ket noi trong pool xac thuc sau {self._pool.timeout}s"
+            ) from exc
+
+    def _admin(self, autocommit: bool = True):
+        """Ket noi quan tri. `autocommit=False` de gop nhieu lenh thanh MOT.
+
+        `CREATE ROLE` / `GRANT` / `REVOKE` / `ALTER ROLE` deu transactional
+        trong PostgreSQL, nen mot khoi nhieu lenh cuon lai duoc sach se. Xem
+        `create_user`: truoc day no chay autocommit, nen `assert_no_leak` hong
+        SAU khi `ensure_role` da commit se de lai mot vai tro mo coi dang nhap
+        duoc - va lan chay sau bao "da co" roi bo qua vinh vien.
+
+        Mac dinh phai giu `True`, va phep kiem CREATEROLE phai o cau lenh dau:
+        `test_server_auth_store_cannot_create_roles` goi `store._admin()` khong
+        tham so tren mot store dung bang `__new__`.
+        """
+        if not self._admin_conninfo:
+            raise AuthError(
+                "Thao tac nay can quyen quan tri vai tro (CREATEROLE). "
+                "AuthStore duoc dung khong co admin_conninfo - dung admin_cli."
+            )
+        return psycopg.connect(self._admin_conninfo, autocommit=autocommit)
+
+    def _write_profile(
+        self, uname: str, full_name: str, must_change_password: bool
+    ) -> None:
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO app.user_profile "
+                "(username, full_name, must_change_password, created_at, password_changed_at) "
+                "VALUES (%s,%s,%s,%s,%s) "
+                "ON CONFLICT (username) DO UPDATE SET full_name = EXCLUDED.full_name, "
+                "must_change_password = EXCLUDED.must_change_password",
+                (uname, full_name, must_change_password, _utc_now(), _utc_now()),
+            )
+
+    # -- người dùng -------------------------------------------------------
     def create_user(
         self,
         username: str,
@@ -301,205 +394,291 @@ class AuthStore:
         full_name: str = "",
         must_change_password: bool = True,
     ) -> tuple[User, str]:
-        """Create an account. Returns (user, plaintext_password).
-
-        The plaintext is returned exactly once, to be shown to the operator and
-        then forgotten. It is not stored, logged, or recoverable.
-        """
-        uname = normalise_username(username)
-        if not uname or not uname.replace("_", "").replace(".", "").replace(
-            "-", ""
-        ).isalnum():
-            raise AuthError(
-                "Username must be alphanumeric (dots, dashes and underscores allowed)."
-            )
-        if len(uname) > 64:
-            raise AuthError("Username must be at most 64 characters.")
+        # Kiem ten TRUOC tien: hong som, hong re, chua dung toi mot ket noi nao.
+        # Truoc day ten chi duoc kiem o sau trong `ensure_role`, tuc la sau khi
+        # `CREATE ROLE` da chay.
+        uname = pgroles.validate_username(username)
+        role = (role or "").upper()
         if role not in ROLES:
-            raise AuthError(f"role must be one of {ROLES}, got {role!r}")
-
+            raise AuthError(f"Unknown role: {role!r}")
         plaintext = password or generate_password()
         validate_password_strength(plaintext, uname)
-        salt, digest, params = hash_password(plaintext)
-        now = _utc_now()
-        with self._write_lock:
-            try:
-                self._con.execute(
-                    "INSERT INTO users (username, role, full_name, pw_algo, pw_salt, "
-                    "pw_hash, pw_params, must_change_password, disabled, created_at, "
-                    "password_changed_at) VALUES (?,?,?,?,?,?,?,?,0,?,?)",
-                    (
-                        uname,
-                        role,
-                        full_name,
-                        "scrypt",
-                        salt,
-                        digest,
-                        params,
-                        1 if must_change_password else 0,
-                        now,
-                        now,
-                    ),
-                )
-                self._con.commit()
-            except sqlite3.IntegrityError as exc:
-                raise AuthError(f"User {uname!r} already exists.") from exc
-        self._restrict_permissions()
+
+        # MOT giao dich cho ca vai tro lan ho so. Ghi ho so nam LONG trong giao
+        # dich vai tro dang mo: no nem thi `with psycopg.connect(...)` cuon lai
+        # va KHONG con vai tro mo coi - nua nguy hiem la nua duoc hoan tac.
+        #
+        # Cua so con lai la "ho so da commit, COMMIT vai tro hong", de lai mot
+        # hang ho so MO COI VA TRO: `get_user`/`list_users` deu lai tu `pg_roles`
+        # roi LEFT JOIN ho so, nen no vo hinh khap noi, va `ON CONFLICT DO UPDATE`
+        # khien lan chay sau de len. Do la tot nhat co the ma khong can 2PC hai
+        # database, va chat hon han chieu nguoc lai.
+        with self._admin(autocommit=False) as con:
+            # Phep kiem ton tai phai nam TRUOC `_write_profile`, khong thi mot
+            # lan `import-csv` chay lai se reset `full_name`/`must_change_password`
+            # cua hoc vien co san TRUOC khi phat hien trung.
+            if pgroles.role_exists(con, uname):
+                raise UserExistsError(f"User already exists: {uname}")
+            pgroles.ensure_role(con, uname, role, plaintext)
+            pgroles.assert_no_leak(con)
+            self._write_profile(uname, full_name, must_change_password)
+
         user = self.get_user(uname)
-        assert user is not None
+        if user is None:  # pragma: no cover - vừa tạo xong
+            raise AuthError(f"Tao {uname} xong nhung doc lai khong thay")
         return user, plaintext
 
     def get_user(self, username: str) -> User | None:
-        row = self._con.execute(
-            "SELECT username, role, full_name, must_change_password, disabled, "
-            "created_at, password_changed_at, last_login_at FROM users WHERE username = ?",
-            (normalise_username(username),),
-        ).fetchone()
-        return _row_to_user(row) if row else None
+        uname = normalise_username(username)
+        with self._conn() as con:
+            row = con.execute(
+                _USER_SELECT + " WHERE r.rolname = %s", (uname,)
+            ).fetchone()
+        if row is None or row[1] is None:
+            # Vai trò không tồn tại, hoặc tồn tại nhưng không thuộc nhóm lớp nào
+            # (ví dụ `aivb_loader`). Với tầng trên thì cả hai đều là "không có".
+            return None
+        return _user_from_row(row)
 
     def list_users(self) -> list[User]:
-        rows = self._con.execute(
-            "SELECT username, role, full_name, must_change_password, disabled, "
-            "created_at, password_changed_at, last_login_at FROM users ORDER BY role, username"
-        ).fetchall()
-        return [_row_to_user(r) for r in rows]
+        """Mọi tài khoản thuộc một nhóm lớp. MỘT truy vấn.
+
+        Bản cũ chạy một truy vấn `pg_roles` rồi một `get_user` đầy đủ cho TỪNG
+        người, mỗi cái mượn một kết nối riêng trong pool — và `main.py` gọi nó
+        trên MỌI request `/gamification/leaderboard`. Một lớp 100 người là 101
+        vòng đi-về cho một thứ mà bảng xếp hạng chỉ cần vài cái tên.
+        """
+        with self._conn() as con:
+            rows = con.execute(
+                _USER_SELECT
+                + " WHERE app.role_of(r.rolname) IS NOT NULL ORDER BY 2, 1"
+            ).fetchall()
+        return [_user_from_row(row) for row in rows]
+
+    def active_usernames(self, role: str) -> frozenset[str]:
+        """Tên của những tài khoản CÒN BẬT thuộc một vai trò.
+
+        Truy vấn hẹp cho `/gamification/leaderboard`, thứ duy nhất nó cần. Cố ý
+        KHÔNG có cache TTL: học viên bị khoá sẽ nán lại bảng xếp hạng hết vòng
+        đời cache, trái với tính chất "khoá có hiệu lực NGAY" mà
+        `validate_session` được dựng quanh.
+        """
+        with self._conn() as con:
+            rows = con.execute(
+                "SELECT r.rolname FROM pg_roles r "
+                "WHERE app.role_of(r.rolname) = %s AND r.rolcanlogin",
+                ((role or "").upper(),),
+            ).fetchall()
+        return frozenset(name for (name,) in rows)
 
     def set_disabled(self, username: str, disabled: bool) -> None:
         uname = normalise_username(username)
-        with self._write_lock:
-            cur = self._con.execute(
-                "UPDATE users SET disabled = ? WHERE username = ?",
-                (1 if disabled else 0, uname),
-            )
-            self._con.commit()
-        if cur.rowcount == 0:
-            raise AuthError(f"No such user: {uname}")
+        with self._admin() as con:
+            if not pgroles.role_exists(con, uname):
+                raise AuthError(f"No such user: {uname}")
+            pgroles.set_disabled(con, uname, disabled)
         if disabled:
-            # Disabling must take effect now, not at the next session expiry.
+            # Khoá phải có hiệu lực NGAY, không đợi phiên hết hạn.
             self.revoke_all_sessions(uname)
 
     def set_password(
         self, username: str, password: str, must_change_password: bool = False
     ) -> None:
+        """Đổi mật khẩu bằng quyền quản trị. Dùng cho `admin_cli`.
+
+        Người dùng tự đổi mật khẩu của mình thì đi qua `change_own_password`,
+        không cần quyền gì cả.
+        """
         uname = normalise_username(username)
         validate_password_strength(password, uname)
-        salt, digest, params = hash_password(password)
-        with self._write_lock:
-            cur = self._con.execute(
-                "UPDATE users SET pw_salt = ?, pw_hash = ?, pw_params = ?, "
-                "pw_algo = 'scrypt', must_change_password = ?, password_changed_at = ? "
-                "WHERE username = ?",
-                (
-                    salt,
-                    digest,
-                    params,
-                    1 if must_change_password else 0,
-                    _utc_now(),
-                    uname,
-                ),
+        with self._admin() as con:
+            if not pgroles.role_exists(con, uname):
+                raise AuthError(f"No such user: {uname}")
+            pgroles.set_password(con, uname, password)
+        self._mark_password_changed(uname, must_change_password)
+
+    def change_own_password(
+        self, username: str, current_password: str, new_password: str
+    ) -> bool:
+        """Người dùng tự đổi mật khẩu — KHÔNG cần quyền quản trị nào.
+
+        PostgreSQL cho phép mọi vai trò `ALTER ROLE CURRENT_USER PASSWORD`. Nhờ
+        vậy web app không bao giờ phải cầm `CREATEROLE`, và đây chính là lý do
+        thiết kế này không phải đánh đổi quyền hạn để lấy sự đồng bộ.
+
+        Trả về False nếu mật khẩu hiện tại sai.
+        """
+        uname = normalise_username(username)
+        validate_password_strength(new_password, uname)
+        if self._user_conninfo is None:  # pragma: no cover
+            raise AuthError("AuthStore thieu user_conninfo")
+        # Tach phep NOI khoi phep DOI. Bản cũ để một `try:` ôm cả hai, nên một
+        # `ALTER ROLE` hỏng (kết nối đứt sau khi đã xác thực xong) bị báo là
+        # "mật khẩu hiện tại sai" — người dùng ăn một strike khoá, trong khi mật
+        # khẩu thì có thể đã đổi thật.
+        try:
+            con = psycopg.connect(
+                self._user_conninfo(uname, current_password), autocommit=True
             )
-            self._con.commit()
-        if cur.rowcount == 0:
-            raise AuthError(f"No such user: {uname}")
+        except psycopg.Error as exc:
+            if _is_bad_credentials(exc):
+                return False
+            raise AuthUnavailable(str(exc)) from exc
+        with con:
+            # Lỗi ở đây KHÔNG bao giờ là "sai mật khẩu hiện tại" — cứ để nó bay.
+            #
+            # Hỏi `scram_iterations` của chính máy chủ, giống `pgroles.set_password`:
+            # nếu không, người vận hành NÂNG tham số đó sẽ chỉ có tác dụng lên
+            # mật khẩu do quản trị đặt, còn học viên tự đổi thì vẫn ở mức sàn.
+            verifier = pgroles.scram_sha256_verifier(
+                new_password, iterations=pgroles.server_scram_iterations(con)
+            )
+            con.execute(
+                sql.SQL("ALTER ROLE CURRENT_USER PASSWORD {}").format(
+                    sql.Literal(verifier)
+                )
+            )
+        self._mark_password_changed(uname, must_change_password=False)
+        return True
+
+    def _mark_password_changed(self, uname: str, must_change_password: bool) -> None:
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO app.user_profile "
+                "(username, must_change_password, created_at, password_changed_at) "
+                "VALUES (%s,%s,%s,%s) "
+                "ON CONFLICT (username) DO UPDATE SET "
+                "must_change_password = EXCLUDED.must_change_password, "
+                "password_changed_at = EXCLUDED.password_changed_at",
+                (uname, must_change_password, _utc_now(), _utc_now()),
+            )
 
     def reset_password(self, username: str) -> str:
-        """Set a fresh random password, force a change at next login, and kill
-        every live session for that user. Returns the plaintext once."""
         plaintext = generate_password()
         self.set_password(username, plaintext, must_change_password=True)
         self.revoke_all_sessions(username)
         return plaintext
 
-    # -- authentication ---------------------------------------------------
+    # -- xác thực ---------------------------------------------------------
     def verify_password(self, username: str, password: str) -> User | None:
-        """Constant-work credential check.
+        """Thử mở kết nối PostgreSQL bằng chính tài khoản đó.
 
-        Exactly one scrypt derivation happens on every path:
-          * unknown user      -> derive against a fixed dummy salt, return None
-          * disabled user     -> derive against the real salt, return None
-          * wrong password    -> derive, compare, return None
-          * correct password  -> derive, compare, return the User
+        Nối được = mật khẩu đúng. Không có bản sao mật khẩu nào để so, và ứng
+        dụng không bao giờ đọc `pg_authid`.
+
+        Thất bại của NGƯỜI DÙNG đều trả về None như nhau — sai mật khẩu, không
+        có người này, hay tài khoản bị `NOLOGIN` đều không phân biệt được từ bên
+        ngoài.
+
+        Thất bại của HẠ TẦNG thì ném `AuthUnavailable`, và đó là điểm khác so
+        với bản trước. Gộp hai loại lại nghĩa là một lần PostgreSQL restart, hay
+        một vai trò chạm `CONNECTION LIMIT` vì Power BI, bị báo cho học viên là
+        "sai mật khẩu" — và bị `main.py` tính thành một strike khoá tài khoản.
         """
         uname = normalise_username(username)
-        row = self._con.execute(
-            "SELECT username, role, full_name, pw_salt, pw_hash, pw_params, "
-            "must_change_password, disabled, created_at, password_changed_at, "
-            "last_login_at FROM users WHERE username = ?",
-            (uname,),
-        ).fetchone()
-
-        if row is None:
-            salt, expected, params = _DUMMY_SALT, b"", default_params()
-        else:
-            salt = row["pw_salt"]
-            expected = row["pw_hash"]
-            try:
-                params = json.loads(row["pw_params"])
-            except (TypeError, ValueError):  # pragma: no cover - corrupt store
-                params = default_params()
-
-        candidate = _derive(password[:MAX_PASSWORD_LENGTH], salt, params)
-        # compare_digest even in the unknown-user branch so the comparison cost
-        # does not become the oracle the scrypt call just removed.
-        matched = hmac.compare_digest(candidate, expected or b"\x00" * len(candidate))
-
-        if row is None or not matched or row["disabled"]:
+        if not password or len(password) > MAX_PASSWORD_LENGTH:
             return None
-        return _row_to_user(row)
+        # Tên hỏng không bao giờ tới được libpq. Cũng là thứ chặn `aivb_app_rw`
+        # bị THỬ làm tên đăng nhập: trước đây nó nối được thật, chỉ bị loại sau
+        # đó vì `app.role_of` trả NULL — đúng một lớp phòng thủ.
+        #
+        # Có, việc này tạo chênh lệch thời gian giữa "tên sai cú pháp" (tức thì)
+        # và "tên hợp lệ nhưng không tồn tại" (nối đầy đủ + PBKDF2 100k vòng).
+        # Không rò gì: văn phạm tên là công khai, nó nằm ngay trong `_NAME_RE`.
+        # Tính chất mà bộ test bảo vệ (`test_unknown_user_and_wrong_password_
+        # cost_the_same_time`) so hai tên HỢP LỆ, không đụng tới.
+        if not pgroles.is_valid_username(uname):
+            return None
+        if self._user_conninfo is None:  # pragma: no cover
+            raise AuthError("AuthStore thieu user_conninfo")
+        try:
+            with psycopg.connect(
+                self._user_conninfo(uname, password), autocommit=True
+            ) as con:
+                con.execute("SELECT 1")
+        except psycopg.Error as exc:
+            if _is_bad_credentials(exc):
+                return None
+            raise AuthUnavailable(str(exc)) from exc
+        user = self.get_user(uname)
+        if user is None or user.disabled:
+            return None
+        return user
 
     def record_login(self, username: str) -> None:
-        with self._write_lock:
-            self._con.execute(
-                "UPDATE users SET last_login_at = ? WHERE username = ?",
-                (_utc_now(), normalise_username(username)),
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO app.user_profile (username, created_at, last_login_at) "
+                "VALUES (%s,%s,%s) "
+                "ON CONFLICT (username) DO UPDATE SET last_login_at = EXCLUDED.last_login_at",
+                (normalise_username(username), _utc_now(), _utc_now()),
             )
-            self._con.commit()
 
-    # -- throttle ---------------------------------------------------------
+    # -- chặn đăng nhập sai ------------------------------------------------
     def lock_remaining(self, scope: str, key: str, now: float | None = None) -> float:
         now = time.time() if now is None else now
-        row = self._con.execute(
-            "SELECT locked_until FROM throttle WHERE scope = ? AND key = ?",
-            (scope, key),
-        ).fetchone()
-        if row is None:
-            return 0.0
-        return max(0.0, float(row["locked_until"]) - now)
-
-    def record_failure(self, scope: str, key: str, now: float | None = None) -> float:
-        """Count one failed attempt; returns the lock duration now in force."""
-        now = time.time() if now is None else now
-        with self._write_lock:
-            row = self._con.execute(
-                "SELECT fail_count FROM throttle WHERE scope = ? AND key = ?",
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT locked_until FROM app.throttle WHERE scope = %s AND key = %s",
                 (scope, key),
             ).fetchone()
-            fails = (int(row["fail_count"]) if row else 0) + 1
+        if row is None:
+            return 0.0
+        return max(0.0, float(row[0]) - now)
+
+    def record_failure(self, scope: str, key: str, now: float | None = None) -> float:
+        """Cộng một lượt sai, rồi trả về độ dài khoá tương ứng.
+
+        Phép cộng do PostgreSQL làm, KHÔNG phải đọc-rồi-ghi trong Python. Bản
+        cũ `SELECT fail_count` rồi ghi lại `EXCLUDED.fail_count`, không
+        `FOR UPDATE`, không khoá gì (bản SQLite giữ `_write_lock` suốt cả
+        read-modify-write, phép chuyển đánh rơi nó mà không thay bằng gì). N lần
+        sai đồng thời cùng đọc N và cùng ghi N+1, nên một đợt dò song song bị
+        đếm hụt — đúng vào trường hợp `ThrottlePolicy` sinh ra để chặn.
+
+        Hai câu lệnh này nguyên tử vì pool KHÔNG autocommit: `AuthStore._pool`
+        dựng không `kwargs`, nên `psycopg_pool` phát connection `autocommit=False`
+        và `pool.connection()` commit lúc thoát. `ON CONFLICT DO UPDATE` giữ khoá
+        hàng tới lúc commit, nên luồng thứ hai CHỜ chứ không xen kẽ. Ai đó thêm
+        `autocommit=True` vào pool là race quay lại, lặng lẽ.
+        """
+        now = time.time() if now is None else now
+        with self._conn() as con:
+            row = con.execute(
+                "INSERT INTO app.throttle AS t "
+                "(scope, key, fail_count, locked_until, updated_at) "
+                "VALUES (%s,%s,1,0,%s) "
+                "ON CONFLICT (scope, key) DO UPDATE SET "
+                "fail_count = t.fail_count + 1, updated_at = EXCLUDED.updated_at "
+                "RETURNING t.fail_count",
+                (scope, key, now),
+            ).fetchone()
+            fails = int(row[0])
             delay = self.throttle.delay_for(scope, fails)
-            self._con.execute(
-                "INSERT INTO throttle (scope, key, fail_count, locked_until, updated_at) "
-                "VALUES (?,?,?,?,?) ON CONFLICT(scope, key) DO UPDATE SET "
-                "fail_count = excluded.fail_count, locked_until = excluded.locked_until, "
-                "updated_at = excluded.updated_at",
-                (scope, key, fails, now + delay, now),
+            # `GREATEST` la dai phong ho, khong phai co che: da tuan tu hoa thi
+            # so dem don dieu roi. No chi bao dam khoa khong bao gio NGAN DI.
+            con.execute(
+                "UPDATE app.throttle SET locked_until = GREATEST(locked_until, %s) "
+                "WHERE scope = %s AND key = %s",
+                (now + delay, scope, key),
             )
-            self._con.commit()
         return delay
 
     def clear_failures(self, scope: str, key: str) -> None:
-        with self._write_lock:
-            self._con.execute(
-                "DELETE FROM throttle WHERE scope = ? AND key = ?", (scope, key)
+        with self._conn() as con:
+            con.execute(
+                "DELETE FROM app.throttle WHERE scope = %s AND key = %s", (scope, key)
             )
-            self._con.commit()
 
     def fail_count(self, scope: str, key: str) -> int:
-        row = self._con.execute(
-            "SELECT fail_count FROM throttle WHERE scope = ? AND key = ?", (scope, key)
-        ).fetchone()
-        return int(row["fail_count"]) if row else 0
+        with self._conn() as con:
+            row = con.execute(
+                "SELECT fail_count FROM app.throttle WHERE scope = %s AND key = %s",
+                (scope, key),
+            ).fetchone()
+        return int(row[0]) if row else 0
 
-    # -- sessions ---------------------------------------------------------
+    # -- phiên -------------------------------------------------------------
     def create_session(
         self,
         username: str,
@@ -508,37 +687,28 @@ class AuthStore:
         user_agent: str = "",
         now: float | None = None,
     ) -> tuple[str, Session]:
-        """Mint a session. Returns (raw_token, session).
+        """Cấp một phiên. Trả về (token thô, phiên).
 
-        The raw token leaves this method exactly once, into a Set-Cookie
-        header. Only its SHA-256 is persisted, so a dump of auth.sqlite3 does
-        not yield a usable session.
+        Token thô rời khỏi hàm này đúng một lần, vào header Set-Cookie. Chỉ
+        SHA-256 của nó được lưu, nên một bản dump database không cho ra phiên
+        dùng được.
         """
         now = time.time() if now is None else now
         raw = secrets.token_urlsafe(32)
         digest = hash_token(raw)
         absolute = now + self.session_policy.absolute_timeout_s
-        with self._write_lock:
-            self._con.execute(
-                "INSERT INTO sessions (token_hash, username, role, created_at, "
+        uname = normalise_username(username)
+        with self._conn() as con:
+            con.execute(
+                "INSERT INTO app.sessions (token_hash, username, created_at, "
                 "last_seen_at, absolute_expires_at, revoked, ip, user_agent) "
-                "VALUES (?,?,?,?,?,?,0,?,?)",
-                (
-                    digest,
-                    normalise_username(username),
-                    role,
-                    now,
-                    now,
-                    absolute,
-                    ip[:64],
-                    user_agent[:200],
-                ),
+                "VALUES (%s,%s,%s,%s,%s,false,%s,%s)",
+                (digest, uname, now, now, absolute, ip[:64], user_agent[:200]),
             )
-            self._con.commit()
-        user = self.get_user(username)
-        session = Session(
+        user = self.get_user(uname)
+        return raw, Session(
             token_hash=digest,
-            username=normalise_username(username),
+            username=uname,
             role=role,
             created_at=now,
             last_seen_at=now,
@@ -546,140 +716,143 @@ class AuthStore:
             idle_expires_at=now + self.session_policy.idle_timeout_s,
             must_change_password=bool(user.must_change_password) if user else False,
         )
-        return raw, session
 
     def validate_session(
         self, raw_token: str, now: float | None = None, touch: bool = True
     ) -> Session | None:
-        """Resolve a cookie value to a live session, or None.
+        """Đổi giá trị cookie thành một phiên còn sống, hoặc None.
 
-        Role and disabled-status are re-read from `users` on every request, so
-        an account disabled by the instructor stops working immediately rather
-        than at the next expiry.
+        Vai trò và trạng thái khoá được ĐỌC LẠI TỪ PostgreSQL trên mỗi request,
+        nên một tài khoản bị giảng viên khoá ngừng chạy ngay lập tức chứ không
+        phải chờ tới lần hết hạn kế tiếp. Cột `role` cố ý không lưu trong bảng
+        phiên vì lý do đó.
         """
         if not raw_token or len(raw_token) > 256:
             return None
         now = time.time() if now is None else now
         digest = hash_token(raw_token)
-        row = self._con.execute(
-            "SELECT s.token_hash, s.username, s.created_at, s.last_seen_at, "
-            "       s.absolute_expires_at, s.revoked, u.role AS user_role, "
-            "       u.disabled, u.must_change_password "
-            "FROM sessions s JOIN users u ON u.username = s.username "
-            "WHERE s.token_hash = ?",
-            (digest,),
-        ).fetchone()
+        with self._conn() as con:
+            row = con.execute(
+                """
+                SELECT s.token_hash, s.username, s.created_at, s.last_seen_at,
+                       s.absolute_expires_at, s.revoked,
+                       app.role_of(s.username)                AS role,
+                       NOT r.rolcanlogin                      AS disabled,
+                       COALESCE(p.must_change_password, true) AS must_change
+                FROM app.sessions s
+                JOIN pg_roles r ON r.rolname = s.username
+                LEFT JOIN app.user_profile p ON p.username = s.username
+                WHERE s.token_hash = %s
+                """,
+                (digest,),
+            ).fetchone()
         if row is None:
             return None
-        # Belt and braces: the lookup already matched, but compare the stored
-        # value in constant time as well.
-        if not hmac.compare_digest(str(row["token_hash"]), digest):
-            return None  # pragma: no cover - unreachable via SQL equality
-        if int(row["revoked"]):
+        if not hmac.compare_digest(str(row[0]), digest):
+            return None  # pragma: no cover - không tới được qua so bằng SQL
+        if row[5]:
             return None
-        if int(row["disabled"]):
+        if row[7]:  # disabled
             return None
-        if now >= float(row["absolute_expires_at"]):
+        if row[6] is None:  # không còn thuộc nhóm lớp nào
+            return None
+        if now >= float(row[4]):
             self.revoke_session_hash(digest)
             return None
-        idle_deadline = float(row["last_seen_at"]) + self.session_policy.idle_timeout_s
+        idle_deadline = float(row[3]) + self.session_policy.idle_timeout_s
         if now >= idle_deadline:
             self.revoke_session_hash(digest)
             return None
 
         if touch:
-            with self._write_lock:
-                self._con.execute(
-                    "UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",
+            with self._conn() as con:
+                con.execute(
+                    "UPDATE app.sessions SET last_seen_at = %s WHERE token_hash = %s",
                     (now, digest),
                 )
-                self._con.commit()
             last_seen = now
         else:
-            last_seen = float(row["last_seen_at"])
+            last_seen = float(row[3])
 
         return Session(
             token_hash=digest,
-            username=row["username"],
-            role=row["user_role"],
-            created_at=float(row["created_at"]),
+            username=row[1],
+            role=row[6],
+            created_at=float(row[2]),
             last_seen_at=last_seen,
-            absolute_expires_at=float(row["absolute_expires_at"]),
+            absolute_expires_at=float(row[4]),
             idle_expires_at=last_seen + self.session_policy.idle_timeout_s,
-            must_change_password=bool(row["must_change_password"]),
+            must_change_password=bool(row[8]),
         )
 
     def revoke_session(self, raw_token: str) -> bool:
         return self.revoke_session_hash(hash_token(raw_token)) if raw_token else False
 
     def revoke_session_hash(self, token_hash: str) -> bool:
-        with self._write_lock:
-            cur = self._con.execute(
-                "UPDATE sessions SET revoked = 1 WHERE token_hash = ? AND revoked = 0",
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE app.sessions SET revoked = true "
+                "WHERE token_hash = %s AND revoked = false",
                 (token_hash,),
             )
-            self._con.commit()
-        return cur.rowcount > 0
+            return cur.rowcount > 0
 
     def revoke_all_sessions(self, username: str) -> int:
-        with self._write_lock:
-            cur = self._con.execute(
-                "UPDATE sessions SET revoked = 1 WHERE username = ? AND revoked = 0",
+        with self._conn() as con:
+            cur = con.execute(
+                "UPDATE app.sessions SET revoked = true "
+                "WHERE username = %s AND revoked = false",
                 (normalise_username(username),),
             )
-            self._con.commit()
-        return cur.rowcount
+            return cur.rowcount
 
     def expire_session_now(self, raw_token: str) -> None:
-        """Test/ops helper: push a session past its idle window without waiting."""
+        """Tiện ích cho test/vận hành: đẩy một phiên qua cửa sổ nhàn rỗi."""
         digest = hash_token(raw_token)
         past = time.time() - self.session_policy.idle_timeout_s - 1
-        with self._write_lock:
-            self._con.execute(
-                "UPDATE sessions SET last_seen_at = ? WHERE token_hash = ?",
+        with self._conn() as con:
+            con.execute(
+                "UPDATE app.sessions SET last_seen_at = %s WHERE token_hash = %s",
                 (past, digest),
             )
-            self._con.commit()
+
+    #: Bao lau thi mot hang `app.throttle` da het khoa duoc coi la rac.
+    THROTTLE_RETENTION_S = 24 * 3600.0
 
     def purge_expired(self, now: float | None = None) -> int:
+        """Dọn phiên hết hạn VÀ các hàng `app.throttle` đã nguội.
+
+        `app.throttle` trước đây không có ai dọn, mà khoá của nó thì do kẻ gọi
+        chọn: `main.py` ghi `record_failure("user", <username thẳng từ body>)`
+        trên đường CHƯA xác thực. Một hàng mỗi request, không giới hạn — phình
+        bảng chậm rãi trên database trạng thái, và không cần đăng nhập được.
+        `login` vốn đã gọi hàm này sau mỗi lần thành công.
+        """
         now = time.time() if now is None else now
         cutoff = now - self.session_policy.idle_timeout_s
-        with self._write_lock:
-            cur = self._con.execute(
-                "DELETE FROM sessions WHERE revoked = 1 OR absolute_expires_at < ? "
-                "OR last_seen_at < ?",
+        with self._conn() as con:
+            cur = con.execute(
+                "DELETE FROM app.sessions WHERE revoked = true "
+                "OR absolute_expires_at < %s OR last_seen_at < %s",
                 (now, cutoff),
             )
-            self._con.commit()
-        return cur.rowcount
+            removed = cur.rowcount
+            con.execute(
+                "DELETE FROM app.throttle WHERE locked_until < %s AND updated_at < %s",
+                (now, now - self.THROTTLE_RETENTION_S),
+            )
+            return removed
 
     def active_session_count(self, username: str | None = None) -> int:
-        if username is None:
-            row = self._con.execute(
-                "SELECT count(*) AS n FROM sessions WHERE revoked = 0"
-            ).fetchone()
-        else:
-            row = self._con.execute(
-                "SELECT count(*) AS n FROM sessions WHERE revoked = 0 AND username = ?",
-                (normalise_username(username),),
-            ).fetchone()
-        return int(row["n"])
-
-
-def _row_to_user(row: sqlite3.Row) -> User:
-    return User(
-        username=row["username"],
-        role=row["role"],
-        full_name=row["full_name"] if "full_name" in row.keys() else "",
-        must_change_password=bool(row["must_change_password"]),
-        disabled=bool(row["disabled"]),
-        created_at=row["created_at"],
-        password_changed_at=row["password_changed_at"],
-        last_login_at=row["last_login_at"] if "last_login_at" in row.keys() else None,
-    )
-
-
-def _utc_now() -> str:
-    import datetime as _dt
-
-    return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
+        with self._conn() as con:
+            if username is None:
+                row = con.execute(
+                    "SELECT count(*) FROM app.sessions WHERE revoked = false"
+                ).fetchone()
+            else:
+                row = con.execute(
+                    "SELECT count(*) FROM app.sessions "
+                    "WHERE revoked = false AND username = %s",
+                    (normalise_username(username),),
+                ).fetchone()
+        return int(row[0])

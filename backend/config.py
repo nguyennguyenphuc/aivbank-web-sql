@@ -12,6 +12,8 @@ import tempfile
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 
+from psycopg.conninfo import make_conninfo
+
 # `app/` - moi thu ung dung can luc chay deu nam duoi day. Doi ten thu muc `app`
 # hay chuyen no sang may khac deu khong anh huong: moi duong dan mac dinh o duoi
 # deu tinh tu APP_ROOT chu khong tu mot vi tri co dinh nao.
@@ -41,9 +43,6 @@ DEFAULT_OWNER_CONFIG_PATH = APP_ROOT / "backend" / "contract" / "owner-config.js
 # AIVB_FRONTEND_DIR vao do - khong sua mot dong backend nao.
 DEFAULT_FRONTEND_DIR = APP_ROOT / "frontend"
 
-# Credential store. Deliberately NOT under a student-facing directory and NOT
-# next to any dataset file. See assert_auth_store_isolated.
-DEFAULT_AUTH_DB_PATH = APP_ROOT / "var" / "auth" / "auth.sqlite3"
 DEFAULT_AUDIT_LOG_PATH = APP_ROOT / "var" / "auth" / "audit.jsonl"
 
 # Directories whose contents are handed to students. Nothing credential-shaped
@@ -65,53 +64,6 @@ def _is_within(path: Path, parent: Path) -> bool:
         return True
     except (ValueError, OSError):
         return False
-
-
-class AuthStoreLocationError(RuntimeError):
-    """The credential store is somewhere a student could reach it."""
-
-
-def assert_auth_store_isolated(
-    auth_path: Path, dataset_paths: tuple[Path, ...] = ()
-) -> None:
-    """Fail closed if `auth.sqlite3` is anywhere a student can get at it.
-
-    Three ways this could go wrong, all of them fatal, none of them obvious
-    from reading a config file at 2am:
-
-      1. the store is placed inside the release folder that gets zipped and
-         handed to the class;
-      2. it is placed inside `web/`, which the dev server serves over HTTP;
-      3. it is placed in the same directory as student.duckdb - not directly
-         readable through the API, but one careless `cp -r` away from (1).
-
-    Raising here means the service refuses to boot rather than serving the
-    cohort's password hashes.
-    """
-    auth_path = Path(auth_path)
-    for shipped in STUDENT_FACING_DIRS:
-        if _is_within(auth_path, shipped):
-            raise AuthStoreLocationError(
-                f"AIVB_AUTH_DB_PATH ({auth_path}) is inside {shipped}, which is "
-                "published to students. Move the credential store outside every "
-                "student-facing directory."
-            )
-    for dataset in dataset_paths:
-        dataset = Path(dataset)
-        if auth_path.resolve() == dataset.resolve():
-            raise AuthStoreLocationError(
-                f"AIVB_AUTH_DB_PATH ({auth_path}) is the dataset file itself."
-            )
-        try:
-            same_dir = auth_path.resolve().parent == dataset.resolve().parent
-        except OSError:  # pragma: no cover
-            same_dir = False
-        if same_dir:
-            raise AuthStoreLocationError(
-                f"AIVB_AUTH_DB_PATH ({auth_path}) sits in the same directory as "
-                f"the dataset {dataset}. Keep credentials on a separate path so "
-                "no dataset copy can ever sweep them up."
-            )
 
 
 # --------------------------------------------------------------------------
@@ -262,6 +214,40 @@ def _env_path_or_none(name: str) -> Path | None:
     return Path(raw.strip())
 
 
+def _read_secret_file(path: Path, key: str) -> str:
+    """Doc mot khoa trong `pg_secrets.env`.
+
+    Khuon file: `ten=gia_tri  chu thich tuy y`. Gia tri la phan TRUOC dau cach
+    dau tien, phan con lai la chu thich. Luat do co o ba noi (`Settings._pg_secret`,
+    `Settings._pg_password`, `database/restore.py:_secrets`) nen no o day, MOT ban.
+
+    Doc bang `utf-8-sig`: PowerShell ghi file nay, va `Add-Content -Encoding UTF8`
+    tren WinPS 5.1 co the them BOM. Voi `utf-8` thi BOM dinh vao khoa DAU TIEN
+    (`﻿pw_loader`) va khoa do bien mat khong mot loi bao. `utf-8-sig` giai ma
+    file khong BOM y het, nen phep doi nay khong mat gi.
+
+    Gia tri rong -> `ValueError` neu ro khoa nao. Truoc day la `value.split()[0]`,
+    tuc mot dong `pw_app_rw=` lam ca dich vu chet luc khoi dong bang
+    `IndexError: list index out of range` - dung, nhung khong noi khoa nao.
+    """
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        name, _, value = line.partition("=")
+        if name.strip() != key:
+            continue
+        # `split(" ", 1)[0]` chu khong `split()[0]`: khoan dung voi dong rong.
+        cleaned = value.strip().split(" ", 1)[0]
+        if not cleaned:
+            raise ValueError(
+                f"Khoa {key!r} trong {path} co nhung rong. Gia tri la phan TRUOC "
+                f"dau cach dau tien, nen dong `{key}=` khong mang gia tri nao."
+            )
+        return cleaned
+    raise KeyError(f"Khong thay {key!r} trong {path}")
+
+
 @dataclass(frozen=True)
 class DatasetSpec:
     """Mot BO DU LIEU day hoc, voi day du thu can de phuc vu no.
@@ -396,19 +382,9 @@ class Settings:
     instructor_db_path: Path | None = field(
         default_factory=lambda: _env_path_or_none("AIVB_INSTRUCTOR_DB_PATH")
     )
-    auth_db_path: Path = field(
-        default_factory=lambda: Path(
-            os.environ.get("AIVB_AUTH_DB_PATH", str(DEFAULT_AUTH_DB_PATH))
-        )
-    )
     audit_log_path: Path = field(
         default_factory=lambda: Path(
             os.environ.get("AIVB_AUDIT_LOG_PATH", str(DEFAULT_AUDIT_LOG_PATH))
-        )
-    )
-    gamification_db_path: Path = field(
-        default_factory=lambda: Path(
-            os.environ.get("AIVB_GAMIFICATION_DB_PATH", str(DEFAULT_AUTH_DB_PATH.with_name("gamification.sqlite3")))
         )
     )
     session_idle_timeout_s: float = field(
@@ -553,6 +529,16 @@ class Settings:
     # API noi chuyen voi PostgreSQL qua loopback trong cung mot may, nen TLS o
     # chang do khong mua duoc gi ma phai tra gia bat tay moi ket noi. Nguoi dung
     # BI thi khac: ho di qua tunnel va dung sslmode=require.
+    #: Database trang thai ung dung: phien, chan dang nhap sai, gamification.
+    #: TACH khoi hai database du lieu vi `restore.py` dung lai chung moi lan nap
+    #: dump — de chung o do la mat diem va lich su luyen tap cua ca lop.
+    pg_db_app: str = field(
+        default_factory=lambda: os.environ.get("AIVB_PG_DB_APP", "aivb_app")
+    )
+    pg_user_app: str = field(
+        default_factory=lambda: os.environ.get("AIVB_PG_USER_APP", "aivb_app_rw")
+    )
+
     pg_sslmode: str = field(default_factory=lambda: os.environ.get("AIVB_PG_SSLMODE", "disable"))
     pg_connect_timeout_s: int = field(
         default_factory=lambda: _env_int("AIVB_PG_CONNECT_TIMEOUT_S", 5)
@@ -576,6 +562,33 @@ class Settings:
     )
     pg_pool_min: int = field(default_factory=lambda: _env_int("AIVB_PG_POOL_MIN", 1))
     pg_pool_max: int = field(default_factory=lambda: _env_int("AIVB_PG_POOL_MAX", 0))
+
+    # -- ngan sach ket noi cua `aivb_app_rw` ---------------------------------
+    #
+    # `aivb_app_rw` co `CONNECTION LIMIT` dat trong
+    # `database/schema/16_app_database.sql`. Ba ben cung an vao han muc do:
+    #
+    #     pool xac thuc (AuthStore)           <= pg_auth_pool_max        (4)
+    #     pool diem so  (GamificationStore)   <= pg_gamification_pool_max (6)
+    #     `admin_cli` / `psql` luc van hanh   ~ 2
+    #
+    # Nang mot ben thi phai ha ben kia, hoac nang `CONNECTION LIMIT` trong file
+    # schema - khong co cho nao khac giu con so nay.
+    #
+    # CO Y KHONG dung lai `pg_pool_min`/`pg_pool_max` o tren: hai cai do sizing
+    # pool TRUY VAN theo bo du lieu trong `db.py`, noi bang `aivb_api_*` toi
+    # `aivb_student`/`aivb_instructor` - vai tro khac, han muc khac. Dat
+    # `AIVB_PG_POOL_MAX=10` la hop ly cho pool truy van, ma se an het phan cua
+    # `aivb_app_rw` neu dung chung.
+    pg_auth_pool_min: int = field(
+        default_factory=lambda: _env_int("AIVB_PG_AUTH_POOL_MIN", 1)
+    )
+    pg_auth_pool_max: int = field(
+        default_factory=lambda: _env_int("AIVB_PG_AUTH_POOL_MAX", 4)
+    )
+    pg_gamification_pool_max: int = field(
+        default_factory=lambda: _env_int("AIVB_PG_GAMIFICATION_POOL_MAX", 6)
+    )
 
     # Optional watch list: columns whose use earns a highlighted line in the
     # server log. Detection only - never blocks, never changes the response.
@@ -650,9 +663,7 @@ class Settings:
         object.__setattr__(self, "db_path", Path(self.db_path))
         object.__setattr__(self, "contract_path", Path(self.contract_path))
         object.__setattr__(self, "owner_config_path", Path(self.owner_config_path))
-        object.__setattr__(self, "auth_db_path", Path(self.auth_db_path))
         object.__setattr__(self, "audit_log_path", Path(self.audit_log_path))
-        object.__setattr__(self, "gamification_db_path", Path(self.gamification_db_path))
         if self.instructor_db_path is not None:
             object.__setattr__(
                 self, "instructor_db_path", Path(self.instructor_db_path)
@@ -708,17 +719,95 @@ class Settings:
         spec = self.dataset(dataset)
         database, user = spec.db_for(role)
         password = self._pg_password(user, spec, role)
-        parts = [
-            f"host={self.pg_host}",
-            f"port={self.pg_port}",
-            f"dbname={database}",
-            f"user={user}",
-            f"password={password}",
-            f"sslmode={self.pg_sslmode}",
-            f"connect_timeout={self.pg_connect_timeout_s}",
-            f"application_name={self.pg_application_name}",
-        ]
-        return " ".join(parts)
+        return self._pg_dsn(
+            dbname=database,
+            user=user,
+            password=password,
+            application_name=self.pg_application_name,
+        )
+
+    # -- database trang thai ung dung (`aivb_app`) -------------------------
+    def pg_conninfo_app(self) -> str:
+        """Chuoi ket noi toi `aivb_app` bang `aivb_app_rw`.
+
+        Day la ket noi GHI DUOC duy nhat cua backend, va no chi ghi duoc trong
+        schema `app` cua mot database rieng. Hai database du lieu van chi-doc.
+        Xem `database/schema/16_app_database.sql`.
+        """
+        password = self._pg_secret("pw_app_rw")
+        return self._pg_dsn(
+            dbname=self.pg_db_app,
+            user=self.pg_user_app,
+            password=password,
+            application_name=f"{self.pg_application_name}-app",
+        )
+
+    def pg_conninfo_as_user(self, username: str, password: str) -> str:
+        """Chuoi ket noi bang CHINH tai khoan cua nguoi dung.
+
+        Dung de XAC THUC: noi duoc nghia la mat khau dung. Nho vay ung dung
+        khong bao gio phai doc `pg_authid`, va cung khong can `CREATEROLE`.
+
+        Noi vao `aivb_app` chu khong vao `aivb_student`: moi lan go sai mat khau
+        cung ton mot ket noi, va tran cua aivb_student la de danh cho truy van
+        cua hoc vien chu khong phai cho nguoi go nham.
+        """
+        return self._pg_dsn(
+            dbname=self.pg_db_app,
+            user=username,
+            password=password,
+            application_name=f"{self.pg_application_name}-auth",
+        )
+
+    def _pg_dsn(
+        self, *, dbname: str, user: str, password: str, application_name: str
+    ) -> str:
+        r"""Rap mot DSN libpq. MOI chuoi ket noi cua ung dung di qua day.
+
+        Dung `make_conninfo` chu KHONG noi chuoi tay, va day khong phai mot lop
+        gian tiep cho dep:
+
+        DSN kieu keyword/value tach nhau bang KHOANG TRANG, va khoa trung thi
+        lan CUOI thang. Noi tay nghia la mot mat khau nhu
+
+            x host=evil.example.com
+
+        se ra `... user=sv001 password=x host=evil.example.com sslmode=disable`,
+        tuc doi duoc may chu DICH cua chinh phep xac thuc. Ma `AuthStore.
+        verify_password` lai coi "noi duoc" LA "mat khau dung", roi doc ho so
+        that tu `aivb_app` that va phat cookie phien. Do la mot duong VONG QUA
+        TOAN BO phep dang nhap, voi bat ky tai khoan nao doan duoc ten.
+
+        `make_conninfo` trich dan tung gia tri (thoat `\` va `'`, boc nhay don
+        khi co khoang trang), nen khong gia tri nao tro thanh mot THAM SO duoc
+        nua. Voi gia tri khong co khoang trang/nhay, chuoi sinh ra giong het ban
+        noi tay - nen phep doi nay khong doi hanh vi cua bat ky ket noi nao dang
+        chay.
+        """
+        return make_conninfo(
+            host=self.pg_host,
+            port=self.pg_port,
+            dbname=dbname,
+            user=user,
+            password=password,
+            sslmode=self.pg_sslmode,
+            connect_timeout=self.pg_connect_timeout_s,
+            application_name=application_name,
+        )
+
+    def _pg_secret(self, key: str) -> str:
+        """Doc mot khoa bat ky trong `pg_secrets.env`.
+
+        Cung khuon voi `_pg_password` - va nay thi dung the that: ca hai deu goi
+        `_read_secret_file`. Truoc day hai ban chep tay da troi khoi nhau va khoi
+        ca `database/restore.py`, moi ban hong mot kieu khac nhau.
+        """
+        path = Path(self.pg_password_file)
+        if not path.exists():
+            raise FileNotFoundError(
+                f"Khong thay file mat khau PostgreSQL: {path}."
+            )
+        return _read_secret_file(path, key)
 
     def _pg_password(
         self, user: str, spec: "DatasetSpec | None" = None, role: str | None = None
@@ -744,14 +833,7 @@ class Settings:
             }.get(user)
         if wanted is None:
             raise ValueError(f"Khong biet lay mat khau nao cho user {user!r}")
-        for line in path.read_text(encoding="utf-8").splitlines():
-            line = line.strip()
-            if not line or line.startswith("#") or "=" not in line:
-                continue
-            key, value = line.split("=", 1)
-            if key.strip() == wanted:
-                return value.split()[0].strip()
-        raise KeyError(f"Khong thay {wanted!r} trong {path}")
+        return _read_secret_file(path, wanted)
 
     def pg_session_settings(self, schema: str | None = None) -> dict[str, str]:
         """Tham so API TU DAT tren moi ket noi trong pool.
