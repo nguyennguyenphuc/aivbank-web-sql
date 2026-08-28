@@ -49,6 +49,13 @@ EXPECTED = {
     },
 }
 
+#: Vai tro truyen cho `03_schema_grants.sql`, lay nguyen van tu header cua no.
+#: Mot dong cho moi database - file do co y dung chung cho ca hai.
+GRANT_ROLES = {
+    "aivb_student": ("aivb_reader_student", "aivb_api_student", "aivb_bi_student"),
+    "aivb_instructor": ("aivb_reader_instructor", "aivb_api_instructor", "aivb_bi_instructor"),
+}
+
 #: Bảng nhỏ, ổn định, dùng làm phép thử "dữ liệu có thật sự vào không".
 CANARY = ("ref_branch", 12)
 
@@ -84,6 +91,32 @@ def _psql_scalar(db: str, sql: str, user: str, host: str, port: str) -> str:
     return out.stdout.strip()
 
 
+def _secrets() -> dict[str, str]:
+    """Doc `pg_secrets.env`: moi dong `khoa=gia-tri`, gia tri la phan TRUOC dau
+    cach dau tien (phan sau la chu thich). Cung khuon ma `backend/config.py`
+    (`Settings._pg_password`) dung, de hai ben khong thoat ly nhau."""
+    raw = os.environ.get("AIVB_PG_PASSWORD_FILE", "")
+    path = Path(raw) if raw else APP_ROOT / "config" / "pg_secrets.env"
+    if not path.is_file():
+        raise SystemExit(
+            f"khong thay {path}. Mat khau vai tro nam o day - xem docs/MIGRATION.md muc 5."
+        )
+    out: dict[str, str] = {}
+    # `utf-8-sig`: PowerShell ghi file nay. Voi `utf-8` thi mot BOM dinh vao
+    # khoa DAU TIEN (`\ufeffpw_loader`) va khoa do bien mat khong mot loi bao.
+    for line in path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, _, value = line.partition("=")
+        cleaned = value.strip().split(" ", 1)[0]
+        # Gia tri rong bi BO QUA chu khong luu chuoi rong: `REQUIRED_SECRETS`
+        # ben duoi se bao thieu khoa, thay vi de mot mat khau rong di tiep.
+        if cleaned:
+            out[key.strip()] = cleaned
+    return out
+
+
 def cmd_dump(args) -> int:
     DUMP_DIR.mkdir(parents=True, exist_ok=True)
     print("NHAC: chay `python qa/verify_pg_parity.py --target student` TRUOC buoc nay.")
@@ -102,36 +135,176 @@ def cmd_dump(args) -> int:
     return 0
 
 
+#: Thu tu ap luoc do. TUONG MINH chu khong glob.
+#:
+#:   - `0*.sql` cu bo sot 14/15/16, va hau qua la mot may moi dung len khong co
+#:     nhom lop, khong co `aivb_app`, khong co `aivb_app_rw`: DANG NHAP WEB CHET
+#:     trong khi `/health` van tra 200 (no chi doc dataset).
+#:   - `*.sql` thi nguoc lai: keo ca `10/11/12_scm_*` vao day, ma do la viec cua
+#:     service `restore-scm` (docker/restore-scm.sh).
+SCHEMA_PRE = ("01_roles.sql", "02_databases.sql", "03_schema_grants.sql")
+
+#: Chay SAU `pg_restore`. Ba canh, moi canh mot ly do:
+#:
+#:   15 sau pg_restore  `15` dat `statement_timeout='300s'` qua
+#:                      `ALTER ROLE ALL IN DATABASE aivb_student`, va khoi mien
+#:                      tru chi go `default_transaction_read_only`, KHONG go
+#:                      timeout. `pg_restore` noi bang `postgres` nen khong duoc
+#:                      mien: mot COPY/CREATE INDEX tren `core_gl_entry` 24,9
+#:                      trieu hang vuot 300s se bi huy giua chung. Day chinh la
+#:                      cai bay trong "cu noi glob ra cho du".
+#:   16 sau 15          `16` cap CONNECT cho hai nhom lop ma `15` tao ra.
+#:   01 LAN HAI         `01` dat nam mat khau ha tang vo dieu kien, ma verifier
+#:                      SCRAM duoc tinh MOT LAN luc dat. Chay `01` o pha PRE bam
+#:                      chung o 4096 vong; chay lai sau `15` (da nang
+#:                      `scram_iterations` len 100000) bam lai cho dung. Nam cau
+#:                      `ALTER ROLE`, idempotent hoan toan. KHONG gi khac dong
+#:                      khe nay, va no khong co trieu chung nao.
+SCHEMA_POST = ("15_class_roles.sql", "01_roles.sql", "16_app_database.sql")
+
+#: Khoa bat buoc phai co trong `pg_secrets.env` truoc khi chay `restore`.
+REQUIRED_SECRETS = (
+    "pw_loader", "pw_api_s", "pw_api_i", "pw_bi_s", "pw_bi_i", "pw_app_rw",
+)
+
+
+def _runs_for(script: str, secrets: dict) -> list:
+    """(database, [(bien psql, gia tri)]) cho moi lan chay mot script.
+
+    Vai script duoc THAM SO HOA bang bien psql, va `03` con phai chay MOT LAN
+    CHO MOI DATABASE - xem header cua chinh cac file. Chay tat ca voi
+    `-d postgres` va khong bien nao thi hong ca hai duong: `:'pw_loader'` thanh
+    loi cu phap duoi `ON_ERROR_STOP`, con schema `aivb` bi tao nham vao database
+    `postgres` thay vi hai database that.
+    """
+    if script.startswith("01"):
+        keys = ("pw_loader", "pw_api_s", "pw_api_i", "pw_bi_s", "pw_bi_i")
+        return [("postgres", [(k, secrets[k]) for k in keys])]
+    if script.startswith("03"):
+        return [
+            (db, list(zip(("reader", "api", "bi"), roles)))
+            for db, roles in GRANT_ROLES.items()
+        ]
+    if script.startswith("16"):
+        # `-d postgres`: chinh file tu `\connect aivb_app` ben trong no.
+        return [("postgres", [("pw_app_rw", secrets["pw_app_rw"])])]
+    return [("postgres", [])]
+
+
+def _wait_scram(args, want: int = 100000, timeout_s: float = 15.0) -> None:
+    """Doi `scram_iterations` thuc su co hieu luc TRUOC khi dat mat khau.
+
+    `15` doi tham so nay bang `ALTER SYSTEM` + `pg_reload_conf()`, ma
+    `pg_reload_conf()` gui TIN HIEU cho postmaster - no khong dong bo. Phien
+    psql ngay sau do van co the doc ra 4096, va luc ay `16` se bam mat khau cua
+    `aivb_app_rw` o 4096 vong thay vi 100000, KHONG mot loi bao nao.
+    """
+    import time
+
+    deadline = time.time() + timeout_s
+    while time.time() < deadline:
+        out = _run([
+            _pg_bin("psql"), "-h", args.host, "-p", args.port, "-U", args.user,
+            "-d", "postgres", "-Atc", "SHOW scram_iterations",
+        ])
+        try:
+            if int((out.stdout or "").strip()) >= want:
+                return
+        except ValueError:
+            pass
+        time.sleep(0.5)
+    print("    CANH BAO: scram_iterations chua dat %d sau %.0fs" % (want, timeout_s))
+
+
+def _run_scripts(args, scripts, secrets: dict) -> int:
+    for name in scripts:
+        script = SCHEMA_DIR / name
+        if not script.is_file():
+            print("    LOI: khong thay %s" % script, file=sys.stderr)
+            return 1
+        for db, bien in _runs_for(name, secrets):
+            print("  chay %s tren %s" % (name, db))
+            cmd = [
+                _pg_bin("psql"), "-h", args.host, "-p", args.port, "-U", args.user,
+                "-d", db, "-v", "ON_ERROR_STOP=1",
+            ]
+            for k, v in bien:
+                cmd += ["-v", "%s=%s" % (k, v)]
+            cmd += ["-f", str(script)]
+            out = _run(cmd)
+            if out.returncode != 0:
+                print("    LOI: %s" % out.stderr.strip(), file=sys.stderr)
+                return 1
+        if name.startswith("15"):
+            _wait_scram(args)
+    return 0
+
+
+def _data_loaded(args) -> bool:
+    """Du lieu da vao chua - CHI hoi cau do, khong lam gi khac."""
+    import contextlib
+    import io
+
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        try:
+            return cmd_verify(args) == 0
+        except SystemExit:
+            return False
+
+
 def cmd_restore(args) -> int:
-    missing = [db for db in EXPECTED if not (DUMP_DIR / f"{db}.dump").is_file()]
-    if missing:
-        print(f"thieu ban dump cho: {', '.join(missing)}", file=sys.stderr)
-        print(f"Dat chung vao {DUMP_DIR} - xem app/README.md.", file=sys.stderr)
-        return 2
+    secrets = _secrets()
+    thieu = [k for k in REQUIRED_SECRETS if k not in secrets]
+    if thieu:
+        print("LOI: pg_secrets.env thieu khoa %s." % thieu, file=sys.stderr)
+        print("     Sinh chung tren HOST:  .\\scripts\\Apply-PgAuth.ps1 -Apply",
+              file=sys.stderr)
+        print("     (config/ duoc mount READ-ONLY vao moi container, nen tu trong",
+              file=sys.stderr)
+        print("      day khong ghi duoc. Mot may moi vi the la HAI lenh.)",
+              file=sys.stderr)
+        return 1
 
     # Schema TRUOC: `02_databases.sql` ep BUILTIN_LOCALE 'C', ma pg_restore
     # khong sua duoc sau do. Thu tu nay khong doi cho nhau duoc.
-    for script in sorted(SCHEMA_DIR.glob("0*.sql")):
-        print(f"  chay {script.name}")
-        out = _run([
-            _pg_bin("psql"), "-h", args.host, "-p", args.port, "-U", args.user,
-            "-d", "postgres", "-v", "ON_ERROR_STOP=1", "-f", str(script),
-        ])
-        if out.returncode != 0:
-            print(f"    LOI: {out.stderr.strip()}", file=sys.stderr)
-            return 1
+    rc = _run_scripts(args, SCHEMA_PRE, secrets)
+    if rc:
+        return rc
 
-    for db in EXPECTED:
-        dump = DUMP_DIR / f"{db}.dump"
-        print(f"  phuc hoi {db}")
-        out = _run([
-            _pg_bin("pg_restore"), "-h", args.host, "-p", args.port, "-U", args.user,
-            "-d", db, "--no-owner", "--role", "aivb_owner", "-j", "4", str(dump),
-        ])
-        # pg_restore tra ve khac 0 ca khi chi co canh bao; chi coi la loi khi
-        # phep nghiem thu ben duoi truot.
-        if out.returncode != 0:
-            print(f"    (pg_restore co canh bao, se kiem lai o buoc verify)")
+    # CHOT IDEMPOTENT - GIU DUNG MOT BUOC: `pg_restore`.
+    #
+    # Ban cu goi `cmd_verify` roi `return` som TRUOC CA vong lap luoc do, nen
+    # sua mot script grants/roles roi chay lai `restore` khong ap gi ma van bao
+    # DAT. `pg_restore` la buoc DUY NHAT khong lam lai duoc: vao mot database DA
+    # CO du lieu thi lenh tao bang that bai, con lenh COPY thi khong chac - va
+    # neu no chay, du lieu bi NHAN DOI. Cac script luoc do deu idempotent theo
+    # thiet ke (`02` chi CREATE DATABASE ... \gexec guard NOT EXISTS; `03` drop
+    # schema `public` chu KHONG phai `aivb`, roi CREATE SCHEMA IF NOT EXISTS) -
+    # do la gia dinh chiu luc khien chot doi duoc xuong day.
+    if _data_loaded(args):
+        print("  du lieu da co (nghiem thu dat) - BO QUA pg_restore")
+    else:
+        missing = [db for db in EXPECTED if not (DUMP_DIR / ("%s.dump" % db)).is_file()]
+        if missing:
+            print("thieu ban dump cho: %s" % ", ".join(missing), file=sys.stderr)
+            print("Dat chung vao %s - xem app/README.md." % DUMP_DIR, file=sys.stderr)
+            return 2
+        for db in EXPECTED:
+            dump = DUMP_DIR / ("%s.dump" % db)
+            print("  phuc hoi %s" % db)
+            out = _run([
+                _pg_bin("pg_restore"), "-h", args.host, "-p", args.port,
+                "-U", args.user, "-d", db, "--no-owner", "--role", "aivb_owner",
+                "-j", "4", str(dump),
+            ])
+            # pg_restore tra ve khac 0 ca khi chi co canh bao; chi coi la loi khi
+            # phep nghiem thu ben duoi truot.
+            if out.returncode != 0:
+                print("    (pg_restore co canh bao, se kiem lai o buoc verify)")
+
+    rc = _run_scripts(args, SCHEMA_POST, secrets)
+    if rc:
+        return rc
 
     return cmd_verify(args)
 
