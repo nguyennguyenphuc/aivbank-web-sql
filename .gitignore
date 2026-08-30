@@ -104,6 +104,11 @@ scripts/anaconda3/
 # mạng nhà. Cùng hạng với `Loi/` ở mục 3.
 /Router.png
 
+# Nhat ky cua skill `ra-soat-tieng-viet`: tu lieu ra soat mot lan, khong phai
+# tai lieu du an. Ban da sua nam trong lich su git roi, con file nay chi de doc
+# lai xem tung cau da doi the nao.
+ra-soat-log_*.md
+
 # ---------------------------------------------------------------------
 # KHÔNG bỏ qua: frontend/vendor/
 # ---------------------------------------------------------------------
