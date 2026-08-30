@@ -31,13 +31,30 @@ phải xin từ người khác.
 Mỗi file khoảng 1 GB nên không đưa vào git được. Đặt cả ba vào
 `database/dumps/`:
 
-| File | Dung lượng | Bắt buộc? |
-|---|---|---|
-| `aivb_student.dump` | 959 MB | có |
-| `aivb_instructor.dump` | 1,1 GB | có |
-| `scm.dump` | 671 MB | chỉ khi bật bộ Supply Chain |
+| File | Dung lượng | Bảng | Bắt buộc? |
+|---|---|---|---|
+| `aivb_student.dump` | 959 MB | 77 | có |
+| `aivb_instructor.dump` | 1,1 GB | 100 | có |
+| `scm.dump` | 671 MB | 20 | chỉ khi bật bộ Supply Chain |
 
 **Link tải: `<DAN-LINK-DRIVE-VAO-DAY>`**
+
+Đối chiếu sau khi tải — Drive vẫn có thể cắt cụt một file 1 GB mà trình duyệt
+không báo gì:
+
+```
+5bd4d48d07172449d122851068316be03dde9275840b78604e268b0a2ae3fc00  aivb_student.dump
+4dd2bd4225f810fd8540aeceaf67fc411de7ccd7410154f8b6330046415d03e0  aivb_instructor.dump
+5fa45210c0cee43d49c56712df665741a72b37ccecc3c463e06634e0b5d2461b  scm.dump
+```
+
+```powershell
+Get-FileHash database\dumps\aivb_student.dump -Algorithm SHA256
+```
+
+Sai checksum thì **đừng restore**. `restore.py` có nghiệm thu riêng, nhưng nó
+bắt lỗi ở tầng dữ liệu chứ không bắt được một archive hỏng nửa chừng — bạn sẽ
+mất thời gian đọc một thông báo về collation trong khi nguyên nhân thật là mạng.
 
 ### Tự tạo lúc dựng — KHÔNG phải xin ai
 
