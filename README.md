@@ -37,7 +37,7 @@ Mỗi file khoảng 1 GB nên không đưa vào git được. Đặt cả ba và
 | `aivb_instructor.dump` | 1,1 GB | 100 | có |
 | `scm.dump` | 671 MB | 20 | chỉ khi bật bộ Supply Chain |
 
-**Link tải: `<DAN-LINK-DRIVE-VAO-DAY>`**
+**Link tải:** https://drive.google.com/drive/folders/1lq33frHjPaXbd_eopECq-6v-XQBk99ht?usp=sharing
 
 Đối chiếu sau khi tải — Drive vẫn có thể cắt cụt một file 1 GB mà trình duyệt
 không báo gì:
