@@ -101,7 +101,7 @@ Interactive docs: `GET /docs` · machine-readable: `GET /openapi.json`.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `AIVB_AUTH_DB_PATH` | `_workspace/auth/auth.sqlite3` | Credential store (SQLite). **Must not be inside `_workspace/release/`, inside `web/`, or in the same directory as a `.duckdb` file** — the server refuses to start otherwise. |
+| *(no credential-store variable)* | — | Passwords live in PostgreSQL's `pg_authid`. The app never hashes or stores a copy: `verify_password` opens a connection as the user's own role, so connecting *is* the check. There is no file to misplace. |
 | `AIVB_AUDIT_LOG_PATH` | `_workspace/auth/audit.jsonl` | Append-only JSONL audit log. |
 | `AIVB_INSTRUCTOR_DB_PATH` | *(unset)* | The 100-table/611-column internal dataset. Unset means INSTRUCTOR sessions get the same student dataset — less access, never more. |
 | `AIVB_OWNER_CONFIG_PATH` | `AIV_Bank_full_standalone_v5.1.6.4/01_cau_hinh_owner_v1.0.json` | Normative DEC-07 visibility, alias and delivery policy. Startup fails closed if it conflicts with the column contract. |
@@ -803,19 +803,23 @@ Work top to bottom. Each step has a command that either passes or fails — do n
 
       First must echo your origin; second must print **nothing**.
 
-- [ ] **4. Create the accounts and check where the credential store landed.**
+- [ ] **4. Create the accounts, and capture the one-time passwords.**
 
       python -m backend.admin_cli import-csv --file class_2026a.csv --role STUDENT
       python -m backend.admin_cli create-user --username gv_lan --role INSTRUCTOR
       python -m backend.admin_cli list
 
-      Then confirm the store is nowhere near the release:
+      Each password is printed **once** and cannot be recovered — copy them as the
+      command runs. A lost one is a `reset-password`, not a lookup.
 
-      find _workspace/release -name '*.sqlite3' -o -name 'audit.jsonl'   # must print nothing
+      There is no credential file to misplace any more: passwords live in `pg_authid`,
+      and the app holds no copy. What *can* still leak is the audit log, which records
+      every query verbatim alongside who ran it:
 
-      The server refuses to start if `AIVB_AUTH_DB_PATH` is inside `_workspace/release/`,
-      inside `web/`, or in the same directory as a dataset file — but check anyway, because
-      the mistake that matters is copying it there *later*, when someone zips the release.
+      find _workspace/release -name 'audit.jsonl'   # must print nothing
+
+      Check it even though `.gitignore` blocks the name everywhere, because the mistake
+      that matters is copying it there *later*, when someone zips the release.
 
 - [ ] **5. Terminate TLS** at the proxy **and set `AIVB_COOKIE_SECURE=1`.** Without it the
       session cookie is sent over plain HTTP. The startup log prints a `SECURITY:` warning
@@ -900,10 +904,12 @@ itself. Decisions worth knowing about:
 * **Server-side sessions, not JWTs.** A JWT cannot be revoked before it expires. Here, the
   instructor disabling an account or resetting a password kills every live session on the
   next request, which is what "a student is caught mid-exam" actually needs.
-* **The credential store is a separate SQLite file.** Students run arbitrary SQL against
-  `student.duckdb`; anything in that file is public to them. `auth.sqlite3` is a different
-  engine, a different file and a different code path, and the server refuses to start if it
-  is placed inside a student-facing directory (`api/config.py::assert_auth_store_isolated`).
+* **There is no credential store to protect.** Passwords live in PostgreSQL's `pg_authid`,
+  and `verify_password` authenticates by opening a connection *as that role* — connecting is
+  the check. The app never reads `pg_authid.rolpassword`, so breaching the web tier yields no
+  verifier to crack offline, and there is no file that can be copied into a student-facing
+  directory by mistake. One person = one PostgreSQL role, shared by the console and Power BI,
+  which is also the only way the two lanes can stay in sync.
 * **The role selects the server-side database file.** `STUDENT → physical projection` (77 tables / 405 columns),
   `INSTRUCTOR → internal dataset` (100 / 611). Not a filter over one connection — a filter is one
   bug away from being bypassed, whereas the student connection has no handle on the
@@ -924,9 +930,9 @@ itself. Decisions worth knowing about:
 1. **No MFA, and no password-reset self-service.** A forgotten password means the instructor
    runs `reset-password`. For a cohort-scale teaching tool that is the right trade; for
    anything larger it is not.
-2. **The lockout counters are per-process state in SQLite.** Running two API processes
-   against the same `auth.sqlite3` works (WAL), but running them against *different* stores
-   would give an attacker N× the attempts. Run one store.
+2. **The lockout counters live in the `aivb_app` database.** Two API processes pointed at the
+   same cluster share them correctly, but pointing them at *different* clusters would give an
+   attacker N× the attempts. Run one `aivb_app`.
 3. **`AIVB_COOKIE_SECURE` defaults to off** so local http development works. That default is
    wrong for production and is warned about at every start; step 5 of the checklist is not
    optional.
