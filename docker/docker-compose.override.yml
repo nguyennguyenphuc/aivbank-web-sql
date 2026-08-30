@@ -26,6 +26,19 @@ services:
     ports:
       - "5433:5432"
 
+    # `max_connections` KHONG duoc dat o dau trong kho truoc day, nen no la mac
+    # dinh 100 cua image. (Ghi chu o `10_scm_roles.sql` dong 59 noi "dang la 200"
+    # la SAI.) 100 khong du cho lop dung Power BI:
+    #
+    #     10 nguoi cung luc x 8 ket noi = 80, cong pool ung dung ~15 va 3 cho
+    #     superuser, la ~98 - sat tran, va bat ky bien dong nao cung lam hong.
+    #
+    # Dat bang `command` chu khong `ALTER SYSTEM`: gia tri nam trong kho, doc
+    # duoc, va song sot khi dung lai volume.
+    #
+    # DOI GIA TRI NAY CAN KHOI DONG LAI PostgreSQL, khong reload duoc.
+    command: ["postgres", "-c", "max_connections=150"]
+
   restore:
     volumes:
       - ../database/dumps:/app/database/dumps:ro

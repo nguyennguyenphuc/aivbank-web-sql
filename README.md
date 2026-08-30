@@ -359,6 +359,39 @@ FATAL: pg_hba.conf rejects connection for host "172.18.0.1", user "postgres"
 
 Đó là quy tắc `pg_hba` đang chặn đúng như thiết kế, không phải lỗi cấu hình.
 
+### Ngân sách kết nối
+
+Mỗi học viên có trần **8 kết nối**, và kết nối rỗi quá **15 phút** bị thu hồi.
+Con số 8 chọn theo cách Power BI thật sự mở kết nối, không phải chọn cho tròn.
+
+| Chế độ | Power BI mở bao nhiêu |
+|---|---|
+| Import | song song mặc định bằng **số nhân logic CPU** của máy học viên, tức 8-16 trên laptop đời mới |
+| DirectQuery | *Maximum connections per data source*, mặc định tối đa **10** với Power BI Pro |
+
+Nên hạ mức song song phía Power BI xuống **4-6**, vì một laptop 16 nhân để mặc
+định sẽ chiếm phần của cả lớp:
+
+- **Import** nằm ở Options > Current File > Data Load > *Parallel loading of tables*
+- **DirectQuery** nằm ở Options > Current File > DirectQuery > *Maximum
+  connections per data source*
+
+Hai thông báo lỗi trỏ vào hai chỗ khác nhau, đừng nhầm:
+
+| Thông báo | Nghĩa | Xử lý |
+|---|---|---|
+| `too many connections for role` | vượt trần cá nhân 8 | hạ mức song song của Power BI |
+| `too many connections for database` | cả lớp đang dùng hết trần chung | chờ, hoặc báo giảng viên |
+
+Giảng viên xem ai đang giữ kết nối:
+
+```sql
+SELECT usename, state, application_name, now() - state_change AS idle
+FROM pg_stat_activity WHERE usename NOT LIKE 'aivb\_%' ORDER BY usename;
+```
+
+`application_name` là `Mashup Engine` thì đó là Power BI.
+
 ---
 
 ## 9. Thay frontend

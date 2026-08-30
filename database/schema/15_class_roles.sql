@@ -123,18 +123,34 @@ GRANT CONNECT ON DATABASE aivb_instructor TO aivb_class_instructor;
 -- Truoc day `aivb_bi_student` co CONNECTION LIMIT 40, va vi ca lop dung
 -- chung mot vai tro nen 40 la TRAN CUNG cho toan bo luu luong BI.
 --
--- Moi nguoi mot vai tro thi tran do bien mat: 30 hoc vien x 4 = 120 ket noi
--- trong khi `max_connections` la 100 (3 danh cho superuser). Tran theo vai
--- tro KHONG cong thanh tran tong.
+-- Moi nguoi mot vai tro thi tran do bien mat, va tran theo vai tro KHONG cong
+-- thanh tran tong. `ALTER DATABASE ... CONNECTION LIMIT` khoi phuc tinh chat do.
 --
--- `ALTER DATABASE ... CONNECTION LIMIT` khoi phuc dung tinh chat da mat.
-ALTER DATABASE aivb_student    CONNECTION LIMIT 45;
-ALTER DATABASE aivb_instructor CONNECTION LIMIT 15;
+-- PHEP TINH, cap nhat 2026-08-30 sau su co Power BI cua sv001:
+--
+--   Tran moi nguoi len 8 (xem `backend/pgroles.py`, DEFAULT_CONNECTION_LIMIT -
+--   4 lam Power BI hong ngay voi mo hinh nhieu hon mot bang). Cao diem 10 nguoi
+--   cung luc:
+--
+--       10 nguoi x 8 = 80  ket noi cho lop
+--       pool ung dung    ~15
+--       superuser          3
+--       -------------------------
+--       tong             ~98
+--
+--   Vi vay `max_connections` da nang 100 -> 150 o
+--   `docker/docker-compose.override.yml`. Neu chay ban bare-metal thi phai tu
+--   dat, PostgreSQL mac dinh la 100 va cum se cham tran truoc lop.
+--
+-- Tong ba tran duoi day CO Y vuot `max_connections`: khong bao gio ca ba
+-- database day cung luc, va `max_connections` moi la buc tuong that.
+ALTER DATABASE aivb_student    CONNECTION LIMIT 80;
+ALTER DATABASE aivb_instructor CONNECTION LIMIT 30;
 
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_database WHERE datname = 'scm') THEN
-        EXECUTE 'ALTER DATABASE scm CONNECTION LIMIT 25';
+        EXECUTE 'ALTER DATABASE scm CONNECTION LIMIT 80';
     END IF;
 END $$;
 

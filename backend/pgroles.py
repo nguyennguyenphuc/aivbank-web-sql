@@ -47,10 +47,30 @@ GROUP_OF_ROLE = {
 }
 ALL_GROUPS = tuple(GROUP_OF_ROLE.values())
 
-#: Power BI mở 4-8 kết nối mỗi lần refresh. 4 là đủ cho một mô hình vừa phải
-#: mà 30 học viên cùng lúc vẫn nằm dưới `ALTER DATABASE ... CONNECTION LIMIT`
-#: đặt ở `15_class_roles.sql`.
-DEFAULT_CONNECTION_LIMIT = 4
+#: Giá trị này từng là 4, và 4 làm Power BI hỏng ngay với mô hình nhiều hơn một
+#: bảng. Con số thật theo tài liệu Microsoft:
+#:
+#:   * Import       song song mặc định BẰNG SỐ NHÂN LOGIC CPU của máy học viên,
+#:                  tức 8-16 trên laptop đời mới.
+#:   * DirectQuery  `Maximum connections per data source`, trần 10 với Power BI
+#:                  Pro / shared capacity.
+#:
+#: 8 là mức khớp với Import ở một mô hình vừa, và để Power BI tự chạm trần của
+#: chính nó trước khi chạm trần của server. Trần TỔNG vẫn là
+#: `ALTER DATABASE ... CONNECTION LIMIT` ở `15_class_roles.sql` mục 3 — trần
+#: theo vai trò không cộng thành trần tổng.
+DEFAULT_CONNECTION_LIMIT = 8
+
+#: Power BI bỏ lại kết nối rỗi sau mỗi lần refresh; `application_name` của chúng
+#: là `Mashup Engine`. Cụm không đặt `idle_session_timeout` (mặc định 0 = không
+#: bao giờ thu hồi), nên chúng tích tụ tới khi người đó không refresh được nữa.
+#: Chỉ nâng CONNECTION LIMIT mà không có dòng này thì chỉ dời thời điểm hỏng.
+#:
+#: ĐẶT TRÊN TỪNG VAI TRÒ ĐĂNG NHẬP, không đặt ở tầng cụm hay tầng database:
+#: pool của backend (`aivb_api_*`, `scm_api`, `aivb_app_rw`) sống dựa vào kết nối
+#: rỗi lâu — có kết nối rỗi hàng ngày là bình thường. Cắt chúng là làm hỏng chính
+#: ứng dụng. Module này chỉ tạo vai trò của người thật nên tự nhiên an toàn.
+DEFAULT_IDLE_SESSION_TIMEOUT = "15min"
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 
@@ -177,10 +197,14 @@ def ensure_role(
     role: str,
     password: str | None = None,
     connection_limit: int = DEFAULT_CONNECTION_LIMIT,
+    idle_session_timeout: str = DEFAULT_IDLE_SESSION_TIMEOUT,
 ) -> None:
     """Tạo vai trò nếu chưa có, rồi đặt nhóm / mật khẩu / hạn mức.
 
     Idempotent. `password=None` thì giữ nguyên mật khẩu hiện tại.
+
+    Vì idempotent, gọi lại hàm này trên một vai trò đã có là cách nâng hạn mức
+    cho tài khoản cũ mà không đụng tới mật khẩu của họ.
     """
     ident = _ident(username)
     if not role_exists(conn, username):
@@ -197,6 +221,14 @@ def ensure_role(
                 ident, sql.Literal(int(connection_limit))
             )
         )
+    # Xem chu thich o `DEFAULT_IDLE_SESSION_TIMEOUT`. Dat o day chu khong o nhom:
+    # `ALTER ROLE ... SET` KHONG di truyen qua thanh vien nhom - `15_class_roles.sql`
+    # muc 4 giai thich dieu nay.
+    conn.execute(
+        sql.SQL("ALTER ROLE {} SET idle_session_timeout = {}").format(
+            ident, sql.Literal(idle_session_timeout)
+        )
+    )
     set_role(conn, username, role)
     if password is not None:
         set_password(conn, username, password)
