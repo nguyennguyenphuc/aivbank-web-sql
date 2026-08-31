@@ -14,7 +14,7 @@
 --
 -- CHAY TREN VPS, voi quyen `scm_owner` (hoac postgres):
 --
---     psql -U postgres -d scm -f 14_scm_migration_2026-08-31.sql
+--     psql -U postgres -d scm -f 17_scm_migration_2026-08-31.sql
 --
 -- File nay CHI doi luoc do, khong dong vao du lieu. Chay xong moi chay
 -- `load_scm.py load`. Chay lai nhieu lan khong sao (idempotent).
