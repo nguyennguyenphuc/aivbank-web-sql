@@ -1,5 +1,5 @@
 -- =====================================================================
--- SupplyChain dataset - schema, 20 bang, GRANT
+-- SupplyChain dataset - schema, 21 bang, GRANT
 -- =====================================================================
 -- Chay bang superuser, BEN TRONG database `scm`, sau 11_scm_database.sql:
 --   psql -h 127.0.0.1 -U postgres -d scm -f database/schema/12_scm_schema_grants.sql
@@ -94,6 +94,19 @@ CREATE TABLE IF NOT EXISTS item_costs (
     unit_cost   double precision
 );
 
+-- Gia ban / gia von THEO THANG. `item_costs` giu nguyen la gia goc; bang nay
+-- la gia theo tung thang quanh no. Co vi `item_costs` chi co mot gia cho ca 4,5
+-- nam va bien loi nhuan cua moi ma la hang so, nen khong the tra loi "bien dang
+-- mong di hay day len".
+CREATE TABLE IF NOT EXISTS item_costs_monthly (
+    item_nbr    integer REFERENCES items(item_nbr),
+    ym          text,             -- 'YYYY-MM'
+    unit_price  double precision,
+    unit_cost   double precision,
+    margin_pct  double precision, -- 1 - unit_cost / unit_price
+    PRIMARY KEY (item_nbr, ym)
+);
+
 CREATE TABLE IF NOT EXISTS warehouses (
     warehouse_id  text PRIMARY KEY,
     city          text,
@@ -173,6 +186,10 @@ CREATE TABLE IF NOT EXISTS inventory_snapshots (
     received         real,
     sold             real,
     on_hand_end      real,
+    -- Phan cau KHONG dap ung duoc trong ky (het hang). `sold` van la CAU THAT,
+    -- khong bi cat bot, nen dang thuc luon dung:
+    --   on_hand_end = on_hand_begin + received - sold + thieu_hut
+    thieu_hut        real,
     inventory_value  double precision,
     PRIMARY KEY (store_nbr, item_nbr, ym)
 );
@@ -183,6 +200,13 @@ CREATE TABLE IF NOT EXISTS purchase_orders (
     item_nbr            integer REFERENCES items(item_nbr),
     po_date             text,
     qty_ordered         real,
+    -- Chat luong hang nhan. `received_date` NULL = don con dang tren duong o moc
+    -- cat du lieu; khi do ba cot duoi day cung NULL va `inspection_result` la
+    -- 'Pending'. Nho vay %Pass + %Pending + %Fail = 100% mot cach tu nhien.
+    qty_received        real,
+    qty_defect          real,
+    defect_rate         double precision,
+    inspection_result   text,          -- 'Pass' | 'Fail' | 'Pending'
     promised_lead_days  smallint,
     promised_date       text,
     received_date       text,
@@ -238,6 +262,9 @@ CREATE TABLE IF NOT EXISTS staffing_plan (
     hub_id              text REFERENCES sorting_hubs(hub_id),
     date                date,
     headcount_ke_hoach  integer,
+    -- Quan so CO MAT = ke hoach tru so nguoi vang. Nang luc kho tinh theo cot
+    -- nay, khong theo cot ke hoach.
+    headcount_thuc_te   integer,
     PRIMARY KEY (hub_id, date)
 );
 
@@ -277,7 +304,8 @@ CREATE TABLE IF NOT EXISTS warehouse_daily_ops (
     orders_to_process  integer,
     backlog_dau_ngay   double precision,
     backlog_cuoi_ngay  double precision,
-    headcount          integer,
+    headcount          integer,   -- so nguoi CO MAT
+    headcount_ke_hoach integer,   -- so nguoi tren giay, de so sanh
     total_weight_kg    double precision,
     avg_sort_time_min  double precision,
     workload_ratio     double precision,

@@ -42,6 +42,13 @@ USER = os.environ.get("AIVB_SCM_LOAD_USER", "postgres")
 #: lam FK tu choi, khong phai lam sai du lieu, nhung thong bao loi cua
 #: PostgreSQL o day khong noi ro nguyen nhan la thu tu.
 #:
+#: CANH BAO so dong mong doi. Sau dot sua bo sinh (nhanh `sua-bo-sinh-du-lieu`
+#: cua repo SupplyChain), `inventory_snapshots` KHONG con la tich chu nhat
+#: (cap x thang) nua: cac thang truoc khi mot ma len ke va sau khi no roi ke da
+#: bi cat bo, khoang 5-6% so dong. So 9.782.360 duoi day la cua bo CU. Phai do
+#: lai va cap nhat sau lan sinh du lieu ke tiep. Sai lech chi in canh bao chu
+#: khong chan viec nap.
+#:
 #: (ten bang, thu muc con, so dong mong doi)
 TABLES: list[tuple[str, str, int]] = [
     # --- tang 1: dimension khong phu thuoc ai ---
@@ -57,6 +64,7 @@ TABLES: list[tuple[str, str, int]] = [
     # --- tang 2: mo rong 1:1 va dimension co FK ---
     ("store_attributes", "", 54),
     ("item_costs", "", 4_100),
+    ("item_costs_monthly", "", 229_600),
     ("suppliers", "", 66),
     ("staffing_plan", "lastmile_v2", 4_368),
     ("warehouse_daily_ops", "lastmile_v2", 4_368),
