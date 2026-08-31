@@ -42,14 +42,15 @@ USER = os.environ.get("AIVB_SCM_LOAD_USER", "postgres")
 #: lam FK tu choi, khong phai lam sai du lieu, nhung thong bao loi cua
 #: PostgreSQL o day khong noi ro nguyen nhan la thu tu.
 #:
-#: CANH BAO so dong mong doi. Sau dot sua bo sinh (nhanh `sua-bo-sinh-du-lieu`
-#: cua repo SupplyChain), `inventory_snapshots` KHONG con la tich chu nhat
-#: (cap x thang) nua: cac thang truoc khi mot ma len ke va sau khi no roi ke da
-#: bi cat bo, khoang 5-6% so dong. So 9.782.360 duoi day la cua bo CU. Phai do
-#: lai va cap nhat sau lan sinh du lieu ke tiep. Sai lech chi in canh bao chu
-#: khong chan viec nap.
-#:
 #: (ten bang, thu muc con, so dong mong doi)
+#:
+#: Da do lai tren `bo-du-lieu-vn-full/` sau dot sinh lai ngay 2026-08-31.
+#: Chi hai dong doi so voi truoc do:
+#:   inventory_snapshots  9.782.360 -> 6.477.346  (-33,8%)
+#:       Vong doi danh muc cat cac thang truoc khi mot ma len ke va sau khi no
+#:       roi ke. Nhung dong bi cat truoc day khai bao ton kho cho hang ma cua
+#:       hang chua bao gio ban.
+#:   item_costs_monthly   BANG MOI, 229.600 dong = 4.100 ma x 56 thang.
 TABLES: list[tuple[str, str, int]] = [
     # --- tang 1: dimension khong phu thuoc ai ---
     ("city_geo", "", 22),
@@ -73,7 +74,7 @@ TABLES: list[tuple[str, str, int]] = [
     ("shipments", "", 12_060),
     ("purchase_orders", "", 158_798),
     ("orders", "lastmile_v2", 1_034_195),
-    ("inventory_snapshots", "", 9_782_360),
+    ("inventory_snapshots", "", 6_477_346),
     ("sales", "", 125_497_040),
 ]
 
