@@ -1,0 +1,6 @@
+{
+  "name": "Vương Quốc Kẹo Ngọt Match-3",
+  "description": "Game xếp hình Match-3 phong cách hoạt hình hoạt họa dễ thương với nhiều màn chơi thử thách, combo hoành tráng, các bổ trợ đặc sắc và hiệu ứng âm thanh sống động.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

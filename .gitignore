@@ -29,6 +29,7 @@ audit.jsonl
 # Toàn bộ config/ trừ đúng file mẫu. Đây là chỗ pg_secrets.env sống.
 config/*
 !config/.env.example
+!config/game.env.example
 
 # Mọi biến thể file bí mật khác.
 *.pem
@@ -116,3 +117,6 @@ ra-soat-log_*.md
 # mục 3 và frontend/vendor/duckdb-wasm/PROVENANCE.md). Chúng phải đi cùng
 # kho, vì phòng máy có thể không ra được Internet và ở đây không có bước
 # build nào để tải chúng về.
+
+# Profile compose cua may nay (vd. COMPOSE_PROFILES=game) - do scripts/Enable-Game.ps1 ghi.
+docker/.env

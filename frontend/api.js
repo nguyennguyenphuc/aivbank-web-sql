@@ -334,6 +334,7 @@ export const api = {
     ),
 
   gamificationMe: () => request("/gamification/me"),
+  gameStatus: () => request("/game-sso/status"),
   leaderboard: (period = "week") => request(`/gamification/leaderboard?period=${encodeURIComponent(period)}`),
   instructorAnalytics: () => request("/admin/analytics/queries"),
 

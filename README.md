@@ -361,16 +361,26 @@ FATAL: pg_hba.conf rejects connection for host "172.18.0.1", user "postgres"
 
 ### Ngân sách kết nối
 
-Mỗi học viên có trần **8 kết nối**, và kết nối rỗi quá **15 phút** bị thu hồi.
-Con số 8 chọn theo cách Power BI thật sự mở kết nối, không phải chọn cho tròn.
+Mỗi học viên có trần **30 kết nối**. Trong database `scm` (nguồn dashboard Power BI)
+kết nối rỗi **không** bị thu hồi; ở các database còn lại vẫn thu hồi sau **3 phút**.
+
+Đo trên dashboard LastMile ngày 2026-09-14 bằng `sv001`:
+
+| Cách nạp | Timeout rỗi `scm` | Đỉnh kết nối | Kết quả |
+|---|---|---|---|
+| song song (mặc định) | không | 47 | qua, nhưng vượt mọi trần hợp lý |
+| song song | 20–60 giây | 14–20 | **chập chờn** — server cắt kết nối rỗi, Power BI dùng lại kết nối đã chết: `Exception while reading from stream` |
+| **tuần tự** | không | **18–19** | qua |
+
+**Học viên phải nạp tuần tự.** File `.pbip` của bài đã đặt sẵn; ai tự dựng file mới
+thì vào Options > **Current File** > Data Load > *Parallel loading of tables* = **One**.
 
 | Chế độ | Power BI mở bao nhiêu |
 |---|---|
 | Import | song song mặc định bằng **số nhân logic CPU** của máy học viên, tức 8-16 trên laptop đời mới |
 | DirectQuery | *Maximum connections per data source*, mặc định tối đa **10** với Power BI Pro |
 
-Nên hạ mức song song phía Power BI xuống **4-6**, vì một laptop 16 nhân để mặc
-định sẽ chiếm phần của cả lớp:
+Với Import, đặt nạp **tuần tự** (xem trên). DirectQuery thì hạ số kết nối xuống **4-6**:
 
 - **Import** nằm ở Options > Current File > Data Load > *Parallel loading of tables*
 - **DirectQuery** nằm ở Options > Current File > DirectQuery > *Maximum
@@ -380,7 +390,7 @@ Hai thông báo lỗi trỏ vào hai chỗ khác nhau, đừng nhầm:
 
 | Thông báo | Nghĩa | Xử lý |
 |---|---|---|
-| `too many connections for role` | vượt trần cá nhân 8 | hạ mức song song của Power BI |
+| `too many connections for role` | vượt trần cá nhân 30 | đặt *Parallel loading of tables* = One, đóng/mở lại Power BI rồi Refresh |
 | `too many connections for database` | cả lớp đang dùng hết trần chung | chờ, hoặc báo giảng viên |
 
 Giảng viên xem ai đang giữ kết nối:
@@ -464,3 +474,57 @@ python database/restore.py dump
 
 Thứ tự này không đổi chỗ được. Dump chụp lại đúng trạng thái hiện tại, nên một
 sai lệch chưa phát hiện sẽ bị đóng gói vĩnh viễn rồi nhân bản sang mọi máy sau.
+
+---
+
+## 12. Tab Trò chơi (game match-3)
+
+Tab **Trò chơi** nhúng game "Vương Quốc Kẹo Ngọt" (thư mục `game/`, lấy từ
+repo `kabuto-png/candy-kingdom-match3` ở commit ghi trong `game/PROVENANCE.md`).
+Game là một ứng dụng đầy đủ (React + API NestJS + Redis + database riêng), nên
+nó chạy thành ba service thêm trong profile compose `game`. **Tùy chọn**: không
+bật thì không có service nào mới và tab tự ẩn.
+
+```
+trình duyệt ─> backend :8000 ─┬─ /game/          file tĩnh của game (build sẵn trong image backend)
+                              ├─ /game-sso/token vé SSO 60 giây, dùng một lần
+                              └─ /game/api/*  ──> game-api:3001 ──> PostgreSQL candy_game + redis
+```
+
+Bật trên máy đang chạy (idempotent, không cần Administrator):
+
+```powershell
+.\scripts\Enable-Game.ps1           # xem trước
+.\scripts\Enable-Game.ps1 -Apply    # làm thật
+```
+
+Script sinh `pw_candy_app` (trong `config\pg_secrets.env`) và `config\game.env`,
+dựng database `candy_game` bằng `database/schema/18_game_database.sql`, bật
+`AIVB_GAME_API_URL` + `COMPOSE_PROFILES=game`, build rồi `up -d`, cuối cùng đồng
+bộ tài khoản.
+
+**Đồng bộ tài khoản** — hai đường, cùng một hàm SQL `aivb_upsert_account`:
+
+- Mở tab là tự đăng nhập: game xin vé SSO từ phiên AIV Bank rồi tạo/cập nhật
+  tài khoản game (`account_identities.provider = 'aivb'`, `provider_subject` =
+  username, vai trò student/instructor theo AIV Bank).
+- Hàng loạt: `docker compose exec backend python -m backend.admin_cli game-sync`.
+  `create-user` / `import-csv` cũng tự đẩy tài khoản mới sang. Tài khoản bị
+  xoá hoặc khoá bên AIV Bank thì bị vô hiệu hoá bên game và mất phiên.
+
+**Ranh giới an toàn**: `candy_app` chỉ vào được `candy_game`; cookie phiên AIV
+Bank không bao giờ được chuyển sang `game-api`; chỉ `/game/*` được phép nhúng
+iframe, và chỉ bởi chính origin này.
+
+**Học viên kết nối trực tiếp** (psql / Power BI), giống Finance và Supply Chain,
+bằng chính tài khoản của mình: host của server, cổng `5433`, database
+`candy_game`. Quyền do `database/schema/19_game_class_access.sql` cấp qua gói
+`candy_reader` cho hai nhóm `aivb_class_*`, nên tài khoản tạo mới tự có.
+
+- Đọc được: schema `jelly_analytics` — 13 bảng dữ liệu dạy học Jelly Trail v3
+  (nạp bằng `npm run data:import`) cộng người chơi thật của lớp (`user_id` bắt
+  đầu bằng `aivb_`, `app_version = 'web-live'`), hai view health và
+  `live_player_wallets` (số dư ví của người chơi thật).
+- Không đọc được: schema `public` của game (tài khoản, hash mật khẩu, token
+  phiên, IP, vé SSO, ví gốc). Phiên của lớp là chỉ đọc, `search_path =
+  jelly_analytics`, `statement_timeout = 300s`.

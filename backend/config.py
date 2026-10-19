@@ -101,6 +101,19 @@ CONTENT_SECURITY_POLICY = (
     "script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'"
 )
 
+# CSP rieng cho `/game/*` (game match-3 nhung trong tab Tro choi):
+#   * `frame-ancestors 'self'` - duoc nhung, nhung CHI boi chinh origin nay;
+#   * KHONG 'wasm-unsafe-eval' - game khong can;
+#   * `worker-src blob:` - canvas-confetti dung Web Worker tu Blob URL (no tu
+#     lui ve luong chinh neu bi chan, nhung de lai mot loi CSP moi lan thang);
+#   * `media-src data: blob:` - am thanh sinh bang Web Audio.
+GAME_CONTENT_SECURITY_POLICY = (
+    "default-src 'self'; base-uri 'self'; connect-src 'self'; font-src 'self'; "
+    "frame-ancestors 'self'; img-src 'self' data: blob:; media-src 'self' data: blob:; "
+    "object-src 'none'; script-src 'self'; style-src 'self' 'unsafe-inline'; "
+    "worker-src 'self' blob:"
+)
+
 
 @dataclass(frozen=True)
 class CorsPolicy:
@@ -539,6 +552,33 @@ class Settings:
         default_factory=lambda: os.environ.get("AIVB_PG_USER_APP", "aivb_app_rw")
     )
 
+    # -- game "Vuong Quoc Keo Ngot" (tab Tro choi) -------------------------
+    #: Dia chi noi bo cua `game-api` (Node). RONG = tat game: khong route
+    #: `/game/*` nao duoc dang ky, tab Tro choi tu an.
+    game_api_url: str = field(
+        default_factory=lambda: os.environ.get("AIVB_GAME_API_URL", "").rstrip("/")
+    )
+    #: Ban build frontend cua game (`game/`, `npm run build:web`).
+    game_dist_dir: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("AIVB_GAME_DIST_DIR", str(APP_ROOT / "game" / "dist"))
+        )
+    )
+    #: File chua khoa HMAC chung voi game (`AIVB_SSO_SECRET=`), cung khuon
+    #: `khoa=gia_tri` voi `pg_secrets.env`. `game-api` doc CHINH file nay qua
+    #: `env_file`, nen hai ben khong the lech khoa.
+    game_env_file: Path = field(
+        default_factory=lambda: Path(
+            os.environ.get("AIVB_GAME_ENV_FILE", str(APP_ROOT / "config" / "game.env"))
+        )
+    )
+    pg_db_game: str = field(
+        default_factory=lambda: os.environ.get("AIVB_PG_DB_GAME", "candy_game")
+    )
+    pg_user_game: str = field(
+        default_factory=lambda: os.environ.get("AIVB_PG_USER_GAME", "candy_app")
+    )
+
     pg_sslmode: str = field(default_factory=lambda: os.environ.get("AIVB_PG_SSLMODE", "disable"))
     pg_connect_timeout_s: int = field(
         default_factory=lambda: _env_int("AIVB_PG_CONNECT_TIMEOUT_S", 5)
@@ -740,6 +780,29 @@ class Settings:
             user=self.pg_user_app,
             password=password,
             application_name=f"{self.pg_application_name}-app",
+        )
+
+    # -- game ------------------------------------------------------------
+    @property
+    def game_enabled(self) -> bool:
+        return bool(self.game_api_url)
+
+    def game_sso_secret(self) -> str:
+        """Khoa ky ve SSO. Doc moi lan goi (re, file nho) de xoay khoa khong
+        can khoi dong lai backend - `game-api` thi van phai khoi dong lai."""
+        secret = _read_secret_file(self.game_env_file, "AIVB_SSO_SECRET")
+        if len(secret) < 32:
+            raise ValueError("AIVB_SSO_SECRET phai dai it nhat 32 ky tu")
+        return secret
+
+    def pg_conninfo_game(self) -> str:
+        """Chuoi ket noi toi `candy_game` bang `candy_app` - chi de dong bo user.
+        Xem `database/schema/18_game_database.sql`."""
+        return self._pg_dsn(
+            dbname=self.pg_db_game,
+            user=self.pg_user_game,
+            password=self._pg_secret("pw_candy_app"),
+            application_name=f"{self.pg_application_name}-game-sync",
         )
 
     def pg_conninfo_as_user(self, username: str, password: str) -> str:

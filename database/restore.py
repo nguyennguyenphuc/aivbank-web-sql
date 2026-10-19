@@ -162,6 +162,13 @@ SCHEMA_PRE = ("01_roles.sql", "02_databases.sql", "03_schema_grants.sql")
 #:                      khe nay, va no khong co trieu chung nao.
 SCHEMA_POST = ("15_class_roles.sql", "01_roles.sql", "16_app_database.sql")
 
+#: Khung database cua game (tab Tro choi). TUY CHON: chi chay khi
+#: `pg_secrets.env` co khoa `pw_candy_app`, de mot may chua bat game van
+#: `restore` duoc nhu cu. Bang cua game do service `game-migrate` tao.
+#: 19 mo `jelly_analytics` (chi doc) cho lop hoc, giong lane SCM.
+SCHEMA_GAME = ("18_game_database.sql", "19_game_class_access.sql")
+GAME_SECRET = "pw_candy_app"
+
 #: Khoa bat buoc phai co trong `pg_secrets.env` truoc khi chay `restore`.
 REQUIRED_SECRETS = (
     "pw_loader", "pw_api_s", "pw_api_i", "pw_bi_s", "pw_bi_i", "pw_app_rw",
@@ -188,6 +195,8 @@ def _runs_for(script: str, secrets: dict) -> list:
     if script.startswith("16"):
         # `-d postgres`: chinh file tu `\connect aivb_app` ben trong no.
         return [("postgres", [("pw_app_rw", secrets["pw_app_rw"])])]
+    if script.startswith("18"):
+        return [("postgres", [(GAME_SECRET, secrets[GAME_SECRET])])]
     return [("postgres", [])]
 
 
@@ -305,6 +314,13 @@ def cmd_restore(args) -> int:
     rc = _run_scripts(args, SCHEMA_POST, secrets)
     if rc:
         return rc
+
+    if GAME_SECRET in secrets:
+        rc = _run_scripts(args, SCHEMA_GAME, secrets)
+        if rc:
+            return rc
+    else:
+        print("  pg_secrets.env chua co %s - bo qua database game (candy_game)" % GAME_SECRET)
 
     return cmd_verify(args)
 

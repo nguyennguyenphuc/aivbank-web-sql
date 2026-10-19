@@ -1,6 +1,16 @@
 # Backend + frontend tĩnh. Một image dùng cho cả service `backend` lẫn bước
 # `restore` một lần — cùng phụ thuộc, đỡ phải giữ hai thứ đồng bộ.
 
+# --- frontend cua game (thu muc game/, tab Tro choi) ------------------------
+# Build ra file tinh voi base `/game/`; backend phuc vu chung o `/game/`.
+# API cua game KHONG o day - no la service `game-api` rieng (docker-compose).
+FROM docker.io/library/node:22.22.0-alpine3.23 AS game-web
+WORKDIR /src
+COPY game/package.json game/package-lock.json ./
+RUN npm ci --ignore-scripts --no-audit --no-fund
+COPY game/ ./
+RUN npm run build:web
+
 FROM python:3.11-slim
 
 # postgresql-client: `restore.py` gọi pg_dump/pg_restore/psql thật, không tự
@@ -31,6 +41,8 @@ RUN pip install --no-cache-dir -r /tmp/requirements.txt
 COPY backend/ /app/backend/
 COPY frontend/ /app/frontend/
 COPY database/ /app/database/
+COPY --from=game-web /src/dist /app/game-dist
+ENV AIVB_GAME_DIST_DIR=/app/game-dist
 
 # Không chạy bằng root: nếu ai đó thoát được ra khỏi tiến trình Python thì
 # quyền họ có cũng chỉ là quyền của tài khoản này.

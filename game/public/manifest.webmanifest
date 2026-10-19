@@ -1,0 +1,13 @@
+{
+  "name": "Jelly Trail Academy",
+  "short_name": "Jelly Trail",
+  "description": "Game Match-3 H5 dài hạn kết hợp lớp học phân tích dữ liệu.",
+  "start_url": "/#/player",
+  "display": "standalone",
+  "background_color": "#FFF9E6",
+  "theme_color": "#FF9F1A",
+  "lang": "vi",
+  "icons": [
+    { "src": "/jelly-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

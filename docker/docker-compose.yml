@@ -50,7 +50,15 @@ services:
     expose:
       - "5432"
 
+  # MOT image cho ba service `restore`, `restore-scm`, `backend` (cung Dockerfile,
+  # cung context). Khong dat `image:` thi Compose sinh BA image rieng, va moi
+  # lan chi build mot service (`compose build backend`, Enable-Game.ps1) de hai
+  # cai kia cu: den 2026-09-29 `restore` van chay script SQL cua 2026-09-01 o
+  # MOI lan `up`, am tham keo `scm` CONNECTION LIMIT tu 320 ve 120. Chung ten
+  # `docker-backend:latest` (Check-PgVolume.ps1 / Migrate-PgVolume.ps1 goi dich
+  # danh ten nay) thi build bat ky service nao cung cap nhat ca ba.
   restore:
+    image: docker-backend:latest
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -80,6 +88,7 @@ services:
   # Bo du lieu nay LA TUY CHON: khong co database/dumps/scm.dump thi service noi
   # ra roi thoat 0, va backend van len voi mot bo du lieu.
   restore-scm:
+    image: docker-backend:latest   # xem chu thich o `restore`
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -110,6 +119,7 @@ services:
     restart: "no"
 
   backend:
+    image: docker-backend:latest   # xem chu thich o `restore`
     build:
       context: ..
       dockerfile: docker/Dockerfile
@@ -136,6 +146,90 @@ services:
       timeout: 5s
       retries: 10
 
+  # -----------------------------------------------------------------------
+  # Game "Vuong Quoc Keo Ngot" (tab Tro choi) - TUY CHON, profile `game`.
+  #
+  # Khong bat profile thi ba service nay khong ton tai va moi thu chay nhu cu.
+  # Bat bang `scripts/Enable-Game.ps1`: no sinh `config/game.env`, khoa
+  # `pw_candy_app`, dung database `candy_game` (18_game_database.sql), them
+  # `AIVB_GAME_API_URL` vao `config/app.env` va ghi `COMPOSE_PROFILES=game`
+  # vao `docker/.env`.
+  #
+  # Trinh duyet KHONG bao gio noi thang toi game-api: backend proxy
+  # `/game/api/*` sang day (backend/game_bridge.py), nen khong cong nao duoc
+  # publish ra ngoai.
+  # -----------------------------------------------------------------------
+  redis:
+    image: redis:7.4.5-alpine
+    profiles: ["game"]
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "everysec"]
+    volumes:
+      - gameredis:/data
+    expose:
+      - "6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  # Chay migration cua game (game/sql/migrations) mot lan roi thoat.
+  # Idempotent: bang `app_schema_migrations` nho ban nao da ap.
+  #
+  # KHAC ba service o tren: `game-migrate` (target `ops`) va `game-api` (target
+  # `api`) la HAI image that su khac nhau, khong chung ten duoc. Sua gi trong
+  # `game/` thi build CA HAI (`Enable-Game.ps1` va `Server.ps1 up -Build` deu
+  # lam vay) - build rieng `game-api` thi migration moi khong bao gio duoc chay.
+  game-migrate:
+    build:
+      context: ../game
+      dockerfile: infra/production/Containerfile
+      target: ops
+    profiles: ["game"]
+    depends_on:
+      restore:
+        condition: service_completed_successfully
+    env_file:
+      - ../config/game.env
+    environment:
+      NODE_ENV: production
+    restart: "no"
+
+  game-api:
+    build:
+      context: ../game
+      dockerfile: infra/production/Containerfile
+      target: api
+    profiles: ["game"]
+    depends_on:
+      game-migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
+    env_file:
+      - ../config/game.env
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      REDIS_URL: redis://redis:6379
+      # Trinh duyet thay game o /game/ -> cookie cua game gioi han trong do.
+      PUBLIC_BASE_PATH: /game
+      LOG_LEVEL: warn
+    expose:
+      - "3001"
+    read_only: true
+    tmpfs:
+      - /tmp
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1:3001/api/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
 secrets:
   pg_superuser:
     file: ../config/pg_superuser.txt
@@ -143,3 +237,4 @@ secrets:
 volumes:
   pgdata:
   appvar:
+  gameredis:

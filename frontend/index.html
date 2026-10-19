@@ -189,6 +189,13 @@
           id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
     <span class="section-tab-name">Bảng xếp hạng</span>
   </button>
+  <!-- Tro choi: an cho toi khi GET /game-sso/status noi may chu da bat game.
+       `disabled` di kem `hidden` de phim mui ten cung bo qua no. -->
+  <button class="section-tab" type="button" role="tab" data-section="game"
+          id="section-tab-game" aria-controls="game-workspace" aria-selected="false" tabindex="-1"
+          hidden disabled aria-disabled="true">
+    <span class="section-tab-name">Trò chơi</span>
+  </button>
 </nav>
 
 <div id="service-banner" class="banner banner-warn" hidden></div>
@@ -331,6 +338,14 @@
      Runs DuckDB-WASM in this browser. No upload, no session, no roles: the
      file never leaves the machine. See frontend/sandbox.js for why the rules
      that bind the console above do not all bind here. -->
+<!-- Game match-3 (thu muc game/), phuc vu o /game/ va nhung bang iframe cung
+     origin. `src` chi duoc gan lan dau mo tab (ensureGame trong app.js). Dang
+     nhap vao game la tu dong: game xin ve SSO tu /game-sso/token. -->
+<section id="game-workspace" class="game-workspace" aria-label="Trò chơi" hidden>
+  <iframe id="game-frame" class="game-frame" title="Vương Quốc Kẹo Ngọt"
+          allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+</section>
+
 <section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
   <div class="progress-panel">
     <div class="progress-head">

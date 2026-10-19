@@ -43,3 +43,11 @@ CODEBASE_MAP.md
 # --- KHÔNG loại trừ: frontend/vendor/ -------------------------------------
 # CodeMirror và DuckDB-WASM (34 MB) phải nằm trong image. Không có bước build
 # nào tải chúng về, và phòng máy có thể không ra được Internet.
+
+# --- game (thu muc game/) -------------------------------------------------
+# Stage `game-web` cua Dockerfile tu `npm ci` + build trong container; ban
+# node_modules/dist tren may Windows vua nang vua sai nen tang.
+game/node_modules/
+game/dist/
+game/server/dist/
+game/coverage/

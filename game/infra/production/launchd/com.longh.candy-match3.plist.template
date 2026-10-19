@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.longh.candy-match3</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__HOME__/Services/match3-h5/current/infra/production/launchd/start-candy-stack.sh</string>
+  </array>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>CANDY_RELEASE_DIR</key>
+    <string>__HOME__/Services/match3-h5/current</string>
+    <key>CANDY_ENV_FILE</key>
+    <string>__HOME__/Services/match3-h5/shared/.env.production</string>
+    <key>CANDY_BACKUP_DIR</key>
+    <string>__HOME__/Services/match3-h5/backups</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Background</string>
+  <key>StandardOutPath</key>
+  <string>__HOME__/Services/match3-h5/logs/launchd.stdout.log</string>
+  <key>StandardErrorPath</key>
+  <string>__HOME__/Services/match3-h5/logs/launchd.stderr.log</string>
+</dict>
+</plist>

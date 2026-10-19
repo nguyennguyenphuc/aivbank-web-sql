@@ -1629,6 +1629,21 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   min-height: 0;
   background: var(--surface-sunken);
 }
+/* Tab Tro choi: iframe chiem tron khu vuc. Cung ly do voi .leaderboard-workspace
+   o tren: phai tu cap flex + min-height:0, khong thi iframe cao 150px mac dinh. */
+.game-workspace {
+  flex: 1 1 auto;
+  display: flex;
+  min-height: 0;
+  background: #FFF9E6;
+}
+.game-frame {
+  flex: 1 1 auto;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  display: block;
+}
 .leaderboard-workspace .progress-panel {
   flex: 1 1 auto;
   display: flex;

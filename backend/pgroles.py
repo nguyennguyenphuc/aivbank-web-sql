@@ -47,30 +47,82 @@ GROUP_OF_ROLE = {
 }
 ALL_GROUPS = tuple(GROUP_OF_ROLE.values())
 
-#: Giá trị này từng là 4, và 4 làm Power BI hỏng ngay với mô hình nhiều hơn một
-#: bảng. Con số thật theo tài liệu Microsoft:
+#: Giá trị này từng là 4, rồi 8, và CẢ HAI đều hỏng. Con số thật theo tài liệu
+#: Microsoft:
 #:
 #:   * Import       song song mặc định BẰNG SỐ NHÂN LOGIC CPU của máy học viên,
 #:                  tức 8-16 trên laptop đời mới.
 #:   * DirectQuery  `Maximum connections per data source`, trần 10 với Power BI
 #:                  Pro / shared capacity.
 #:
-#: 8 là mức khớp với Import ở một mô hình vừa, và để Power BI tự chạm trần của
-#: chính nó trước khi chạm trần của server. Trần TỔNG vẫn là
-#: `ALTER DATABASE ... CONNECTION LIMIT` ở `15_class_roles.sql` mục 3 — trần
-#: theo vai trò không cộng thành trần tổng.
-DEFAULT_CONNECTION_LIMIT = 8
+#: Vì sao 8 hỏng, đo được ngày 2026-09-01 trên `sv001`: tám kết nối
+#: `Mashup Engine` mở dồn trong 49 giây rồi nằm `idle`. Trần 8 ĐÚNG BẰNG độ song
+#: song của Import, nên MỘT lần refresh tiêu hết sạch ngân sách. Học viên đó
+#: cũng không đăng nhập nổi console web, vì `authstore.verify_password` mở một
+#: kết nối bằng CHÍNH vai trò này.
+#:
+#: Bài học: trần phải LỚN HƠN độ song song của client, không được BẰNG nó.
+#:
+#: 12 -> 30 ngày 2026-09-14, ĐO trên dashboard LastMile (14 bảng) bằng user
+#: `sv001`. Power BI giữ kết nối rỗi của từng tiến trình Mashup tới hết lần
+#: refresh, nên số kết nối giữ cùng lúc lớn hơn nhiều số kết nối `active`:
+#:
+#:   cách nạp       trần  rỗi scm   đỉnh   kết quả
+#:   song song      100   không     47     qua
+#:   song song      12-20 20-30s    14-20  CHẬP CHỜN: server cắt kết nối rỗi,
+#:                                         Npgsql lấy lại kết nối đã chết ->
+#:                                         "Exception while reading from stream"
+#:   song song      16    60s       16     chập chờn
+#:   TUẦN TỰ        30    không     18-19  qua (verify_dax 46/46)
+#:
+#: Nên file .pbip của lớp PHẢI nạp tuần tự (`maxParallelismPerRefresh: 1`, tức
+#: Options > Current File > Data Load > Parallel loading of tables = One), và
+#: trần 30 = đỉnh 19 + chỗ cho `verify_password` và một phiên DBeaver. Trần TỔNG vẫn là `ALTER DATABASE ... CONNECTION LIMIT` ở
+#: `15_class_roles.sql` mục 3 — trần theo vai trò không cộng thành trần tổng, và
+#: mục đó có phép tính đối chiếu với `max_connections`.
+DEFAULT_CONNECTION_LIMIT = 30
 
 #: Power BI bỏ lại kết nối rỗi sau mỗi lần refresh; `application_name` của chúng
 #: là `Mashup Engine`. Cụm không đặt `idle_session_timeout` (mặc định 0 = không
 #: bao giờ thu hồi), nên chúng tích tụ tới khi người đó không refresh được nữa.
 #: Chỉ nâng CONNECTION LIMIT mà không có dòng này thì chỉ dời thời điểm hỏng.
 #:
+#: GIÁ TRỊ NÀY PHẢI NGẮN HƠN CHU KỲ REFRESH. Nó từng là `15min`, và 15 phút dài
+#: hơn khoảng cách giữa hai lần refresh — nên bản vá đã được áp mà vẫn hỏng:
+#: refresh thứ hai gặp nguyên tám kết nối của lần thứ nhất còn sống. Đó là sự cố
+#: `sv001` ngày 2026-09-01, và nó KHÔNG phải "quên áp bản vá".
+#:
+#: 3 phút vẫn đủ dài để không cắt nhầm một kết nối đang chờ giữa hai bảng trong
+#: cùng một lần refresh — mỗi truy vấn đã bị `statement_timeout` chặn ở 20s.
+#:
 #: ĐẶT TRÊN TỪNG VAI TRÒ ĐĂNG NHẬP, không đặt ở tầng cụm hay tầng database:
 #: pool của backend (`aivb_api_*`, `scm_api`, `aivb_app_rw`) sống dựa vào kết nối
 #: rỗi lâu — có kết nối rỗi hàng ngày là bình thường. Cắt chúng là làm hỏng chính
 #: ứng dụng. Module này chỉ tạo vai trò của người thật nên tự nhiên an toàn.
-DEFAULT_IDLE_SESSION_TIMEOUT = "15min"
+DEFAULT_IDLE_SESSION_TIMEOUT = "3min"
+
+#: Các vai trò `*_api` đã có `idle_in_transaction_session_timeout=30s` đặt trong
+#: `01_roles.sql`, nhưng vai trò của NGƯỜI THẬT thì không có gì — một Power BI
+#: treo giữa transaction giữ kết nối vô hạn, và `idle_session_timeout` KHÔNG cứu
+#: được vì trạng thái đó là `idle in transaction`, không phải `idle`.
+DEFAULT_IDLE_IN_TXN_TIMEOUT = "30s"
+
+#: RIÊNG database `scm` (nguồn dashboard Power BI của lớp): KHÔNG thu hồi kết
+#: nối rỗi ("0"), giống `scm_bi` vốn chạy ổn. Đo ngày 2026-09-14: bất kỳ timeout
+#: rỗi nào NGẮN HƠN một lần refresh (20s, 30s, 60s) đều làm refresh chập chờn —
+#: server cắt kết nối đang nằm trong pool của Npgsql, Power BI lấy lại đúng kết
+#: nối đã chết và báo "Exception while reading from stream", bảng về null.
+#:
+#: Kết nối rỗi vẫn được trả: Npgsql tự đóng kết nối rỗi quá ~5 phút, và đóng
+#: Desktop là đóng hết. Đặt bằng `ALTER ROLE ... IN DATABASE scm` nên database web
+#: vẫn giữ `DEFAULT_IDLE_SESSION_TIMEOUT` (mức role+database thắng mức role).
+SCM_DATABASE = "scm"
+DEFAULT_SCM_IDLE_SESSION_TIMEOUT = "0"
+
+#: `candy_game` (du lieu phan tich cua game, `19_game_class_access.sql`) cung la
+#: nguon Power BI cua lop, nen huong CUNG ngoai le timeout roi voi `scm`.
+GAME_DATABASE = "candy_game"
+BI_DATABASES = (SCM_DATABASE, GAME_DATABASE)
 
 _NAME_RE = re.compile(r"^[a-z][a-z0-9_]{2,62}$")
 
@@ -92,6 +144,8 @@ _RESERVED = {
     "scm_loader",
     "scm_api",
     "scm_bi",
+    "candy_app",
+    "candy_reader",
     *ALL_GROUPS,
 }
 
@@ -119,7 +173,7 @@ def validate_username(username: str) -> str:
         )
     if name in _RESERVED:
         raise RoleError(f"{name!r} la vai tro ha tang, khong duoc dung lam tai khoan")
-    if name.startswith(("pg_", "aivb_", "scm_")):
+    if name.startswith(("pg_", "aivb_", "scm_", "candy_")):
         raise RoleError(f"{name!r} dung tien to danh cho ha tang")
     return name
 
@@ -191,6 +245,63 @@ def set_role(conn, username: str, role: str) -> None:
     )
 
 
+def apply_limits(
+    conn,
+    username: str,
+    connection_limit: int = DEFAULT_CONNECTION_LIMIT,
+    idle_session_timeout: str = DEFAULT_IDLE_SESSION_TIMEOUT,
+    idle_in_txn_timeout: str = DEFAULT_IDLE_IN_TXN_TIMEOUT,
+    scm_idle_session_timeout: str = DEFAULT_SCM_IDLE_SESSION_TIMEOUT,
+) -> None:
+    """Đặt hạn mức kết nối lên một vai trò đã tồn tại. Idempotent.
+
+    Bốn thứ: trần kết nối, hai timeout ở mọi database, và timeout rỗi riêng
+    trong `scm` / `candy_game` (bỏ qua database nào cụm chưa có).
+
+    KHÔNG đụng `LOGIN`, KHÔNG đổi nhóm, KHÔNG đổi mật khẩu — và đó chính là lý
+    do hàm này tồn tại tách khỏi `ensure_role`.
+
+    `ensure_role` chạy `ALTER ROLE ... LOGIN ...`, nên dùng NÓ để áp hạn mức
+    hàng loạt sẽ ÂM THẦM MỞ KHOÁ mọi tài khoản đang bị `set_disabled` khoá
+    (`set_disabled` đặt `NOLOGIN`). Một vòng lặp "nâng hạn mức cho cả lớp" như
+    `admin_cli reapply-limits` vì thế PHẢI gọi hàm này, không gọi `ensure_role`.
+
+    `ALTER ROLE ... SET` KHÔNG di truyền qua thành viên nhóm, nên phải đặt trên
+    từng vai trò đăng nhập — `15_class_roles.sql` mục 4 giải thích điều này.
+    """
+    ident = _ident(username)
+    conn.execute(
+        sql.SQL("ALTER ROLE {} CONNECTION LIMIT {}").format(
+            ident, sql.Literal(int(connection_limit))
+        )
+    )
+    # Xem chu thich o `DEFAULT_IDLE_SESSION_TIMEOUT` va
+    # `DEFAULT_IDLE_IN_TXN_TIMEOUT`: hai tham so nay bat hai trang thai KHAC
+    # nhau (`idle` va `idle in transaction`), khong cai nao thay duoc cai kia.
+    conn.execute(
+        sql.SQL("ALTER ROLE {} SET idle_session_timeout = {}").format(
+            ident, sql.Literal(idle_session_timeout)
+        )
+    )
+    conn.execute(
+        sql.SQL(
+            "ALTER ROLE {} SET idle_in_transaction_session_timeout = {}"
+        ).format(ident, sql.Literal(idle_in_txn_timeout))
+    )
+    # Xem chu thich o `DEFAULT_SCM_IDLE_SESSION_TIMEOUT` va `BI_DATABASES`.
+    for database in BI_DATABASES:
+        co_db = conn.execute(
+            "SELECT 1 FROM pg_database WHERE datname = %s", (database,)
+        ).fetchone()
+        if co_db:
+            conn.execute(
+                sql.SQL("ALTER ROLE {} IN DATABASE {} SET idle_session_timeout = {}").format(
+                    ident, sql.Identifier(database),
+                    sql.Literal(scm_idle_session_timeout),
+                )
+            )
+
+
 def ensure_role(
     conn,
     username: str,
@@ -198,13 +309,17 @@ def ensure_role(
     password: str | None = None,
     connection_limit: int = DEFAULT_CONNECTION_LIMIT,
     idle_session_timeout: str = DEFAULT_IDLE_SESSION_TIMEOUT,
+    idle_in_txn_timeout: str = DEFAULT_IDLE_IN_TXN_TIMEOUT,
 ) -> None:
     """Tạo vai trò nếu chưa có, rồi đặt nhóm / mật khẩu / hạn mức.
 
     Idempotent. `password=None` thì giữ nguyên mật khẩu hiện tại.
 
-    Vì idempotent, gọi lại hàm này trên một vai trò đã có là cách nâng hạn mức
-    cho tài khoản cũ mà không đụng tới mật khẩu của họ.
+    ⚠ HÀM NÀY MỞ KHOÁ TÀI KHOẢN. Nó chạy `ALTER ROLE ... LOGIN` vô điều kiện,
+    nên gọi nó trên một tài khoản đang bị `set_disabled` khoá sẽ mở khoá lại
+    người đó. Chỉ gọi cho một người mà bạn CHỦ ĐỊNH cho đăng nhập. Muốn nâng
+    hạn mức cho nhiều người mà không đụng trạng thái khoá thì dùng
+    `apply_limits`.
     """
     ident = _ident(username)
     if not role_exists(conn, username):
@@ -216,18 +331,13 @@ def ensure_role(
             ).format(ident, sql.Literal(int(connection_limit)))
         )
     else:
-        conn.execute(
-            sql.SQL("ALTER ROLE {} LOGIN CONNECTION LIMIT {}").format(
-                ident, sql.Literal(int(connection_limit))
-            )
-        )
-    # Xem chu thich o `DEFAULT_IDLE_SESSION_TIMEOUT`. Dat o day chu khong o nhom:
-    # `ALTER ROLE ... SET` KHONG di truyen qua thanh vien nhom - `15_class_roles.sql`
-    # muc 4 giai thich dieu nay.
-    conn.execute(
-        sql.SQL("ALTER ROLE {} SET idle_session_timeout = {}").format(
-            ident, sql.Literal(idle_session_timeout)
-        )
+        conn.execute(sql.SQL("ALTER ROLE {} LOGIN").format(ident))
+    apply_limits(
+        conn,
+        username,
+        connection_limit=connection_limit,
+        idle_session_timeout=idle_session_timeout,
+        idle_in_txn_timeout=idle_in_txn_timeout,
     )
     set_role(conn, username, role)
     if password is not None:

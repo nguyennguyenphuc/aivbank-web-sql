@@ -1,0 +1,35 @@
+node_modules/
+bun.lock
+dist/
+coverage/
+server/dist/
+*.log
+.env
+.env.local
+.DS_Store
+playwright-report/
+test-results/
+/exports/
+
+# Local AI-agent workspaces and generated traces
+.agents/
+.claude/
+.codex/
+.gemini/
+.cursor/
+.windsurf/
+.continue/
+.browser-agent-traces/
+
+# Local agent instruction files
+AGENTS.md
+CLAUDE.md
+GEMINI.md
+
+# Internal planning, reports, and working documentation
+plans/
+docs/
+repomix-output.xml
+
+# Local synthetic teaching delivery; imported separately from application releases
+/Jelly_Trail_Academy_v3_DELIVERY/

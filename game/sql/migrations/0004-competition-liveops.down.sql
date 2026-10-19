@@ -1,0 +1,14 @@
+drop table if exists experiment_revisions;
+drop table if exists remote_config_revisions;
+drop table if exists liveops_player_state;
+drop table if exists liveops_inbox_claims;
+drop table if exists liveops_inbox;
+drop table if exists liveops_progress_events;
+drop table if exists liveops_quest_progress;
+drop table if exists liveops_calendars;
+drop table if exists competition_meta;
+drop table if exists competition_season_snapshots;
+drop table if exists competition_seasons;
+drop table if exists competition_leaderboard_entries;
+drop table if exists competition_rosters;
+drop table if exists competition_roster_revisions;

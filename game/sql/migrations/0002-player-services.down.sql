@@ -1,0 +1,16 @@
+drop table if exists ad_reward_tokens cascade;
+drop table if exists purchase_receipts cascade;
+drop table if exists payment_intents cascade;
+drop table if exists reward_claims cascade;
+drop table if exists inventory_items cascade;
+drop table if exists economy_journal_lines cascade;
+drop table if exists economy_journals cascade;
+drop table if exists offline_practice_operations cascade;
+drop table if exists player_progress_snapshots cascade;
+drop table if exists player_settings cascade;
+drop table if exists player_profiles cascade;
+drop table if exists role_grants cascade;
+alter table auth_sessions drop column if exists rotation;
+alter table wallets drop column if exists revision;
+alter table accounts drop column if exists is_guest;
+alter table accounts drop column if exists password_hash;

@@ -603,6 +603,9 @@ function wipeSessionState() {
   $('leaderboard-list').replaceChildren();
   appendEmpty($('leaderboard-list'), 'Đăng nhập để xem xếp hạng.');
   $('leaderboard-status').textContent = '';
+  // Game trong iframe dang giu phien game cua nguoi truoc: go di, lan mo tab
+  // sau se SSO lai bang nguoi dang dang nhap.
+  resetGame();
   currentUsername = '';
   // Go han khoi DOM, khong chi don rong. Dang xuat giang vien roi dang nhap hoc
   // vien tren CUNG MOT TAB trinh duyet la duong sot de nhat: khong go thi phan
@@ -675,6 +678,7 @@ const gate = createAuthGate({
     warnIfCrossOrigin();
 
     await loadDatasets();
+    loadGameAvailability();
 
     const schema = await schemaPanel.load();
     await Promise.all([syncMartTab(), loadPractice(), loadInstructorAnalytics()]);
@@ -840,7 +844,8 @@ function selectSection(name) {
 
   const inSandbox = name === 'sandbox';
   const inBoard = name === 'leaderboard';
-  const inConsole = !inSandbox && !inBoard;
+  const inGame = name === 'game';
+  const inConsole = !inSandbox && !inBoard && !inGame;
 
   // Mot bang tra cuu, khong phai mot chuoi if long nhau. Them khu vuc thu tu da
   // lam lo ra kieu cu: no chi biet "sandbox hay khong", nen khu vuc moi se hien
@@ -850,6 +855,7 @@ function selectSection(name) {
     scm: 'main-workspace',
     sandbox: 'sandbox-workspace',
     leaderboard: 'leaderboard-workspace',
+    game: 'game-workspace',
   };
   const shown = WORKSPACES[name];
   for (const id of new Set(Object.values(WORKSPACES))) $(id).hidden = id !== shown;
@@ -859,6 +865,7 @@ function selectSection(name) {
   const sub = document.querySelector('.brand-text small');
   if (sub && inSandbox) sub.textContent = 'Dữ liệu của bạn, chạy trên máy bạn';
   if (sub && inBoard) sub.textContent = 'Toàn lớp, tính từ trước tới nay';
+  if (sub && inGame) sub.textContent = 'Vương Quốc Kẹo Ngọt';
   // The schema drawer belongs to the console only.
   $('open-schema').hidden = !inConsole;
   if (!inConsole) setSchemaDrawer(false);
@@ -871,6 +878,8 @@ function selectSection(name) {
     // CodeMirror measures 0px while its container is hidden -- the same trap
     // the console hits behind the login gate (see refresh() calls after boot).
     if (sandboxUi) requestAnimationFrame(() => sandboxUi.cm.refresh());
+  } else if (inGame) {
+    ensureGame();
   } else if (inBoard) {
     // Nap lai moi lan vao: diem doi sau moi query, va nguoi xem vao day chinh la
     // de xem con so MOI. Mot bang cu dung im thi te hon la khong co bang.
@@ -897,6 +906,39 @@ $('sections').addEventListener('keydown', (e) => {
   usable[next].focus();
   selectSection(usable[next].dataset.section);
 });
+
+/* ------------------------------- the game tab ------------------------------ */
+
+let gameLoaded = false;
+
+/** Hien tab Tro choi chi khi may chu da bat game VA co ban build. Loi mang thi
+ *  giu an: mot tab bam vao ra trang loi te hon la khong co tab. */
+async function loadGameAvailability() {
+  const tab = $('section-tab-game');
+  let enabled = false;
+  try {
+    enabled = Boolean((await api.gameStatus()).enabled);
+  } catch (_) {
+    enabled = false;
+  }
+  tab.hidden = !enabled;
+  tab.disabled = !enabled;
+  tab.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+}
+
+/** Gan `src` lan dau mo tab: game ~500 KB JS va tu SSO khi tai, khong co ly do
+ *  lam viec do cho nguoi khong bao gio mo tab. */
+function ensureGame() {
+  if (gameLoaded) return;
+  gameLoaded = true;
+  $('game-frame').src = '/game/';
+}
+
+function resetGame() {
+  gameLoaded = false;
+  const frame = $('game-frame');
+  if (frame) frame.src = 'about:blank';
+}
 
 /* --------------------------- the sandbox itself --------------------------- */
 

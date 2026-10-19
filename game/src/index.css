@@ -1,0 +1,116 @@
+@import "tailwindcss" source(none);
+@source "./**/*.{ts,tsx}";
+@source "../index.html";
+
+@layer base {
+  body {
+    font-family: Inter, 'Be Vietnam Pro', 'Noto Sans', 'Helvetica Neue', Arial, system-ui, sans-serif;
+    background-color: #FFF9E6;
+    color: #4A3B2C;
+  }
+  h1, h2, h3, h4, h5, h6, .font-heading {
+    font-family: 'Be Vietnam Pro', Inter, 'Noto Sans', 'Helvetica Neue', Arial, system-ui, sans-serif;
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-6px) rotate(1.5deg);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    filter: drop-shadow(0 0 4px rgba(255, 159, 26, 0.6));
+    transform: scale(1);
+  }
+  50% {
+    filter: drop-shadow(0 0 12px rgba(255, 159, 26, 0.95));
+    transform: scale(1.05);
+  }
+}
+
+@keyframes rainbow-shimmer {
+  0% { filter: hue-rotate(0deg); }
+  100% { filter: hue-rotate(360deg); }
+}
+
+@keyframes candy-wobble {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  25% { transform: scale(1.1) rotate(-6deg); }
+  75% { transform: scale(1.1) rotate(6deg); }
+}
+
+@keyframes shockwave {
+  0% { transform: scale(0.2); opacity: 0.9; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@keyframes snap-confirm {
+  0% { transform: scale(1); filter: brightness(1); }
+  45% { transform: scale(1.11); filter: brightness(1.08); }
+  100% { transform: scale(1); filter: brightness(1); }
+}
+
+@keyframes level-beacon {
+  0%, 100% { filter: brightness(1) drop-shadow(0 0 0 rgba(255, 159, 26, 0)); }
+  50% { filter: brightness(1.08) drop-shadow(0 0 9px rgba(255, 159, 26, 0.72)); }
+}
+
+.animate-float {
+  animation: float 3s ease-in-out infinite;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 1.8s ease-in-out infinite;
+}
+
+.animate-rainbow {
+  animation: rainbow-shimmer 4s linear infinite;
+}
+
+.animate-wobble-hint {
+  animation: candy-wobble 0.8s ease-in-out infinite;
+}
+
+.animate-shockwave {
+  animation: shockwave 0.6s ease-out forwards;
+}
+.animate-snap-confirm {
+  animation: snap-confirm 0.42s cubic-bezier(.2,.9,.2,1) both;
+}
+
+.animate-level-beacon {
+  animation: level-beacon 1.8s ease-in-out infinite;
+  will-change: filter;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Custom Natural Tones scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: #FFF1CC;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb {
+  background: #FF9F1A;
+  border-radius: 9999px;
+  border: 2px solid #FFF1CC;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #E6B800;
+}

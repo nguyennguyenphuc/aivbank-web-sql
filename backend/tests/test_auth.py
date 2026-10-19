@@ -1227,6 +1227,13 @@ def test_every_route_is_either_authenticated_or_on_the_public_allowlist():
         # Route do tu chan di nguoc thu muc, va co test rieng cho viec do:
         # test_ops_hardening.py::test_vendor_route_refuses_to_walk_out_of_its_directory
         "/vendor/{asset_path:path}",
+        # Tab Tro choi. `status` chi noi game co bat khong. Proxy `/game/api/*`
+        # khong dung phien AIV Bank: game tu xac thuc bang phien GAME cua no
+        # (cookie Path=/game), va proxy chi chuyen dung ba cookie cua game -
+        # xem test_game_bridge.py::test_proxy_strips_host_session_and_passes_game_cookies.
+        # Ve SSO (`/game-sso/token`) thi KHONG nam day: no doi phien AIV Bank.
+        "/game-sso/status",
+        "/game/api/{path:path}",
     }
     session_dependencies = {
         "require_session", "require_active_session", "require_instructor"

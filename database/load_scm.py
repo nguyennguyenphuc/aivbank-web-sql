@@ -73,7 +73,8 @@ TABLES: list[tuple[str, str, int]] = [
     ("transactions", "", 83_488),
     ("shipments", "", 12_060),
     ("purchase_orders", "", 158_798),
-    ("orders", "lastmile_v2", 1_034_195),
+    # 2026-09-13: sinh lai lastmile_v2 (Ha Noi ~70% don, nut that o middle mile).
+    ("orders", "lastmile_v2", 1_033_327),
     ("inventory_snapshots", "", 6_477_346),
     ("sales", "", 125_497_040),
 ]

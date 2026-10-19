@@ -56,7 +56,8 @@ $$;
 -- guard.py (ARCHITECTURE.md muc 3).
 -- CONNECTION LIMIT lay dung khuon `01_roles.sql`: Power BI mo 4-8 ket noi moi
 -- lan refresh, nen han muc BI phai rong hon API, nhung van huu han de mot lop
--- dong nguoi khong lam can `max_connections` cua ca cluster (dang la 200, va
+-- dong nguoi khong lam can `max_connections` cua ca cluster (nay la 350, xem
+-- docker-compose.override.yml; ghi "200" truoc day la sai, va
 -- AIV Bank da chiem 8+12+8+40+10).
 --
 -- Thieu han muc KHONG bao loi gi: no chi hien ra vao dung luc te nhat - ca lop

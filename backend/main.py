@@ -79,6 +79,7 @@ from .authstore import (
 )
 from .config import (
     CONTENT_SECURITY_POLICY,
+    GAME_CONTENT_SECURITY_POLICY,
     REPO_ROOT,
     cors_policy_from_env,
     settings,
@@ -86,6 +87,7 @@ from .config import (
 from .db import Database, QueryFailed, QueryTimeout, ServiceBusy
 from .guard import GuardRejection, validate
 from .gamification import GamificationStore
+from . import game_bridge
 from .models import (
     AuditEntryResponse,
     ColumnOut,
@@ -214,6 +216,10 @@ async def lifespan(app: FastAPI):
         log.error("kho diem khong mo duoc: %s", exc)
         _state["gamification"] = None
     log.info("kho danh tinh: PostgreSQL %s", settings.pg_db_app)
+    # Game la TUY CHON: khong dat AIVB_GAME_API_URL thi khong co route `/game`.
+    if settings.game_enabled:
+        _state["game"] = game_bridge.GameProxy(settings.game_api_url)
+        log.info("game: proxy /game/api -> %s", settings.game_api_url)
     if not settings.cookie_secure:
         log.warning(
             "SECURITY: session cookies are NOT marked Secure "
@@ -277,6 +283,9 @@ async def lifespan(app: FastAPI):
     rewards = _state.get("gamification")
     if rewards is not None:
         rewards.close()
+    game = _state.get("game")
+    if game is not None:
+        await game.aclose()
 
 
 app = FastAPI(
@@ -336,14 +345,20 @@ async def production_response_headers(request: Request, call_next: Any) -> Any:
     # KHONG noi cho HTML/JS/CSS cua ung dung: ten file chua duoc bam, nen mot lop
     # hoc se chay ma cu sau moi lan cap nhat va khong co gi bao. Doi lai mot lan
     # tai 34 MB thi duoc; doi lai mot lop chay nham ban thi khong.
-    if request.url.path.startswith("/vendor/"):
+    path = request.url.path
+    in_game = path == "/game" or path.startswith("/game/")
+    # `/game/assets/*` do Vite dat ten KEM BAM noi dung, nen cache vinh vien la
+    # an toan - khac han HTML/JS cua ung dung chu (xem ngay duoi).
+    if path.startswith("/vendor/") or path.startswith("/game/assets/"):
         response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
     else:
         response.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
         response.headers["Pragma"] = "no-cache"
         response.headers["Expires"] = "0"
     response.headers["X-Content-Type-Options"] = "nosniff"
-    response.headers["X-Frame-Options"] = "DENY"
+    # Game la trang DUY NHAT duoc nhung, va chi vao chinh origin nay (tab Tro
+    # choi). Moi trang khac van DENY / frame-ancestors 'none'.
+    response.headers["X-Frame-Options"] = "SAMEORIGIN" if in_game else "DENY"
     response.headers["Referrer-Policy"] = "no-referrer"
     response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
     # 'wasm-unsafe-eval' exists for ONE feature: the SQL sandbox tab, which runs
@@ -360,7 +375,9 @@ async def production_response_headers(request: Request, call_next: Any) -> Any:
     # frontend/vendor/, not from a Blob URL, so default-src 'self' already
     # covers it.  If a future change makes the worker load from a blob, prefer
     # fixing the loader over widening this header.
-    response.headers["Content-Security-Policy"] = CONTENT_SECURITY_POLICY
+    response.headers["Content-Security-Policy"] = (
+        GAME_CONTENT_SECURITY_POLICY if in_game else CONTENT_SECURITY_POLICY
+    )
     return response
 
 
@@ -739,6 +756,15 @@ def logout(request: Request, _csrf: None = Depends(csrf_guard)) -> Any:
         ).model_dump()
     )
     clear_session_cookie(response, settings.session_cookie_name, settings.cookie_secure)
+    if settings.game_enabled:
+        # Phien game song trong cookie `Path=/game` ma trang chinh khong doc
+        # duoc, nen chinh endpoint nay xoa ho. Khong xoa thi may dung chung cua
+        # phong lab se mo game bang tai khoan nguoi truoc cho toi luc SSO lai.
+        for name, path in game_bridge.GAME_COOKIE_PATHS.items():
+            response.delete_cookie(
+                key=name, path=path, httponly=name != "csrf",
+                samesite="strict", secure=settings.cookie_secure,
+            )
     log.info("logout user=%s revoked=%s", username or "-", revoked)
     return response
 
@@ -1227,6 +1253,81 @@ def _gzip_matches(source: Path, packed: Path) -> bool:
         )
     _GZIP_OK[key] = ok
     return ok
+
+
+# ---------------------------------------------------------------------------
+# Game "Vuong Quoc Keo Ngot" (tab Tro choi) - xem backend/game_bridge.py
+# ---------------------------------------------------------------------------
+def _game() -> game_bridge.GameProxy:
+    proxy = _state.get("game")
+    if proxy is None:
+        raise ApiError(404, "E_GAME_DISABLED", "Trò chơi chưa được bật trên máy chủ này.")
+    return proxy
+
+
+@app.get("/game-sso/status", include_in_schema=False)
+def game_status() -> Any:
+    """Giao dien hoi co nen hien tab Tro choi khong. Khong can dang nhap."""
+    return {"enabled": settings.game_enabled and settings.game_dist_dir.is_dir()}
+
+
+@app.post("/game-sso/token", include_in_schema=False)
+def game_sso_token(
+    _csrf: None = Depends(csrf_guard),
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    """Cap ve SSO (60 giay, dung mot lan) cho nguoi dang dang nhap.
+
+    `require_active_session`: nguoi con phai doi mat khau lan dau thi CHUA
+    duoc vao game - giong moi chuc nang khac ngoai trang doi mat khau.
+    """
+    _game()
+    try:
+        secret = settings.game_sso_secret()
+    except (OSError, KeyError, ValueError) as exc:
+        log.error("game: khong doc duoc AIVB_SSO_SECRET: %s", exc)
+        raise ApiError(503, "E_GAME_UNAVAILABLE", "Trò chơi tạm thời không dùng được.") from None
+    user = _auth().get_user(principal.username)
+    ticket = game_bridge.sign_ticket(
+        username=principal.username,
+        full_name=user.full_name if user else "",
+        role=principal.role,
+        secret=secret,
+    )
+    return {"ticket": ticket}
+
+
+# Xac thuc cua `/game/api/*` la PHIEN GAME (cookie `session` Path=/game, game
+# tu kiem). Rieng lop CSRF thi AIV Bank giu them mot lop: moi request ghi phai
+# mang `X-AIVB-Client` (game gui no khi chay duoi /game/), giong moi POST khac
+# cua ung dung nay - chong lai trang la gui form vao game qua cookie cua nguoi hoc.
+@app.api_route("/game/api/{path:path}", methods=["GET"], include_in_schema=False)
+async def game_api_read(path: str, request: Request) -> Any:
+    return await _game().forward(request, path)
+
+
+@app.api_route(
+    "/game/api/{path:path}",
+    methods=["POST", "PUT", "PATCH", "DELETE"],
+    include_in_schema=False,
+)
+async def game_api_write(
+    path: str, request: Request, _csrf: None = Depends(csrf_guard)
+) -> Any:
+    return await _game().forward(request, path)
+
+
+if settings.game_enabled and settings.game_dist_dir.is_dir():
+    app.mount(
+        "/game",
+        StaticFiles(directory=str(settings.game_dist_dir), html=True),
+        name="game",
+    )
+elif settings.game_enabled:
+    log.warning(
+        "game: AIVB_GAME_API_URL da dat nhung khong thay ban build %s - tab Tro choi se an",
+        settings.game_dist_dir,
+    )
 
 
 # HEAD cung phai o day, khong chi GET: thieu no thi mot yeu cau HEAD roi xuong

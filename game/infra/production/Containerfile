@@ -1,0 +1,76 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_IMAGE=docker.io/library/node:22.22.0-alpine3.23
+ARG CADDY_IMAGE=docker.io/library/caddy:2.10.2-alpine
+
+FROM ${NODE_IMAGE} AS dependencies
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --ignore-scripts
+
+FROM dependencies AS build
+ARG RELEASE_SHA=development
+ENV VITE_RELEASE_SHA=${RELEASE_SHA}
+COPY . .
+RUN npm run build:web \
+    && npm run build:api \
+    && ./node_modules/.bin/esbuild server/src/database/migrate.ts \
+      --bundle --platform=node --packages=external --format=esm \
+      --outfile=server/dist/ops/migrate.js \
+    && ./node_modules/.bin/esbuild server/src/database/seed.ts \
+      --bundle --platform=node --packages=external --format=esm \
+      --outfile=server/dist/ops/seed.js \
+    && ./node_modules/.bin/esbuild scripts/import-jelly-dataset.ts \
+      --bundle --platform=node --packages=external --format=esm \
+      --outfile=server/dist/ops/import-jelly-dataset.js
+
+FROM ${NODE_IMAGE} AS runtime-dependencies
+ENV NODE_ENV=production
+WORKDIR /app
+COPY package.json package-lock.json ./
+RUN npm ci --omit=dev --ignore-scripts \
+    && npm cache clean --force
+
+FROM ${CADDY_IMAGE} AS web
+ARG RELEASE_SHA=development
+LABEL org.opencontainers.image.revision=${RELEASE_SHA}
+ENV XDG_CONFIG_HOME=/tmp/caddy-config \
+    XDG_DATA_HOME=/tmp/caddy-data
+COPY infra/production/Caddyfile /etc/caddy/Caddyfile
+COPY --from=build /app/dist /srv
+RUN setcap -r /usr/bin/caddy \
+    && printf '%s\n' "$RELEASE_SHA" > /etc/candy-release-sha
+USER 1000:1000
+EXPOSE 8080
+
+FROM ${NODE_IMAGE} AS api
+ARG RELEASE_SHA=development
+LABEL org.opencontainers.image.revision=${RELEASE_SHA}
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=3001
+WORKDIR /app
+COPY --from=runtime-dependencies --chown=1000:1000 /app/node_modules ./node_modules
+COPY --from=runtime-dependencies --chown=1000:1000 /app/package.json ./package.json
+COPY --from=build --chown=1000:1000 /app/server/dist/main.js ./server/dist/main.js
+COPY --from=build --chown=1000:1000 /app/server/dist/main.js.map ./server/dist/main.js.map
+RUN printf '%s\n' "$RELEASE_SHA" > /app/.release-sha \
+    && chown 1000:1000 /app/.release-sha
+USER 1000:1000
+EXPOSE 3001
+CMD ["node", "server/dist/main.js"]
+
+FROM ${NODE_IMAGE} AS ops
+ARG RELEASE_SHA=development
+LABEL org.opencontainers.image.revision=${RELEASE_SHA}
+ENV NODE_ENV=production
+WORKDIR /app
+COPY --from=runtime-dependencies --chown=1000:1000 /app/node_modules ./node_modules
+COPY --from=runtime-dependencies --chown=1000:1000 /app/package.json ./package.json
+COPY --from=build --chown=1000:1000 /app/server/dist/ops ./server/dist/ops
+COPY --from=build --chown=1000:1000 /app/sql/migrations ./sql/migrations
+RUN apk add --no-cache postgresql17-client \
+    && printf '%s\n' "$RELEASE_SHA" > /app/.release-sha \
+    && chown 1000:1000 /app/.release-sha
+USER 1000:1000
+CMD ["node", "server/dist/ops/migrate.js", "up"]

@@ -37,7 +37,11 @@ services:
     # duoc, va song sot khi dung lai volume.
     #
     # DOI GIA TRI NAY CAN KHOI DONG LAI PostgreSQL, khong reload duoc.
-    command: ["postgres", "-c", "max_connections=150"]
+    #
+    # 150 -> 350 ngay 2026-09-14: tran moi hoc vien 30 (do tren Power BI
+    # LastMile), 10 nguoi x 30 + pool ung dung 28 + superuser 3 = 331. Phep tinh
+    # day du o `database/schema/15_class_roles.sql` muc 3.
+    command: ["postgres", "-c", "max_connections=350"]
 
   restore:
     volumes:

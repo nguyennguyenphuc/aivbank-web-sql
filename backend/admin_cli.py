@@ -12,6 +12,7 @@ someone with shell access.
     python -m backend.admin_cli disable --username sv001
     python -m backend.admin_cli enable  --username sv001
     python -m backend.admin_cli sessions --revoke-user sv001
+    python -m backend.admin_cli reapply-limits --dry-run
 
 Initial and reset passwords are RANDOM and printed EXACTLY ONCE. They are not
 stored in plaintext anywhere and cannot be recovered - reset again if lost.
@@ -71,6 +72,53 @@ def _print_credentials(rows: list[tuple[str, str, str]]) -> None:
     print(f"{len(rows)} account(s). Distribute over a channel you trust.")
 
 
+def _game_upsert(store: AuthStore, usernames: list[str]) -> None:
+    """Dua user vua tao sang game ngay. BEST-EFFORT: game la tuy chon, nen
+    game chua bat (thieu `pw_candy_app`, `candy_game` chua dung...) chi in canh
+    bao - viec tao tai khoan AIV Bank KHONG duoc hong vi no. SSO luc mo tab
+    Tro choi va `game-sync` deu bu lai sau."""
+    if not usernames:
+        return
+    from . import game_sync
+
+    try:
+        conninfo = settings.pg_conninfo_game()
+    except (OSError, KeyError, ValueError):
+        return  # game chua bat tren may nay: im lang la dung
+    done = 0
+    for username in usernames:
+        user = store.get_user(username)
+        if user is None:
+            continue
+        try:
+            game_sync.upsert_one(user, conninfo)
+            done += 1
+        except Exception as exc:  # noqa: BLE001
+            print(f"warning: chua dong bo {username} sang game: {exc}", file=sys.stderr)
+            return
+    print(f"game: da dong bo {done} tai khoan sang {settings.pg_db_game}")
+
+
+def cmd_game_sync(args: argparse.Namespace) -> int:
+    """Dua `candy_game` ve dung danh sach tai khoan AIV Bank hien tai."""
+    from . import game_sync
+
+    store = _store(args)
+    try:
+        conninfo = settings.pg_conninfo_game()
+    except (OSError, KeyError, ValueError) as exc:
+        print(f"error: game chua cau hinh ({exc}). Xem scripts/Enable-Game.ps1", file=sys.stderr)
+        return 2
+    users = store.list_users()
+    try:
+        result = game_sync.sync_all(users, conninfo)
+    except Exception as exc:  # noqa: BLE001
+        print(f"error: dong bo that bai, KHONG doi gi (mot giao dich): {exc}", file=sys.stderr)
+        return 1
+    print(f"game-sync: {len(users)} tai khoan AIV Bank -> {settings.pg_db_game}: {result}")
+    return 0
+
+
 def cmd_create_user(args: argparse.Namespace) -> int:
     store = _store(args)
     try:
@@ -88,6 +136,7 @@ def cmd_create_user(args: argparse.Namespace) -> int:
         print(f"created {user.username} ({user.role}) with the supplied password")
     else:
         _print_credentials([(user.username, user.role, password)])
+    _game_upsert(store, [user.username])
     return 0
 
 
@@ -157,6 +206,7 @@ def cmd_import_csv(args: argparse.Namespace) -> int:
         print(f"\n{len(failed)} failure(s):", file=sys.stderr)
         for line in failed:
             print(f"  {line}", file=sys.stderr)
+    _game_upsert(store, [username for username, _, _ in created])
     return 0 if not failed else 1
 
 
@@ -228,6 +278,53 @@ def cmd_sessions(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_reapply_limits(args: argparse.Namespace) -> int:
+    """Ap lai han muc ket noi cho MOI vai tro lop dang ton tai.
+
+    `pgroles.ensure_role` chi chay luc TAO vai tro, nen doi
+    `DEFAULT_CONNECTION_LIMIT` / `DEFAULT_IDLE_SESSION_TIMEOUT` khong tu dong
+    cham toi tai khoan da phat ra tu truoc. Lenh nay lam viec do.
+
+    Dung `pgroles.apply_limits` chu KHONG dung `ensure_role`: `ensure_role`
+    chay `ALTER ROLE ... LOGIN` nen se mo khoa lai moi tai khoan dang bi
+    `disable`. Nho vay lenh nay ap duoc cho ca tai khoan da khoa ma khong doi
+    trang thai khoa cua ho.
+    """
+    import psycopg
+
+    from . import pgroles
+
+    with psycopg.connect(_admin_conninfo(args), autocommit=True) as conn:
+        rows = pgroles.list_class_roles(conn)
+        if not rows:
+            print("khong co vai tro lop nao")
+            return 0
+        print(
+            f"connection_limit={pgroles.DEFAULT_CONNECTION_LIMIT}  "
+            f"idle_session_timeout={pgroles.DEFAULT_IDLE_SESSION_TIMEOUT}  "
+            f"idle_in_transaction_session_timeout={pgroles.DEFAULT_IDLE_IN_TXN_TIMEOUT}  "
+            f"{'/'.join(pgroles.BI_DATABASES)}.idle_session_timeout={pgroles.DEFAULT_SCM_IDLE_SESSION_TIMEOUT}"
+        )
+        print()
+        width = max(len(r[0]) for r in rows)
+        for username, role, disabled in rows:
+            state = "disabled" if disabled else "active"
+            if args.dry_run:
+                print(f"  [dry-run] {username.ljust(width)}  {role:<11} {state}")
+                continue
+            pgroles.apply_limits(conn, username)
+            print(f"  ok        {username.ljust(width)}  {role:<11} {state}")
+        print()
+        verb = "se ap cho" if args.dry_run else "da ap cho"
+        print(f"{verb} {len(rows)} vai tro.")
+        if not args.dry_run:
+            print(
+                "Han muc moi chi ap dung cho KET NOI MOI. Ket noi dang mo giu "
+                "nguyen han muc cu cho toi khi chung dong."
+            )
+    return 0
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         prog="python -m backend.admin_cli",
@@ -274,6 +371,13 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--username", required=True)
     p.set_defaults(func=cmd_enable)
 
+    p = sub.add_parser(
+        "game-sync",
+        help="dong bo moi tai khoan sang database game (candy_game); "
+        "tai khoan da xoa/khoa bi vo hieu hoa ben game",
+    )
+    p.set_defaults(func=cmd_game_sync)
+
     p = sub.add_parser("list", help="list accounts")
     p.set_defaults(func=cmd_list)
 
@@ -281,6 +385,17 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--revoke-user", default=None)
     p.add_argument("--purge", action="store_true", help="delete expired session rows")
     p.set_defaults(func=cmd_sessions)
+
+    p = sub.add_parser(
+        "reapply-limits",
+        help="ap lai han muc ket noi cho moi tai khoan lop da ton tai",
+    )
+    p.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="chi in ra se ap cho ai, khong doi gi",
+    )
+    p.set_defaults(func=cmd_reapply_limits)
 
     return parser
 

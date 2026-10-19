@@ -126,31 +126,59 @@ GRANT CONNECT ON DATABASE aivb_instructor TO aivb_class_instructor;
 -- Moi nguoi mot vai tro thi tran do bien mat, va tran theo vai tro KHONG cong
 -- thanh tran tong. `ALTER DATABASE ... CONNECTION LIMIT` khoi phuc tinh chat do.
 --
--- PHEP TINH, cap nhat 2026-08-30 sau su co Power BI cua sv001:
+-- PHEP TINH, cap nhat 2026-09-01 sau su co Power BI THU HAI cua sv001:
 --
---   Tran moi nguoi len 8 (xem `backend/pgroles.py`, DEFAULT_CONNECTION_LIMIT -
---   4 lam Power BI hong ngay voi mo hinh nhieu hon mot bang). Cao diem 10 nguoi
---   cung luc:
+--   Tran moi nguoi len 12 (xem `backend/pgroles.py`, DEFAULT_CONNECTION_LIMIT).
+--   Vi sao khong phai 8: 8 DUNG BANG do song song cua Power BI Import, nen mot
+--   lan refresh tieu het sach ngan sach cua chinh nguoi do. Tran phai LON HON
+--   do song song cua client, khong duoc BANG no.
 --
---       10 nguoi x 8 = 80  ket noi cho lop
---       pool ung dung    ~15
+--   Con so pool ung dung o ban truoc ("~15") la UOC LUONG THAP. Do dung tu
+--   `backend/config.py` dong 563-590:
+--
+--       aivb_app_rw:  auth 4 + gamification 6 + van hanh 2   = 12
+--       pool truy van: toi da 4 doi tuong `Database`         = 16
+--                      (2 bo du lieu x 2 vai tro) x 4 moi cai
+--       ----------------------------------------------------------
+--       tong pool ung dung                                   = 28
+--
+--   Cao diem 10 nguoi cung luc:
+--
+--       10 nguoi x 12  = 120  ket noi cho lop
+--       pool ung dung     28
 --       superuser          3
 --       -------------------------
---       tong             ~98
+--       tong            ~151
 --
---   Vi vay `max_connections` da nang 100 -> 150 o
---   `docker/docker-compose.override.yml`. Neu chay ban bare-metal thi phai tu
---   dat, PostgreSQL mac dinh la 100 va cum se cham tran truoc lop.
+--   `max_connections` dang la 150 o `docker/docker-compose.override.yml`. Con
+--   151 o tren la DINH TUYET DOI - ca 10 nguoi cung cham tran cung mot luc -
+--   va voi `idle_session_timeout=3min` thu hoi ket noi roi thi trang thai do
+--   gan nhu khong xay ra.
+--
+--   NGUONG PHAI THEO DOI: neu lop thuong xuyen co tren ~9 nguoi dung Power BI
+--   DONG THOI, nang `max_connections` len 200. Doi gia tri do CAN KHOI DONG
+--   LAI PostgreSQL, khong reload duoc.
+--
+-- CAP NHAT 2026-09-14, do tren dashboard LastMile (xem bang do o
+-- `backend/pgroles.py`, DEFAULT_CONNECTION_LIMIT): file .pbip nap TUAN TU giu
+-- dinh 18-19 ket noi / nguoi; tran moi nguoi 12 -> 30, KHONG timeout roi trong
+-- `scm`. Cao diem 10 nguoi cung refresh:
+--
+--       10 nguoi x 30  = 300  ket noi cho lop
+--       pool ung dung     28
+--       superuser          3
+--       -------------------------
+--       tong            ~331   -> `max_connections` 350, tran database scm 320.
 --
 -- Tong ba tran duoi day CO Y vuot `max_connections`: khong bao gio ca ba
 -- database day cung luc, va `max_connections` moi la buc tuong that.
-ALTER DATABASE aivb_student    CONNECTION LIMIT 80;
-ALTER DATABASE aivb_instructor CONNECTION LIMIT 30;
+ALTER DATABASE aivb_student    CONNECTION LIMIT 120;
+ALTER DATABASE aivb_instructor CONNECTION LIMIT 60;
 
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_database WHERE datname = 'scm') THEN
-        EXECUTE 'ALTER DATABASE scm CONNECTION LIMIT 80';
+        EXECUTE 'ALTER DATABASE scm CONNECTION LIMIT 320';
     END IF;
 END $$;
 
