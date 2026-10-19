@@ -133,9 +133,15 @@ class GameProxy:
         declared = request.headers.get("content-length")
         if declared is not None and (not declared.isdigit() or int(declared) > MAX_BODY_BYTES):
             return _error(413, "Request body too large")
-        body = await request.body()
-        if len(body) > MAX_BODY_BYTES:
-            return _error(413, "Request body too large")
+        # Doc theo luong va dung ngay khi vuot tran. `request.body()` nap HET roi
+        # moi tra ve, nen mot body chunked (khong Content-Length) lon tuy y se
+        # nam tron trong RAM truoc khi bi chan - duong IPv4 qua duong ham khong
+        # co `request_body max_size` cua Caddy dung truoc.
+        body = bytearray()
+        async for chunk in request.stream():
+            body += chunk
+            if len(body) > MAX_BODY_BYTES:
+                return _error(413, "Request body too large")
 
         headers = {
             name: request.headers[name]
@@ -154,7 +160,7 @@ class GameProxy:
                 request.method,
                 f"/api/{path}",
                 params=list(request.query_params.multi_items()),
-                content=body or None,
+                content=bytes(body) or None,
                 headers=headers,
             )
         except httpx.TimeoutException:

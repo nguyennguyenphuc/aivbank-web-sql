@@ -4,6 +4,7 @@ Khong can PostgreSQL: game-api duoc thay bang `httpx.MockTransport`.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -154,6 +155,36 @@ def test_proxy_rejects_oversized_body(proxied):
     r = client.post("/game/api/v1/x", content=b"a" * (game_bridge.MAX_BODY_BYTES + 1))
     assert r.status_code == 413
     assert len(seen) == before
+
+
+def test_proxy_stops_reading_a_chunked_body_at_the_limit():
+    """Body chunked khong co Content-Length: phai dung doc ngay khi vuot tran,
+    khong nap het vao RAM roi moi dem. TestClient doc tron body truoc khi goi
+    app, nen o day goi thang `forward()` voi `receive` tu dem."""
+    chunk = b"a" * 65536
+    pulled = 0
+
+    async def receive():
+        nonlocal pulled
+        pulled += 1
+        # 64 x 64 KiB = 4 MiB co san; code dung chi duoc keo ~17 doan.
+        return {"type": "http.request", "body": chunk, "more_body": pulled < 64}
+
+    scope = {
+        "type": "http", "method": "POST", "path": "/game/api/v1/x", "query_string": b"",
+        "headers": [], "scheme": "http", "server": ("testserver", 80), "client": ("1.2.3.4", 1),
+    }
+
+    async def run():
+        proxy = game_bridge.GameProxy("http://game-api:3001")
+        try:
+            return await proxy.forward(Request(scope, receive), "v1/x")
+        finally:
+            await proxy.aclose()
+
+    r = asyncio.run(run())
+    assert r.status_code == 413
+    assert pulled <= game_bridge.MAX_BODY_BYTES // len(chunk) + 1
 
 
 def test_proxy_reports_game_api_down():
