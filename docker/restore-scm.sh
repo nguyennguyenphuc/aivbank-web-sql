@@ -48,9 +48,19 @@ echo "== 11_scm_database.sql =="
 $PSQL -f database/schema/11_scm_database.sql
 
 # Chốt chặn: chỉ nạp khi `scm.sales` chưa có dòng nào.
-rows=$($PSQL -d scm -Atc "select coalesce((select count(*) from scm.sales limit 1),0)" 2>/dev/null || echo 0)
+#
+# Lỗi truy vấn KHÔNG được hiểu là "rỗng". Trước 2026-10-18 dòng này là
+# `... 2>/dev/null || echo 0`: một trang hỏng trong sales_2015 làm count(*) lỗi,
+# script coi là 0 dòng và pg_restore đè lên 125 triệu dòng đang có (nhân đôi
+# sales_2017). Bảng chưa tồn tại (cài mới) thì to_regclass trả NULL -> 0; mọi lỗi
+# khác (trang hỏng, mất kết nối, sai mật khẩu) thì DỪNG để người kiểm tra.
+if ! rows=$($PSQL -d scm -Atc "select case when to_regclass('scm.sales') is null then 0 else (select count(*) from (select 1 from scm.sales limit 1) s) end"); then
+    echo "LOI: khong doc duoc scm.sales - KHONG restore de tranh nap de len du lieu dang co." >&2
+    echo "     Xem log postgres (invalid page? ket noi?) roi xu ly tay." >&2
+    exit 1
+fi
 if [ "$rows" -gt 0 ]; then
-    echo "== pg_restore: BO QUA, scm.sales da co $rows dong =="
+    echo "== pg_restore: BO QUA, scm.sales da co du lieu =="
 else
     echo "== pg_restore scm.dump =="
     pg_restore -h postgres -U postgres -d scm --no-owner --no-privileges \

@@ -38,7 +38,9 @@ param(
     [string]$StateFile = 'C:\ProgramData\AIVBank\config\duckdns6.last',
     [string]$Ipv6,
     [string]$Ipv4,
-    [string]$InterfaceAlias = 'Ethernet',
+    # Bo trong = tu chon: may chuyen qua lai giua Ethernet va Wi-Fi, ghim cung
+    # mot ten thi doi mang la AAAA dung yen o dia chi cu ma khong ai biet.
+    [string]$InterfaceAlias = '',
     [switch]$Force
 )
 
@@ -91,19 +93,31 @@ if ($Ipv6) {
     $target = $Ipv6
     Write-Log "dung IPv6 truyen vao: $target"
 } else {
-    $cand = Get-NetIPAddress -InterfaceAlias $InterfaceAlias -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+    $where = if ($InterfaceAlias) { "'$InterfaceAlias'" } else { 'moi giao dien' }
+    $addrArgs = @{ AddressFamily = 'IPv6'; ErrorAction = 'SilentlyContinue' }
+    if ($InterfaceAlias) { $addrArgs['InterfaceAlias'] = $InterfaceAlias }
+    # PrefixOrigin 'RouterAdvertisement' = tien to do router nha cap. Loai duoc
+    # Tailscale/WireGuard/vEthernet/VMware (ULA fd.., gan tay) ma khong can liet ke ten.
+    # Nhieu card cung co (cam day + Wi-Fi): lay card co InterfaceMetric thap nhat,
+    # tuc card Windows dang dung lam duong ra mac dinh.
+    $metric = @{}
+    Get-NetIPInterface -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+        ForEach-Object { $metric[$_.InterfaceIndex] = $_.InterfaceMetric }
+    $cand = Get-NetIPAddress @addrArgs |
             Where-Object {
                 $_.AddressState  -eq 'Preferred' -and
                 $_.SuffixOrigin  -eq 'Link' -and          # ON DINH, khong phai 'Random'
-                $_.PrefixOrigin  -ne 'WellKnown' -and     # loai fe80::
-                $_.IPAddress -notlike 'fe80*'
-            } | Select-Object -First 1
+                $_.PrefixOrigin  -eq 'RouterAdvertisement' -and
+                $_.IPAddress -match '^[23]'
+            } |
+            Sort-Object { if ($metric.ContainsKey($_.InterfaceIndex)) { $metric[$_.InterfaceIndex] } else { 9999 } } |
+            Select-Object -First 1
     if (-not $cand) {
-        Write-Log "HONG: khong thay dia chi IPv6 toan cuc ON DINH tren '$InterfaceAlias'"
-        throw "Khong thay IPv6 toan cuc on dinh tren '$InterfaceAlias'. Kiem `Get-NetIPAddress -AddressFamily IPv6`."
+        Write-Log "HONG: khong thay dia chi IPv6 toan cuc ON DINH tren $where"
+        throw "Khong thay IPv6 toan cuc on dinh tren $where. Kiem `Get-NetIPAddress -AddressFamily IPv6`."
     }
     $target = $cand.IPAddress
-    Write-Log "dia chi on dinh phat hien duoc: $target"
+    Write-Log "dia chi on dinh phat hien duoc: $target (tren '$($cand.InterfaceAlias)')"
 }
 
 # Global unicast la 2000::/3 -> chu so hex dau tien phai la 2 hoac 3.

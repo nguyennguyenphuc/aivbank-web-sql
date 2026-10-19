@@ -75,7 +75,9 @@ function Test-Admin {
 function Assert-Admin([string]$forAction) {
     if (Test-Admin) { return }
     Say 'Cần quyền Administrator để bật/tắt service. Đang mở lại...' 'Yellow'
-    $argList = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'), $forAction)
+    # -NoExit: giữ cửa sổ nâng quyền lại sau khi chạy, kể cả khi lỗi, để còn
+    # đọc được thông báo thay vì cửa sổ tự đóng mất.
+    $argList = @('-NoExit', '-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', ('"' + $PSCommandPath + '"'), $forAction)
     if ($NoDns) { $argList += '-NoDns' }
     if ($Build) { $argList += '-Build' }
     Start-Process powershell.exe -Verb RunAs -ArgumentList $argList
@@ -87,6 +89,16 @@ function Test-DockerUp {
         $null = & docker info --format '{{.ServerVersion}}' 2>$null
         return ($LASTEXITCODE -eq 0)
     } catch { return $false }
+}
+
+# `docker compose` ghi dòng tiến trình ("Container x Running") ra stderr. Trong
+# Windows PowerShell 5.1, `2>&1` biến mỗi dòng đó thành ErrorRecord, và với
+# $ErrorActionPreference = 'Stop' ở đầu file thì dòng ĐẦU TIÊN đã ném lỗi — script
+# chết ngay bước compose dù docker không hỏng gì. Hạ về 'Continue' trong phạm vi
+# hàm này và đổi mọi dòng thành chuỗi; mã thoát vẫn đọc qua $LASTEXITCODE.
+function Invoke-Compose {
+    $ErrorActionPreference = 'Continue'
+    & docker compose @args 2>&1 | ForEach-Object { "$_" }
 }
 
 function Start-DockerDesktop {
@@ -157,9 +169,9 @@ function Invoke-Up {
     Say "`n[2/4] Ứng dụng + PostgreSQL"
     Push-Location $DockerDir
     try {
-        $composeArgs = @('compose', 'up', '-d')
+        $composeArgs = @('up', '-d')
         if ($Build) { $composeArgs += '--build'; Say '  dung lai image...' }
-        & docker @composeArgs 2>&1 |
+        Invoke-Compose @composeArgs |
             Where-Object { $_ -match 'Creat|Start|Recreat|Error' } |
             ForEach-Object { Say "  $_" }
         if ($LASTEXITCODE -ne 0) { throw 'docker compose up thất bại' }
@@ -210,7 +222,7 @@ function Invoke-Down {
             # `stop` chứ KHÔNG phải `down`: giữ nguyên container và volume, lần bật
             # sau không phải dựng lại. Dữ liệu ~36 GB nằm trong volume
             # `docker_pgdata`, và `down -v` sẽ XOÁ nó.
-            & docker compose stop 2>&1 |
+            Invoke-Compose stop |
                 Where-Object { $_ -match 'Stopp|Error' } |
                 ForEach-Object { Say "  $_" }
             Ok 'container đã dừng (dữ liệu giữ nguyên)'
@@ -259,9 +271,13 @@ function Invoke-Status {
     try {
         $aaaa = (Resolve-DnsName $Domain -Type AAAA -Server 8.8.8.8 -ErrorAction Stop |
                  Where-Object { $_.IPAddress }).IPAddress
-        $now = (Get-NetIPAddress -InterfaceAlias Ethernet -AddressFamily IPv6 -ErrorAction SilentlyContinue |
-                Where-Object { $_.SuffixOrigin -eq 'Link' -and $_.IPAddress -notlike 'fe80*' } |
-                Select-Object -First 1).IPAddress
+        # Mọi card (Ethernet hoặc Wi-Fi), cùng tiêu chí với Update-DuckDns6.ps1.
+        $now = @(Get-NetIPAddress -AddressFamily IPv6 -ErrorAction SilentlyContinue |
+                Where-Object { $_.AddressState -eq 'Preferred' -and $_.SuffixOrigin -eq 'Link' -and
+                               $_.PrefixOrigin -eq 'RouterAdvertisement' -and $_.IPAddress -match '^[23]' }).IPAddress
+        $hit = $null
+        if ($aaaa -and $now) { $hit = @($now | Where-Object { $aaaa -contains $_ }) | Select-Object -First 1 }
+        if ($hit) { $now = $hit } else { $now = $now | Select-Object -First 1 }
         if ($aaaa -and $now -and ($aaaa -contains $now)) { Ok "AAAA khớp địa chỉ hiện tại ($now)" }
         elseif ($aaaa) { Bad "AAAA = $aaaa nhưng máy đang là $now — chạy scripts\Update-DuckDns6.ps1" }
         else { Warn 'chưa có bản ghi AAAA' }
@@ -282,7 +298,7 @@ function Invoke-Status {
 function Invoke-Logs {
     Say "`n=== LOG backend ($Tail dòng cuối) ===" 'Cyan'
     Push-Location $DockerDir
-    try { & docker compose logs --tail $Tail backend 2>&1 | ForEach-Object { Say "  $_" } }
+    try { Invoke-Compose logs --tail $Tail backend | ForEach-Object { Say "  $_" } }
     finally { Pop-Location }
 
     foreach ($f in @('caddy.log', 'aivb-tunnel.err.log', 'duckdns.log')) {
