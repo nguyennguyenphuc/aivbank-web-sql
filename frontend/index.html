@@ -54,6 +54,7 @@
           class="auth-input"
           type="text"
           name="username"
+          aria-describedby="login-error"
           autocomplete="username"
           autocapitalize="none"
           autocorrect="off"
@@ -68,6 +69,7 @@
           class="auth-input"
           type="password"
           name="password"
+          aria-describedby="login-error"
           autocomplete="current-password"
         />
       </div>
@@ -94,17 +96,17 @@
 
       <div class="auth-field-group">
         <label class="auth-field" for="change-old">Mật khẩu hiện tại</label>
-        <input id="change-old" class="auth-input" type="password" autocomplete="current-password" />
+        <input id="change-old" class="auth-input" type="password" autocomplete="current-password" aria-describedby="change-error" />
       </div>
 
       <div class="auth-field-group">
         <label class="auth-field" for="change-new">Mật khẩu mới</label>
-        <input id="change-new" class="auth-input" type="password" autocomplete="new-password" />
+        <input id="change-new" class="auth-input" type="password" autocomplete="new-password" aria-describedby="change-error" />
       </div>
 
       <div class="auth-field-group">
         <label class="auth-field" for="change-new2">Nhập lại mật khẩu mới</label>
-        <input id="change-new2" class="auth-input" type="password" autocomplete="new-password" />
+        <input id="change-new2" class="auth-input" type="password" autocomplete="new-password" aria-describedby="change-error" />
       </div>
 
       <ul id="change-rules" class="auth-rules"></ul>

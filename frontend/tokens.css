@@ -25,7 +25,9 @@
    every foreground/background pair actually used in styles.css is at
    least 4.5:1 for normal text and 3:1 for >=18px text, icons and focus
    rings. --ink-faint is 3.59:1 on white and is therefore restricted to
-   large decorative glyphs; it must never carry a sentence.
+   large decorative glyphs; it must never carry a sentence — nor a number,
+   a file name or a tab caption. Form-control borders use --line-input
+   (4.51:1), never --line.
    ===================================================================== */
 
 :root {
@@ -65,12 +67,18 @@
   --surface-code:    #F7F9F5;   /* <pre> blocks, executed-SQL panel    */
   --surface-raised:  #FFFFFF;
   --surface-brand:   #F8FAF6;
+  --surface-game:    #FFF9E6;   /* behind the game iframe while it loads */
 
   /* ---------------------------------------------------------------- lines */
 
   --line:        #D3DCCC;
   --line-soft:   #E8EDE4;
   --line-strong: #B6C4AC;
+  /* The boundary of a control a student has to find before typing in it.
+     WCAG 1.4.11 asks 3:1 for that; --line is 1.41:1 and --line-strong
+     1.83:1, both fine for dividers and both invisible as a text box edge.
+     #6F7A68 is the same grey-green at 4.51:1 on white. */
+  --line-input:  #6F7A68;
 
   /* ------------------------------------------------------------- semantic */
 
@@ -126,8 +134,11 @@
   --font-mono:  ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                 "Liberation Mono", "DejaVu Sans Mono", monospace;
 
-  --text-2xs: 10.5px;
-  --text-xs:  11.5px;
+  /* 2xs carries real words (column types, tags, the Ctrl+Enter chip), so it
+     sits just under the 12px floor rather than at 10.5px, where Vietnamese
+     diacritics on a stacked vowel stop being legible. */
+  --text-2xs: 11.5px;
+  --text-xs:  12px;
   --text-sm:  12.5px;
   --text-md:  13.5px;
   --text-base: 14.5px;

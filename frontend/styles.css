@@ -199,7 +199,7 @@ body.is-gated { overflow: hidden; }
   font-family: var(--font-sans);
   font-size: var(--text-base);
   padding: var(--space-5) var(--space-6);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-sm);
   background: var(--surface);
   color: var(--ink);
@@ -207,7 +207,7 @@ body.is-gated { overflow: hidden; }
               box-shadow var(--duration-fast) var(--ease);
 }
 .auth-input::placeholder { color: var(--ink-muted); }
-.auth-input:hover { border-color: var(--line-strong); }
+.auth-input:hover { border-color: var(--ink-muted); }
 .auth-input:focus {
   outline: var(--focus-ring);
   outline-offset: var(--focus-offset);
@@ -717,7 +717,7 @@ body.results-max .pane-sep { display: none; }
   width: 100%;
   min-height: var(--control-h);
   padding: var(--space-4) var(--space-5) var(--space-4) var(--space-10);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-sm);
   font-family: var(--font-sans);
   font-size: var(--text-md);
@@ -727,7 +727,7 @@ body.results-max .pane-sep { display: none; }
               box-shadow var(--duration-fast) var(--ease);
 }
 .filter::placeholder { color: var(--ink-muted); }
-.filter:hover { border-color: var(--line-strong); }
+.filter:hover { border-color: var(--ink-muted); }
 .filter:focus {
   outline: var(--focus-ring);
   outline-offset: var(--focus-offset);
@@ -763,7 +763,9 @@ body.results-max .pane-sep { display: none; }
   align-items: baseline;
   gap: var(--space-3);
   min-height: var(--touch-target);
-  padding: var(--space-4) var(--space-10) var(--space-4) var(--space-4);
+  /* Right padding clears .tbl-insert (touch-target wide, inset space-2 from
+     the edge). At space-10 the "N cột · M dòng" count ran 16px under it. */
+  padding: var(--space-4) calc(var(--touch-target) + var(--space-2)) var(--space-4) var(--space-4);
   background: none;
   border: 0;
   font: inherit;
@@ -987,7 +989,7 @@ kbd {
   font-family: var(--font-mono);
   font-size: var(--text-md);
   padding: var(--space-3) var(--space-4);
-  border: 1px solid var(--line);
+  border: 1px solid var(--line-input);
   border-radius: var(--radius-sm);
   color: var(--ink);
   background: var(--surface);
@@ -1049,6 +1051,13 @@ kbd {
   border-top: 1px solid var(--line-soft);
   background: var(--surface-sunken);
   flex: 0 0 auto;
+}
+/* The base kbd chip is translucent white, made for the green Run button; on
+   this sunken strip it vanishes. Give it a solid fill and an edge here. */
+.hint-line kbd {
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+  margin-left: 0;
 }
 
 /* ------------------------------------------------------------- CodeMirror */
@@ -1593,18 +1602,6 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   .session-user { max-width: 120px; }
 }
 
-@media (max-width: 900px) {
-  .topbar { flex-wrap: wrap; row-gap: var(--space-3); }
-  .health { display: none; }
-  /* "E2E DATA ANALYTICS" is half again as wide as the old "AI VIETNAM", and
-     .brand-word cannot wrap. Drop the secondary label rather than let the
-     brand push the session box off the bar; the word itself goes at 600px. */
-  .brand-sep, .brand-text { display: none; }
-  .layout { grid-template-columns: minmax(0, 1fr); }
-  .sidebar { max-height: 240px; border-right: 0; border-bottom: 1px solid var(--line); }
-  .session-box { border-left: 0; padding-left: 0; }
-}
-
 .mart-panel { min-width: 0; }
 .mart-head, .mart-tools { display: flex; align-items: center; flex-wrap: wrap; gap: var(--space-4); padding: var(--space-5) var(--space-6); border-bottom: 1px solid var(--line-soft); background: var(--surface); }
 .mart-head .btn { margin-left: auto; }
@@ -1635,7 +1632,7 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   flex: 1 1 auto;
   display: flex;
   min-height: 0;
-  background: #FFF9E6;
+  background: var(--surface-game);
 }
 .game-frame {
   flex: 1 1 auto;
@@ -1665,7 +1662,7 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 .leaderboard-row, .analytics-row { padding: var(--space-4) var(--space-5); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--text-sm); }
 .leaderboard-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto auto; gap: var(--space-5); align-items: center; }
 .leaderboard-row .rank { color: var(--brand-700); font-weight: var(--weight-bold); }
-.leaderboard-queries, .leaderboard-streak { color: var(--ink-faint); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.leaderboard-queries, .leaderboard-streak { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
 /* Dong cua chinh minh. Vien trai chu khong phai to nen: bang nay doc theo cot,
    mot mang mau lam lech thang hang cua cac con so ben canh. */
 .leaderboard-row.is-me { border-color: var(--brand-600); box-shadow: inset 3px 0 0 var(--brand-600); }
@@ -1700,9 +1697,11 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
     padding-inline: var(--space-4);
   }
   .schema-toggle { display: inline-grid; }
+  /* "E2E DATA ANALYTICS" cannot wrap. Drop the secondary label rather than let
+     the brand push the session box off the bar; the word itself goes at 600px. */
   .brand-sep, .brand-text, .health, .session-user { display: none; }
   .brand { min-width: 0; }
-  .session-box { margin-left: auto; gap: var(--space-2); }
+  .session-box { margin-left: auto; gap: var(--space-2); border-left: 0; padding-left: 0; }
   .layout { grid-template-columns: minmax(0, 1fr); position: relative; }
   /* Sidebar la ngan keo o be ngang nay, khong con mep de keo. */
   .pane-sep { display: none; }
@@ -1806,7 +1805,7 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   font-weight: var(--weight-bold);
   letter-spacing: var(--tracking-wide);
 }
-.section-tab-sub { font-size: var(--text-xs); color: var(--ink-faint); }
+.section-tab-sub { font-size: var(--text-xs); color: var(--ink-muted); }
 
 .section-tab.is-active {
   color: var(--brand-700);
@@ -1929,7 +1928,7 @@ body.role-instructor .section-tab.is-active {
   word-break: break-all;
 }
 .sbtable-rows { font-size: var(--text-2xs); color: var(--ink-muted); margin-left: auto; white-space: nowrap; }
-.sbtable-file { font-size: var(--text-2xs); color: var(--ink-faint); word-break: break-all; }
+.sbtable-file { font-size: var(--text-2xs); color: var(--ink-muted); word-break: break-all; }
 .sbtable-cols { font-size: var(--text-2xs); color: var(--ink-muted); line-height: var(--leading-normal); }
 
 @media (max-width: 900px) {
