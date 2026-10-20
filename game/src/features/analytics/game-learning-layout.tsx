@@ -1,15 +1,17 @@
 import { useState, type FC, type ReactNode } from 'react';
-import { Activity, ArrowUpRight, BookOpen, Braces, Check, Download, Pause, Play, Sparkles } from 'lucide-react';
+import { Activity, ArrowUpRight, BookOpen, Braces, Check, Download, Maximize2, Minimize2, Pause, Play, Sparkles } from 'lucide-react';
 import { EVENT_LIMIT, eventLessons, type GameMode, type ObservationState, type ObservedEvent } from './game-observations';
 import './game-learning.css';
 
 import { GameAttemptScope, useObservationStudio } from './game-observation-context';
+import { usePlayOnly } from './play-only';
 
 export const GameLearningLayout: FC<{
   children: ReactNode; levelId: number; mode: GameMode; language: 'vi' | 'en'; onReplay: () => void; onInspect: () => void;
 }> = ({ children, levelId, mode, language, onReplay, onInspect }) => {
   const { state } = useObservationStudio();
   const vi = language === 'vi';
+  const [playOnly, togglePlayOnly] = usePlayOnly();
   const [showGuide, setShowGuide] = useState(() => {
     try { return sessionStorage.getItem('jelly-studio-guide-seen') !== '1'; } catch { return true; }
   });
@@ -29,6 +31,11 @@ export const GameLearningLayout: FC<{
         <header className="studio-heading">
           <div className="studio-brand"><span className="studio-brand-icon"><Sparkles size={23} /></span><div><span className="studio-eyebrow">JELLY TRAIL ACADEMY</span><h1>{vi ? 'Kéo kẹo trước. Đọc dữ liệu sau.' : 'Drag first. Read data next.'}</h1></div></div>
           <span className="studio-mode"><span />{vi ? `Màn ${levelId}` : `Level ${levelId}`}</span>
+          <button className="studio-help" aria-pressed={playOnly} aria-keyshortcuts="Alt+P" onClick={togglePlayOnly}
+            title={vi ? 'Ẩn khung số liệu, phóng to bàn chơi (Alt+P)' : 'Hide the data panel, enlarge the board (Alt+P)'}>
+            {playOnly ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+            {playOnly ? (vi ? 'Hiện số liệu' : 'Show data') : (vi ? 'Chỉ chơi' : 'Play only')}
+          </button>
           <button className="studio-help" aria-expanded={showGuide} aria-controls="studio-first-steps" onClick={() => showGuide ? dismissGuide() : setShowGuide(true)}><BookOpen size={16} />{vi ? 'Dạy học' : 'Lesson'}</button>
         </header>
         <nav className="studio-mobile-jump" aria-label={vi ? 'Chuyển giữa game và dữ liệu' : 'Jump between game and data'}>

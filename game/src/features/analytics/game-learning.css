@@ -61,6 +61,22 @@
 .global-log-host.is-open~.global-log-resizer,.global-log-backdrop~.global-log-resizer{display:none}
 }
 body.is-resizing-log{user-select:none;cursor:col-resize}
+/* Che do "Chi choi" (play-only.ts): an khung so lieu, bo tran kich thuoc ban.
+   `--log-w: 0px` keo theo padding cua .app-workspace, vi tri .app-navigation va
+   mep hop thoai (deu doc bien nay). Nut "Event log" van con: bam la mo log dang
+   hop thoai phu len. Ban vuong nen CHIEU CAO moi la gioi han that; 190px la
+   thanh tieu de + header man + thanh trang thai.
+   Ban luyen tap: tran inline 68svh trong GameScreen.tsx khong tac dung o day,
+   vi `[data-testid=practice-board]>div` da ep width:100% !important. */
+.jelly-play-only{--log-w:0px}
+.jelly-play-only .global-log-host:not(.is-open),.jelly-play-only .global-log-resizer{display:none}
+.jelly-play-only .studio-columns{max-width:min(1200px,100%)}
+.jelly-play-only .studio-game .ranked-candy-board,.jelly-play-only .studio-game [data-testid=practice-board]{max-width:min(100%,calc(100svh - 190px))}
+.jelly-play-only .studio-game .ranked-game-shell>section.grid:not(.ranked-candy-board),.jelly-play-only .studio-game .ranked-game-shell>p{max-width:min(100%,calc(100svh - 190px))}
+.jelly-play-only .studio-first-steps,.jelly-play-only .studio-footnote,.jelly-play-only .studio-game>.studio-section-label{display:none}
+.jelly-play-only .studio-heading{margin-bottom:6px}
+.jelly-play-only .learning-studio:not(.global-log-host){padding-top:10px}
+.studio-help[aria-pressed=true]{background:#e4f3ee;border-color:#087e8b;color:#0b5f66}
 @media(prefers-reduced-motion:reduce){.global-log-resizer::before{transition:none}}
 @media(max-width:1099px){.global-log-host:not(.is-open){display:none}.studio-mobile-jump{display:flex;position:sticky;top:0;z-index:40;gap:8px;max-width:760px;margin:0 auto 12px;padding:7px;background:#f1f7f4f5;border:1px solid #d4e4df;border-radius:14px;backdrop-filter:blur(8px)}.studio-mobile-jump button{display:flex;align-items:center;justify-content:center;gap:8px;flex:1;min-height:44px;background:white;border:1px solid #cbdddd;border-radius:10px;font-size:13px;font-weight:800;color:#245864}.studio-mobile-jump span{font-size:11px;padding:1px 6px;border-radius:6px;background:#e5f2ef}}
 @media(max-width:520px){.studio-help{margin-left:8px}.global-log-host.is-open{padding:8px 6px 20px}.global-log-host .learning-panel{padding:14px 12px}.global-log-launcher small{display:none}.global-log-launcher{right:10px}.studio-first-steps{padding:10px 12px}.lab-tabs{gap:9px}.lab-tabs>button{font-size:11px}}
