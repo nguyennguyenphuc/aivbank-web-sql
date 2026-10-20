@@ -168,6 +168,9 @@
      autocomplete would offer one dataset's table names inside the other's
      query. The sandbox needs no such wipe: it owns a separate editor whose
      only name source is the student's own files. -->
+<!-- Nut phong to nam CHUNG hang voi tablist nhung NGOAI no: role="tablist" chi
+     duoc chua tab (cung ly do voi .results-head). -->
+<div class="sections-bar">
 <nav id="sections" class="sections" role="tablist" aria-label="Khu vực làm việc">
   <button class="section-tab is-active" type="button" data-dataset-slot role="tab" data-section="finance"
           id="section-tab-finance" aria-controls="main-workspace" aria-selected="true">
@@ -184,13 +187,6 @@
           id="section-tab-sandbox" aria-controls="sandbox-workspace" aria-selected="false" tabindex="-1">
     <span class="section-tab-name">Thực hành SQL</span>
   </button>
-  <!-- Bang xep hang la khu vuc RIENG, khong phai mot tab trong vung ket qua: no
-       khong thuoc ve bo du lieu nao ca. De no trong vung ket qua thi doi bo du
-       lieu se xoa no di cung schema va lich su, dù diem thi khong doi. -->
-  <button class="section-tab" type="button" role="tab" data-section="leaderboard"
-          id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
-    <span class="section-tab-name">Bảng xếp hạng</span>
-  </button>
   <!-- Tro choi: an cho toi khi GET /game-sso/status noi may chu da bat game.
        `disabled` di kem `hidden` de phim mui ten cung bo qua no. -->
   <button class="section-tab" type="button" role="tab" data-section="game"
@@ -198,7 +194,34 @@
           hidden disabled aria-disabled="true">
     <span class="section-tab-name">Trò chơi</span>
   </button>
+  <!-- Bang xep hang la khu vuc RIENG, khong phai mot tab trong vung ket qua: no
+       khong thuoc ve bo du lieu nao ca. De no trong vung ket qua thi doi bo du
+       lieu se xoa no di cung schema va lich su, dù diem thi khong doi.
+       Dat CUOI hang: la noi xem lai, khong phai noi lam bai. -->
+  <button class="section-tab" type="button" role="tab" data-section="leaderboard"
+          id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
+    <span class="section-tab-name">Bảng xếp hạng</span>
+  </button>
 </nav>
+<button id="focus-toggle" class="icon-btn focus-toggle" type="button" aria-pressed="false"
+        aria-label="Phóng to khu vực đang mở" title="Phóng to khu vực đang mở (Esc để thoát)">
+  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
+</button>
+</div>
+
+<!-- Che do phong to an ca thanh tieu de lan thanh tab, nen loi ra phai nam o
+     day, noi khong bao gio bi an cung. #focus-schema thay cho nut mo danh sach
+     bang (o thanh tieu de) khi man hep. -->
+<div id="focus-float" class="focus-float" hidden>
+  <button id="focus-schema" class="icon-btn" type="button" aria-label="Mở danh sách bảng"
+          aria-controls="schema-sidebar" title="Danh sách bảng" hidden>
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
+  </button>
+  <button id="focus-exit" class="icon-btn" type="button" aria-label="Thu nhỏ, hiện lại thanh điều hướng"
+          title="Thu nhỏ (Esc)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /></svg>
+  </button>
+</div>
 
 <div id="service-banner" class="banner banner-warn" hidden></div>
 

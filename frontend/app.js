@@ -320,7 +320,10 @@ function setSchemaDrawer(open, restoreFocus = true) {
   workspace.inert = open;
   topbar.inert = open;
   if (open) closeSchemaButton.focus();
-  else if (restoreFocus) openSchemaButton.focus();
+  // Dang phong to thi nut o thanh tieu de bi an; tra focus ve nut noi thay the.
+  else if (restoreFocus) {
+    (document.body.classList.contains('is-focus') ? focusSchema : openSchemaButton).focus();
+  }
 }
 
 function syncSchemaDrawer() {
@@ -342,10 +345,52 @@ schemaBackdrop.addEventListener('click', () => setSchemaDrawer(false));
 $('table-list').addEventListener('click', (event) => {
   if (event.target.closest('.tbl-insert') && compactWorkspace.matches) setSchemaDrawer(false);
 });
+/* ------------------------------ focus mode ------------------------------ */
+
+// Khu vuc dang mo chiem tron cua so: an thanh tieu de VA thanh tab. Cung quy
+// uoc voi setResultsMax: chi la trang thai hien thi, khong luu - tai lai trang
+// la ve bo cuc thuong, nen khong ai bi ket trong mot che do khong biet thoat.
+//
+// Esc trong iframe Tro choi thuoc ve game, khong toi duoc day; vi vay loi ra
+// chinh la #focus-exit, luon nam noi tren cung.
+const focusToggle = $('focus-toggle');
+const focusFloat = $('focus-float');
+const focusExit = $('focus-exit');
+const focusSchema = $('focus-schema');
+
+function syncFocusSchema() {
+  // Nut mo danh sach bang thuong nam o thanh tieu de, ma thanh do dang an.
+  const inConsole = currentSection === 'finance' || currentSection === 'scm';
+  focusSchema.hidden = !(inConsole && compactWorkspace.matches);
+}
+
+function setFocus(on) {
+  const was = document.body.classList.contains('is-focus');
+  document.body.classList.toggle('is-focus', on);
+  focusFloat.hidden = !on;
+  focusToggle.setAttribute('aria-pressed', String(on));
+  if (on) syncFocusSchema();
+  // Kich thuoc vung chua doi, ma CodeMirror chi do lai khi duoc bao.
+  requestAnimationFrame(() => {
+    cm.refresh();
+    if (sandboxUi) sandboxUi.cm.refresh();
+  });
+  if (on && !was) focusExit.focus();
+  else if (!on && was && focusFloat.contains(document.activeElement)) focusToggle.focus();
+}
+
+focusToggle.addEventListener('click', () => setFocus(true));
+focusExit.addEventListener('click', () => setFocus(false));
+focusSchema.addEventListener('click', () => setSchemaDrawer(true));
+compactWorkspace.addEventListener('change', () => {
+  if (document.body.classList.contains('is-focus')) syncFocusSchema();
+});
+
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (document.body.classList.contains('is-schema-open')) setSchemaDrawer(false);
   else if (document.body.classList.contains('results-max')) setResultsMax(false);
+  else if (document.body.classList.contains('is-focus')) setFocus(false);
 });
 compactWorkspace.addEventListener('change', syncSchemaDrawer);
 syncSchemaDrawer();
@@ -606,6 +651,9 @@ function wipeSessionState() {
   // Game trong iframe dang giu phien game cua nguoi truoc: go di, lan mo tab
   // sau se SSO lai bang nguoi dang dang nhap.
   resetGame();
+  // Nguoi sau dang nhap phai thay day du thanh tieu de - trong do co huy hieu
+  // vai tro - chu khong phai mot man hinh dang an het dieu huong.
+  setFocus(false);
   currentUsername = '';
   // Go han khoi DOM, khong chi don rong. Dang xuat giang vien roi dang nhap hoc
   // vien tren CUNG MOT TAB trinh duyet la duong sot de nhat: khong go thi phan
