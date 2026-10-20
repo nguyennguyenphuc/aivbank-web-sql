@@ -46,7 +46,7 @@
 .lab-attempt-scope{font-size:12px;color:#496575;line-height:1.6;margin-top:12px}.event-scope{display:block;font-size:10px;color:#526777;margin-top:3px;overflow-wrap:anywhere}
 .global-log-host.learning-studio{position:fixed;inset:0 0 0 auto;width:var(--log-w);min-height:0;padding:14px 12px 90px;overflow-y:auto;overscroll-behavior:contain;border-left:1px solid #dae5e4;background:#f1f7f4;z-index:60}.global-log-host .learning-panel{position:static;padding:18px;border-radius:20px}.global-log-controls{display:none}.global-log-launcher{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:100;display:flex;align-items:center;gap:8px;min-height:48px;padding:10px 15px;border:2px solid #fff;border-radius:16px;background:#116e76;color:white;box-shadow:0 6px 20px #173e4e33;font-size:13px;font-weight:800;cursor:pointer}.global-log-launcher span{border-radius:7px;padding:2px 6px;background:#ffffff24}.global-log-launcher small{font-size:10px;font-weight:500}
 .global-log-backdrop{position:fixed;inset:0;background:#15323b66;backdrop-filter:blur(3px);z-index:110}.global-log-host.is-open{display:block;z-index:120;width:min(560px,100vw);padding:12px 12px 24px;box-shadow:-12px 0 40px #172f4a26}.is-open .global-log-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12px;color:#385767}.global-log-controls button{display:flex;align-items:center;gap:7px;min-height:44px;padding:8px 12px;background:white;border:1px solid #bcd5d7;border-radius:10px;font-weight:700}
-@media(min-width:1100px){.app-workspace{padding-right:calc(var(--log-w) / var(--z,1))}.app-navigation{left:calc((100% - var(--log-w)) / 2 / var(--z,1));max-width:calc((100% - var(--log-w) - 24px) / var(--z,1))}.app-workspace .fixed.inset-0:has(>[role=dialog]){right:calc(var(--log-w) / var(--z,1))}}
+@media(min-width:1100px){.app-workspace{padding-right:calc(var(--log-w) / var(--z,1))}.app-navigation{left:calc((100% - var(--log-w) / var(--z,1)) / 2);max-width:calc(100% - var(--log-w) / var(--z,1) - 24px)}.app-workspace .fixed.inset-0:has(>[role=dialog]){right:calc(var(--log-w) / var(--z,1))}}
 /* Thanh keo giua vung choi va khung so lieu. Chi co khi khung la cot co dinh
    ben phai (>=1100px); hep hon thi khung la hop thoai, khong co gi de keo.
    `--log-w` do global-event-log.tsx ghi len :root (clampLogWidth). */
@@ -69,7 +69,9 @@ body.is-resizing-log{user-select:none;cursor:col-resize}
      * `100svh` cung bi thu (671px tren khung 789px), nen moi chieu cao theo
        svh/vh o tren deu chia cho --z;
      * moi do dai viet theo --log-w (padding, vi tri thanh dieu huong, hop thoai)
-       cung bi thu - cung chia cho --z.
+       cung bi thu - chia --log-w cho --z. RIENG `100%` cua phan tu `fixed` thi
+       DA la be rong khung nhin quy theo zoom (W/z): chia ca bieu thuc la thanh
+       dieu huong lech phai ~170px (da do).
    Khung Event log THI KHONG thu: chu trong do von 12px. Zoom nguoc ve 1 de
    be rong that van dung bang --log-w (thanh keo cung vay; clientX va
    innerWidth khong bi zoom lam lech, nen log-width.ts khong can sua). */
@@ -78,24 +80,31 @@ body.is-resizing-log{user-select:none;cursor:col-resize}
 /* Khung goc cua App (`min-h-screen`). Hai shell cua man choi chi song trong
    studio, noi `.studio-game ...-shell{min-height:0}` - khong dung toi. */
 .jelly-embedded .app-workspace>div{min-height:calc(100svh / var(--z))}
-/* Ban co theo chieu cao khung. 470px = phan khong phai ban (tieu de, header
-   man, thanh sao, hang vat pham, thanh dieu huong) do o 0.85. San 260px: laptop
+/* Ban co theo chieu cao khung. 480px = phan khong phai ban (tieu de, header
+   man, thanh sao, hang vat pham, thanh dieu huong + 8px), DO tren trang that o
+   0.85: K = 100svh/z - (navTop - 8 - hang vat pham - boardTop)/z. San 260px: laptop
    1366x768 chi con ~545px cho iframe - khi do cuon, hoac dung nut phong to
    cua AIV Bank cung "Chi choi". */
-.jelly-embedded .studio-game [data-testid=practice-board],.jelly-embedded .studio-game .ranked-candy-board{max-width:clamp(260px,calc(100svh / var(--z) - 470px),520px)}
+.jelly-embedded .studio-game [data-testid=practice-board],.jelly-embedded .studio-game .ranked-candy-board{max-width:clamp(260px,calc(100svh / var(--z) - 480px),520px)}
+/* Khung "Thu tu nhin" (hien lan dau moi phien): ba buoc xep MOT hang - 112px
+   thay vi 180px - va trong luc no con hien thi ban nhuong them 120px (112 + le), nen ca man
+   van nam tren thanh dieu huong (da thu o 1920x855). */
+.jelly-embedded .studio-first-steps{max-width:760px;padding:8px 14px;margin-bottom:10px}
+.jelly-embedded .studio-first-steps ol{grid-template-columns:repeat(3,minmax(0,1fr));margin:4px 0 0}
+.jelly-embedded .learning-studio:has(.studio-first-steps:not([hidden])) .studio-game [data-testid=practice-board],.jelly-embedded .learning-studio:has(.studio-first-steps:not([hidden])) .studio-game .ranked-candy-board{max-width:clamp(260px,calc(100svh / var(--z) - 600px),520px)}
 .jelly-embedded .studio-eyebrow,.jelly-embedded .studio-game>.studio-section-label,.jelly-embedded .studio-mode{font-size:13px}
 /* Che do "Chi choi" (play-only.ts): an khung so lieu, bo tran kich thuoc ban.
    `--log-w: 0px` keo theo padding cua .app-workspace, vi tri .app-navigation va
    mep hop thoai (deu doc bien nay). Nut "Event log" van con: bam la mo log dang
-   hop thoai phu len. Ban vuong nen CHIEU CAO moi la gioi han that; 190px la
-   thanh tieu de + header man + thanh trang thai.
+   hop thoai phu len. Ban vuong nen CHIEU CAO moi la gioi han that; 415px la
+   tieu de + header man + thanh sao + hang vat pham + thanh dieu huong (da do).
    Ban luyen tap: tran inline 68svh trong GameScreen.tsx khong tac dung o day,
    vi `[data-testid=practice-board]>div` da ep width:100% !important. */
 .jelly-play-only{--log-w:0px}
 .jelly-play-only .global-log-host:not(.is-open),.jelly-play-only .global-log-resizer{display:none}
 .jelly-play-only .studio-columns{max-width:min(1200px,100%)}
-.jelly-play-only .studio-game .ranked-candy-board,.jelly-play-only .studio-game [data-testid=practice-board]{max-width:min(100%,calc(100svh / var(--z,1) - 190px))}
-.jelly-play-only .studio-game .ranked-game-shell>section.grid:not(.ranked-candy-board),.jelly-play-only .studio-game .ranked-game-shell>p{max-width:min(100%,calc(100svh / var(--z,1) - 190px))}
+.jelly-play-only .studio-game .ranked-candy-board,.jelly-play-only .studio-game [data-testid=practice-board]{max-width:min(100%,calc(100svh / var(--z,1) - 415px))}
+.jelly-play-only .studio-game .ranked-game-shell>section.grid:not(.ranked-candy-board),.jelly-play-only .studio-game .ranked-game-shell>p{max-width:min(100%,calc(100svh / var(--z,1) - 415px))}
 .jelly-play-only .studio-first-steps,.jelly-play-only .studio-footnote,.jelly-play-only .studio-game>.studio-section-label{display:none}
 .jelly-play-only .studio-heading{margin-bottom:6px}
 .jelly-play-only .learning-studio:not(.global-log-host){padding-top:10px}
