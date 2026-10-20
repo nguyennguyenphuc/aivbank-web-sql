@@ -1,4 +1,4 @@
-.learning-studio{--studio-ink:#263b51;--studio-muted:#586d80;--studio-teal:#086f79;color:var(--studio-ink);min-height:100svh;padding:18px clamp(8px,2.4vw,32px) 22px;background:radial-gradient(ellipse at 6% 8%,#e4f8ee 0,transparent 45%),radial-gradient(ellipse at 92% 30%,#f8e4ec 0,transparent 44%),#f5f5ef;display:flex;flex-direction:column}
+.learning-studio{--studio-ink:#263b51;--studio-muted:#586d80;--studio-teal:#086f79;color:var(--studio-ink);min-height:calc(100svh / var(--z,1));padding:18px clamp(8px,2.4vw,32px) 22px;background:radial-gradient(ellipse at 6% 8%,#e4f8ee 0,transparent 45%),radial-gradient(ellipse at 92% 30%,#f8e4ec 0,transparent 44%),#f5f5ef;display:flex;flex-direction:column}
 .academy-world-map{background:radial-gradient(ellipse at 5% 10%,#ddf6ef,transparent 55%),radial-gradient(ellipse at 95% 40%,#fbe2ef,transparent 60%),#f7f7ee}
 .academy-world-map>header{background:#ffffffdd;border:1px solid #e1ebe5;border-radius:0 0 22px 22px;backdrop-filter:blur(12px);box-shadow:0 6px 26px #445b6010;flex-wrap:wrap}
 .academy-welcome{max-width:700px;padding:32px 22px 12px;text-align:center;position:relative}
@@ -17,7 +17,7 @@
 .studio-game .ranked-game-shell>header,.studio-game .practice-game-shell>header{position:static;max-width:none;border:1px solid #fff;background:#ffffffd9;border-radius:21px;box-shadow:0 4px 16px #42536a0b;padding:10px}
 .studio-game .practice-game-shell>header{color:#3c465a}.studio-game .practice-game-shell>div{margin:0;max-width:none;padding:0}
 .studio-game .ranked-candy-board{width:100%;max-width:520px;margin-top:10px;box-shadow:0 9px 0 #b0b5d0,0 18px 28px #5b55722b,inset 0 2px 3px #fff;border:7px solid #fff;background:linear-gradient(150deg,#c6cbea,#d0d9e8);border-radius:27px;padding:10px}
-.studio-game [data-testid=practice-board]{padding:10px;border:7px solid white;border-radius:27px;background:linear-gradient(150deg,#c6cbea,#d0d9e8);box-shadow:0 9px 0 #b0b5d0,0 18px 28px #5b55722b;width:100%;max-width:min(520px,78svh);margin-bottom:4px}
+.studio-game [data-testid=practice-board]{padding:10px;border:7px solid white;border-radius:27px;background:linear-gradient(150deg,#c6cbea,#d0d9e8);box-shadow:0 9px 0 #b0b5d0,0 18px 28px #5b55722b;width:100%;max-width:min(520px,calc(78svh / var(--z,1)));margin-bottom:4px}
 .studio-game [data-testid=practice-board]>div{width:100%!important;height:auto!important;aspect-ratio:1;padding:4px;background:#aeb8d130;gap:4px;border-radius:17px}
 .studio-game .practice-game-shell>main{width:100%;margin:0;padding:0}
 .studio-game .practice-game-shell>footer{margin-top:4px;padding:0}.studio-game .practice-game-shell>footer>div{max-width:100%}
@@ -46,7 +46,7 @@
 .lab-attempt-scope{font-size:12px;color:#496575;line-height:1.6;margin-top:12px}.event-scope{display:block;font-size:10px;color:#526777;margin-top:3px;overflow-wrap:anywhere}
 .global-log-host.learning-studio{position:fixed;inset:0 0 0 auto;width:var(--log-w);min-height:0;padding:14px 12px 90px;overflow-y:auto;overscroll-behavior:contain;border-left:1px solid #dae5e4;background:#f1f7f4;z-index:60}.global-log-host .learning-panel{position:static;padding:18px;border-radius:20px}.global-log-controls{display:none}.global-log-launcher{position:fixed;right:16px;bottom:calc(84px + env(safe-area-inset-bottom));z-index:100;display:flex;align-items:center;gap:8px;min-height:48px;padding:10px 15px;border:2px solid #fff;border-radius:16px;background:#116e76;color:white;box-shadow:0 6px 20px #173e4e33;font-size:13px;font-weight:800;cursor:pointer}.global-log-launcher span{border-radius:7px;padding:2px 6px;background:#ffffff24}.global-log-launcher small{font-size:10px;font-weight:500}
 .global-log-backdrop{position:fixed;inset:0;background:#15323b66;backdrop-filter:blur(3px);z-index:110}.global-log-host.is-open{display:block;z-index:120;width:min(560px,100vw);padding:12px 12px 24px;box-shadow:-12px 0 40px #172f4a26}.is-open .global-log-controls{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:8px;font-size:12px;color:#385767}.global-log-controls button{display:flex;align-items:center;gap:7px;min-height:44px;padding:8px 12px;background:white;border:1px solid #bcd5d7;border-radius:10px;font-weight:700}
-@media(min-width:1100px){.app-workspace{padding-right:var(--log-w)}.app-navigation{left:calc((100% - var(--log-w))/2);max-width:calc(100% - var(--log-w) - 24px)}.app-workspace .fixed.inset-0:has(>[role=dialog]){right:var(--log-w)}}
+@media(min-width:1100px){.app-workspace{padding-right:calc(var(--log-w) / var(--z,1))}.app-navigation{left:calc((100% - var(--log-w)) / 2 / var(--z,1));max-width:calc((100% - var(--log-w) - 24px) / var(--z,1))}.app-workspace .fixed.inset-0:has(>[role=dialog]){right:calc(var(--log-w) / var(--z,1))}}
 /* Thanh keo giua vung choi va khung so lieu. Chi co khi khung la cot co dinh
    ben phai (>=1100px); hep hon thi khung la hop thoai, khong co gi de keo.
    `--log-w` do global-event-log.tsx ghi len :root (clampLogWidth). */
@@ -61,6 +61,29 @@
 .global-log-host.is-open~.global-log-resizer,.global-log-backdrop~.global-log-resizer{display:none}
 }
 body.is-resizing-log{user-select:none;cursor:col-resize}
+/* Nhung trong AIV Bank (main.tsx gan `.jelly-embedded`): vung choi zoom 0.85.
+   Chon bang cach do tren trang that (1920x855): tieu de 25px -> 21px (AIV Bank
+   19-24px); nut 44px -> 37px, khong nho hon nut 36px cua AIV Bank; 0.8 thi nut
+   con 35px va nhan 10px con 8px.
+   Hai he qua cua `zoom`, deu da do:
+     * `100svh` cung bi thu (671px tren khung 789px), nen moi chieu cao theo
+       svh/vh o tren deu chia cho --z;
+     * moi do dai viet theo --log-w (padding, vi tri thanh dieu huong, hop thoai)
+       cung bi thu - cung chia cho --z.
+   Khung Event log THI KHONG thu: chu trong do von 12px. Zoom nguoc ve 1 de
+   be rong that van dung bang --log-w (thanh keo cung vay; clientX va
+   innerWidth khong bi zoom lam lech, nen log-width.ts khong can sua). */
+.jelly-embedded{--z:.85;zoom:var(--z)}
+.jelly-embedded .global-log-host,.jelly-embedded .global-log-resizer{zoom:calc(1 / var(--z))}
+/* Khung goc cua App (`min-h-screen`). Hai shell cua man choi chi song trong
+   studio, noi `.studio-game ...-shell{min-height:0}` - khong dung toi. */
+.jelly-embedded .app-workspace>div{min-height:calc(100svh / var(--z))}
+/* Ban co theo chieu cao khung. 470px = phan khong phai ban (tieu de, header
+   man, thanh sao, hang vat pham, thanh dieu huong) do o 0.85. San 260px: laptop
+   1366x768 chi con ~545px cho iframe - khi do cuon, hoac dung nut phong to
+   cua AIV Bank cung "Chi choi". */
+.jelly-embedded .studio-game [data-testid=practice-board],.jelly-embedded .studio-game .ranked-candy-board{max-width:clamp(260px,calc(100svh / var(--z) - 470px),520px)}
+.jelly-embedded .studio-eyebrow,.jelly-embedded .studio-game>.studio-section-label,.jelly-embedded .studio-mode{font-size:13px}
 /* Che do "Chi choi" (play-only.ts): an khung so lieu, bo tran kich thuoc ban.
    `--log-w: 0px` keo theo padding cua .app-workspace, vi tri .app-navigation va
    mep hop thoai (deu doc bien nay). Nut "Event log" van con: bam la mo log dang
@@ -71,8 +94,8 @@ body.is-resizing-log{user-select:none;cursor:col-resize}
 .jelly-play-only{--log-w:0px}
 .jelly-play-only .global-log-host:not(.is-open),.jelly-play-only .global-log-resizer{display:none}
 .jelly-play-only .studio-columns{max-width:min(1200px,100%)}
-.jelly-play-only .studio-game .ranked-candy-board,.jelly-play-only .studio-game [data-testid=practice-board]{max-width:min(100%,calc(100svh - 190px))}
-.jelly-play-only .studio-game .ranked-game-shell>section.grid:not(.ranked-candy-board),.jelly-play-only .studio-game .ranked-game-shell>p{max-width:min(100%,calc(100svh - 190px))}
+.jelly-play-only .studio-game .ranked-candy-board,.jelly-play-only .studio-game [data-testid=practice-board]{max-width:min(100%,calc(100svh / var(--z,1) - 190px))}
+.jelly-play-only .studio-game .ranked-game-shell>section.grid:not(.ranked-candy-board),.jelly-play-only .studio-game .ranked-game-shell>p{max-width:min(100%,calc(100svh / var(--z,1) - 190px))}
 .jelly-play-only .studio-first-steps,.jelly-play-only .studio-footnote,.jelly-play-only .studio-game>.studio-section-label{display:none}
 .jelly-play-only .studio-heading{margin-bottom:6px}
 .jelly-play-only .learning-studio:not(.global-log-host){padding-top:10px}
