@@ -2435,9 +2435,17 @@ body.role-instructor .focus-float .icon-btn {
   flex: 1 1 auto;
   min-height: 0;
   display: grid;
-  grid-template-columns: 300px minmax(0, 0.95fr) minmax(0, 1.05fr);
+  /* Ba bien do panes.js (initChallengePanes) ghi len chinh vung nay khi keo. */
+  grid-template-columns: var(--ch-list-w, 300px) var(--ch-problem-w, minmax(0, 0.95fr)) minmax(0, 1.05fr);
   background: var(--surface-sunken);
+  position: relative; /* khoi chua cua cac .pane-sep tuyet doi */
 }
+/* Thanh keo: dung .pane-sep-v / .pane-sep-h chung, chi doi o grid. */
+.challenges-workspace > .ch-sep-list { grid-column: 2; grid-row: 1 / -1; }
+.challenges-workspace > .ch-sep-problem { grid-column: 3; grid-row: 1; }
+.ch-work > .ch-sep-editor { grid-column: 1; grid-row: 2; }
+/* `body.results-max` la cua console; khong duoc an thanh keo o day. */
+body.results-max .challenges-workspace .pane-sep { display: block; }
 
 /* --- list column --------------------------------------------------------- */
 .ch-list-col {
@@ -2564,11 +2572,32 @@ body.role-instructor .focus-float .icon-btn {
 .ch-work {
   min-height: 0;
   display: grid;
-  grid-template-rows: minmax(200px, 40%) auto minmax(0, 1fr);
+  position: relative;
+  grid-template-rows: var(--ch-editor-h, minmax(200px, 40%)) auto minmax(0, 1fr);
   gap: var(--workspace-gap);
   padding: var(--workspace-pad);
 }
+/* Ghim tung khung vao hang cua no. Khong ghim thi khi .ch-verdict dang an
+   (display: none), khung ket qua tu xep vao hang 2 (`auto`) va chi cao bang noi
+   dung cua no, con hang 3 (1fr) bo trong. */
+.ch-work > .ch-editor-panel { grid-row: 1; }
+.ch-work > .ch-verdict { grid-row: 2; }
+.ch-work > .results-panel { grid-row: 3; min-height: 0; }
 .ch-editor-panel .CodeMirror { min-height: 0; }
+.ch-expand { flex: none; }
+
+/* Phong to khung lam bai: chi con cot lam bai, va an ca thanh tieu de/tab
+   (nut thu nho nam ngay trong khung, nen khong bao gio mat loi ra). */
+body.ch-work-max .topbar { display: none; }
+.challenges-workspace.is-work-max {
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+}
+.challenges-workspace.is-work-max > .ch-list-col,
+.challenges-workspace.is-work-max > .ch-problem,
+.challenges-workspace.is-work-max > .ch-sep-list,
+.challenges-workspace.is-work-max > .ch-sep-problem { display: none; }
+.challenges-workspace.is-work-max > .ch-work { grid-column: 1; grid-row: 1; }
 .ch-verdict {
   padding: var(--space-6) var(--space-7);
   border-radius: var(--radius-md);
@@ -2584,12 +2613,16 @@ body.role-instructor .focus-float .icon-btn {
 .ch-verdict-sub { font-weight: var(--weight-bold); color: var(--ink-muted); }
 
 @media (max-width: 1279px) {
-  .challenges-workspace { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .challenges-workspace { grid-template-columns: var(--ch-list-w, 260px) minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
   .ch-list-col { grid-row: 1 / span 2; }
+  /* De va khung lam bai xep chong: khong con ranh doc giua hai khung nay. */
+  .challenges-workspace > .ch-sep-problem { display: none; }
   .ch-problem { border-right: 0; border-bottom: 1px solid var(--line); }
 }
 @media (max-width: 900px) {
   .challenges-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; overflow: auto; }
+  /* Mot cot, tu cuon: khong keo gian gi o day. */
+  .challenges-workspace .pane-sep, body.results-max .challenges-workspace .pane-sep { display: none; }
   .ch-list-col { grid-row: auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
   .ch-problem { padding: var(--space-6); }
   .ch-work { grid-template-rows: 260px auto minmax(300px, auto); }

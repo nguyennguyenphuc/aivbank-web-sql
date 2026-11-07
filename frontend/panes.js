@@ -164,6 +164,137 @@ function wire(bar, kind, hostOf) {
   });
 }
 
+/* ------------------------------------------------------------ Luyện SQL
+ *
+ * Khu vực Luyện SQL có bố cục riêng (ba cột: danh sách | đề | làm bài) nên dùng
+ * biến riêng, ghi lên CHÍNH vùng `.challenges-workspace` chứ không lên `:root`:
+ * kéo ở đây không được làm lệch console hay Thực hành SQL.
+ *
+ * Ba thanh:
+ *   list    bề rộng cột danh sách bài          --ch-list-w
+ *   problem bề rộng cột đề bài                 --ch-problem-w
+ *   editor  chiều cao ô soạn thảo (cột làm bài) --ch-editor-h
+ *
+ * Trần tính lại theo bề rộng thật mỗi lần kéo và khi cửa sổ đổi cỡ, để không
+ * cột nào bị bóp về 0 (cột làm bài luôn còn ít nhất 360px, kết quả 160px). */
+
+const CH = {
+  list: {
+    cssVar: '--ch-list-w', axis: 'x', panel: '.ch-list-col', min: 200,
+    max: (host) => Math.min(560, host.clientWidth * 0.4),
+  },
+  problem: {
+    cssVar: '--ch-problem-w', axis: 'x', panel: '.ch-problem', min: 320,
+    max: (host) => {
+      const list = host.querySelector('.ch-list-col');
+      return Math.max(320, host.clientWidth - (list ? list.offsetWidth : 0) - 360);
+    },
+  },
+  editor: {
+    cssVar: '--ch-editor-h', axis: 'y', panel: '.ch-editor-panel', min: 120,
+    max: (host) => {
+      const work = host.querySelector('.ch-work');
+      return Math.max(160, (work ? work.clientHeight : 0) - 160);
+    },
+  },
+};
+const chKey = (kind) => `ch_${kind}`;
+
+function wireChallengeBar(host, bar, kind) {
+  const cfg = CH[kind];
+  const horizontal = cfg.axis === 'x';
+  const panelOf = () => host.querySelector(cfg.panel);
+  const applyPx = (px) => host.style.setProperty(cfg.cssVar, `${Math.round(px)}px`);
+  const currentPx = () => {
+    const el = panelOf();
+    if (!el) return cfg.min;
+    const r = el.getBoundingClientRect();
+    return horizontal ? r.width : r.height;
+  };
+  const commit = (px) => {
+    const next = clamp(px, cfg.min, cfg.max(host));
+    applyPx(next);
+    state[chKey(kind)] = next;
+    save(state);
+    bar.setAttribute('aria-valuenow', String(Math.round(next)));
+  };
+  // CodeMirror và bảng kết quả đo lại kích thước khi cửa sổ đổi cỡ; báo cho
+  // chúng sau mỗi lần kéo xong thay vì sau từng pixel.
+  const settle = () => window.dispatchEvent(new Event('resize'));
+
+  bar.addEventListener('pointerdown', (event) => {
+    if (event.button !== 0) return;
+    event.preventDefault();
+    const el = panelOf();
+    if (!el) return;
+    const r = el.getBoundingClientRect();
+    const origin = horizontal ? r.left : r.top;
+    bar.setPointerCapture(event.pointerId);
+    bar.classList.add('is-dragging');
+    document.body.classList.add('is-resizing');
+    const onMove = (e) => commit((horizontal ? e.clientX : e.clientY) - origin);
+    const onUp = () => {
+      bar.classList.remove('is-dragging');
+      document.body.classList.remove('is-resizing');
+      bar.removeEventListener('pointermove', onMove);
+      bar.removeEventListener('pointerup', onUp);
+      bar.removeEventListener('pointercancel', onUp);
+      settle();
+    };
+    bar.addEventListener('pointermove', onMove);
+    bar.addEventListener('pointerup', onUp);
+    bar.addEventListener('pointercancel', onUp);
+  });
+
+  bar.addEventListener('keydown', (event) => {
+    const step = event.shiftKey ? 48 : 12;
+    const less = horizontal ? 'ArrowLeft' : 'ArrowUp';
+    const more = horizontal ? 'ArrowRight' : 'ArrowDown';
+    let next;
+    if (event.key === less) next = currentPx() - step;
+    else if (event.key === more) next = currentPx() + step;
+    else if (event.key === 'Home') next = cfg.min;
+    else if (event.key === 'End') next = cfg.max(host);
+    else return;
+    event.preventDefault();
+    commit(next);
+    settle();
+  });
+
+  bar.addEventListener('dblclick', () => {
+    delete state[chKey(kind)];
+    save(state);
+    host.style.removeProperty(cfg.cssVar);
+    bar.removeAttribute('aria-valuenow');
+    settle();
+  });
+}
+
+/**
+ * Gắn ba thanh kéo của Luyện SQL trong `host` (`.challenges-workspace`) và khôi
+ * phục kích thước đã nhớ trong phiên.
+ */
+export function initChallengePanes(host) {
+  const restore = () => {
+    for (const kind of Object.keys(CH)) {
+      const px = state[chKey(kind)];
+      if (Number.isFinite(px)) {
+        host.style.setProperty(CH[kind].cssVar, `${Math.round(clamp(px, CH[kind].min, CH[kind].max(host)))}px`);
+      }
+    }
+  };
+  for (const bar of host.querySelectorAll('[data-ch-resize]')) {
+    const kind = bar.dataset.chResize;
+    if (CH[kind]) wireChallengeBar(host, bar, kind);
+  }
+  restore();
+  // Cửa sổ nhỏ lại thì kích thước đã kéo có thể vượt trần mới: kẹp lại.
+  window.addEventListener('resize', () => {
+    if (host.offsetParent !== null) restore();
+  });
+  return { restore };
+}
+
 /** Gắn mọi thanh kéo có trong trang và khôi phục kích thước đã nhớ. */
 export function initPanes() {
   if (Number.isFinite(state.sidebar)) applySidebar(state.sidebar);

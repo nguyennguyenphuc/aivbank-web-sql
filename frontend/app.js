@@ -467,6 +467,7 @@ function setFocus(on) {
   requestAnimationFrame(() => {
     cm.refresh();
     if (sandboxUi) sandboxUi.cm.refresh();
+    if (challengesUi) challengesUi.refresh();
   });
   if (on && !was) focusExit.focus();
   else if (!on && was && focusFloat.contains(document.activeElement)) focusToggle.focus();

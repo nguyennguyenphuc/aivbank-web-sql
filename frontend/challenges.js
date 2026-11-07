@@ -20,6 +20,7 @@ import { errorHint } from './errors.js';
 import { createEditor } from './editor.js';
 import { createResultsPanel } from './results.js';
 import { createErdPanel } from './erd.js';
+import { initChallengePanes } from './panes.js';
 
 const LEVEL_LABEL = { easy: 'Easy', medium: 'Medium', difficult: 'Difficult', advanced: 'Advanced' };
 const LEVELS = Object.keys(LEVEL_LABEL);
@@ -64,6 +65,12 @@ export function createChallengesUi(root) {
       </div>
       <ul class="ch-list" aria-label="Các bài"></ul>
     </aside>
+    <div class="pane-sep pane-sep-v ch-sep-list" data-ch-resize="list" role="separator"
+         aria-orientation="vertical" tabindex="0"
+         aria-label="Kéo để đổi bề rộng danh sách bài, mũi tên trái/phải, nhấn đúp để về mặc định"></div>
+    <div class="pane-sep pane-sep-v ch-sep-problem" data-ch-resize="problem" role="separator"
+         aria-orientation="vertical" tabindex="0"
+         aria-label="Kéo để đổi bề rộng khung đề bài, mũi tên trái/phải, nhấn đúp để về mặc định"></div>
 
     <section class="ch-problem" aria-label="Đề bài">
       <p class="empty ch-placeholder">Chọn một bài ở cột bên trái để bắt đầu.</p>
@@ -92,10 +99,18 @@ export function createChallengesUi(root) {
           <button type="button" class="btn btn-ghost btn-sm ch-reload" hidden>Nạp lại bảng mẫu</button>
           <span class="spacer"></span>
           <span class="run-status ch-runstatus" role="status" aria-live="polite"></span>
+          <button type="button" class="icon-btn ch-expand" aria-pressed="false"
+                  aria-label="Phóng to khung làm bài toàn màn hình"
+                  title="Phóng to toàn màn hình (Esc để thoát)">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><path class="ch-expand-icon" d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
+          </button>
         </div>
         <label class="sr-only" for="ch-sql">Câu SQL cho bài đang chọn</label>
         <textarea id="ch-sql"></textarea>
       </div>
+      <div class="pane-sep pane-sep-h ch-sep-editor" data-ch-resize="editor" role="separator"
+           aria-orientation="horizontal" tabindex="0"
+           aria-label="Kéo để đổi chiều cao ô soạn thảo, mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
       <div class="ch-verdict" role="status" aria-live="polite" hidden></div>
       <div class="results-panel panel">
         <div class="errorbox ch-error" hidden></div>
@@ -106,6 +121,7 @@ export function createChallengesUi(root) {
     </section>`;
 
   const q = (s) => root.querySelector(s);
+  initChallengePanes(root);
   const listEl = q('.ch-list');
   const domainEl = q('.ch-domain');
   const levelsEl = q('.ch-levels');
@@ -629,8 +645,36 @@ export function createChallengesUi(root) {
     errEl.replaceChildren();
   }
 
+  /* --- phong to khung lam bai ----------------------------------------------
+   * Khung lam bai (o SQL, phan dinh, ket qua) chiem tron cua so: an danh sach,
+   * de bai va thanh tieu de. Cung quy uoc voi che do phong to cua console: chi
+   * la trang thai hien thi, khong luu; Esc hoac bam lai de thu nho. */
+  const expandBtn = q('.ch-expand');
+  const expandIcon = q('.ch-expand-icon');
+  const ICON_EXPAND = 'M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5';
+  const ICON_SHRINK = 'M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5';
+
+  function setWorkMax(on) {
+    root.classList.toggle('is-work-max', on);
+    document.body.classList.toggle('ch-work-max', on);
+    expandBtn.setAttribute('aria-pressed', String(on));
+    expandBtn.setAttribute('aria-label', on ? 'Thu nhỏ khung làm bài' : 'Phóng to khung làm bài toàn màn hình');
+    expandBtn.title = on ? 'Thu nhỏ (Esc)' : 'Phóng to toàn màn hình (Esc để thoát)';
+    expandIcon.setAttribute('d', on ? ICON_SHRINK : ICON_EXPAND);
+    // Vung chua doi kich thuoc: CodeMirror va bang ket qua chi do lai khi duoc bao.
+    requestAnimationFrame(() => {
+      cm.refresh();
+      window.dispatchEvent(new Event('resize'));
+    });
+  }
+  expandBtn.addEventListener('click', () => setWorkMax(!root.classList.contains('is-work-max')));
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && root.classList.contains('is-work-max')) setWorkMax(false);
+  });
+
   /** Dang xuat: tien do, de dang mo, cau dang go deu la cua nguoi truoc. */
   function clear() {
+    if (root.classList.contains('is-work-max')) setWorkMax(false);
     epoch += 1;
     catalogue = [];
     current = null;
