@@ -342,6 +342,17 @@ export const api = {
    *  the ERD tab. Not a console dataset: nothing here can be queried in /query. */
   gameSchema: () => request('/schema/game'),
 
+  /* --- Luyen SQL (backend/challenges.py) ----------------------------------
+   * Cung phien dang nhap web, khong co tai khoan rieng. Dataset cua moi bai do
+   * may chu gan; cac ham nay khong gui `dataset`. Dap an khong bao gio co trong
+   * response nao duoi day. */
+  challenges: (domain) => request(`/challenges${qs({ domain })}`),
+  challenge: (id) => request(`/challenges/${encodeURIComponent(id)}`),
+  challengeSample: (id) => request(`/challenges/${encodeURIComponent(id)}/sample`),
+  challengeSubmit: (id, body) =>
+    request(`/challenges/${encodeURIComponent(id)}/submit`, { method: 'POST', body }),
+  challengeLeaderboard: (domain) => request(`/challenges/leaderboard${qs({ domain })}`),
+
   gamificationMe: () => request("/gamification/me"),
   gameStatus: () => request("/game-sso/status"),
   leaderboard: (period = "week") => request(`/gamification/leaderboard?period=${encodeURIComponent(period)}`),

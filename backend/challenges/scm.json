@@ -114,7 +114,7 @@
         "why": "Tỉ lệ lô Fail là một tiêu chí chấm điểm NCC (bài Difficult D2) và là lý do đổi NCC.",
         "lab": "Lab 07: chất lượng NCC."
       },
-      "hints": ["Bài này chạy trên bản sao trong trình duyệt, không đụng database thật.", "Một câu UPDATE với CASE làm được cả hai trạng thái: SET inspection_result = CASE WHEN defect_rate > 0.02 THEN 'Fail' ELSE 'Pass' END.", "Hoặc hai câu UPDATE, mỗi câu một WHERE."],
+      "hints": ["Bài này chạy trên bản sao trong trình duyệt, không đụng database thật.", "Có hai trạng thái cần gán, nên cần hai điều kiện: một cho lô vượt ngưỡng, một cho phần còn lại.", "Cách 1: hai câu UPDATE, mỗi câu một WHERE. Cách 2: một câu UPDATE, vế SET dùng CASE WHEN … THEN … ELSE … END."],
       "sample_sql": "SELECT po_id, supplier_id, item_nbr, qty_received, qty_defect, defect_rate, 'Pending'::text AS inspection_result FROM purchase_orders WHERE po_date >= '2017-07-01' AND po_date < '2017-08-01' AND received_date IS NOT NULL ORDER BY po_id LIMIT 40",
       "expected_state_sql": "SELECT po_id, supplier_id, item_nbr, qty_received, qty_defect, defect_rate, CASE WHEN defect_rate > 0.02 THEN 'Fail' ELSE 'Pass' END AS inspection_result FROM sample",
       "takeaway": "Kiểm định là một quy tắc nghiệp vụ biến thành một câu UPDATE: viết rõ ngưỡng (> hay ≥ 2%) quan trọng không kém viết đúng cú pháp."

@@ -752,6 +752,9 @@ function wipeSessionState() {
   // Game trong iframe dang giu phien game cua nguoi truoc: go di, lan mo tab
   // sau se SSO lai bang nguoi dang dang nhap.
   resetGame();
+  // Luyen SQL: tien do va cau dang go la cua nguoi truoc.
+  if (challengesUi) challengesUi.clear();
+  challengesLoaded = false;
   // Nguoi sau dang nhap phai thay day du thanh tieu de - trong do co huy hieu
   // vai tro - chu khong phai mot man hinh dang an het dieu huong.
   setFocus(false);
@@ -980,6 +983,22 @@ async function switchDataset(name) {
 /** Lazily built on first entry to the sandbox; null until then. */
 let sandboxUi = null;
 
+/* Khu vuc Luyen SQL (frontend/challenges.js): dung lan dau vao, tai danh sach
+ * bai moi lan vao lai (diem va trang thai da giai co the doi tu may khac). */
+let challengesUi = null;
+let challengesLoaded = false;
+async function ensureChallenges() {
+  if (!challengesUi) {
+    const mod = await import('./challenges.js');
+    challengesUi = mod.createChallengesUi($('challenges-workspace'));
+  }
+  if (!challengesLoaded) {
+    challengesLoaded = true;
+    challengesUi.init();
+  }
+  requestAnimationFrame(() => challengesUi.refresh());
+}
+
 function selectSection(name) {
   const target = sectionTabs.find((b) => b.dataset.section === name);
   if (!target || target.disabled || name === currentSection) return;
@@ -997,7 +1016,8 @@ function selectSection(name) {
   const inSandbox = name === 'sandbox';
   const inBoard = name === 'leaderboard';
   const inGame = name === 'game';
-  const inConsole = !inSandbox && !inBoard && !inGame;
+  const inChallenges = name === 'challenges';
+  const inConsole = !inSandbox && !inBoard && !inGame && !inChallenges;
 
   // Mot bang tra cuu, khong phai mot chuoi if long nhau. Them khu vuc thu tu da
   // lam lo ra kieu cu: no chi biet "sandbox hay khong", nen khu vuc moi se hien
@@ -1008,6 +1028,7 @@ function selectSection(name) {
     sandbox: 'sandbox-workspace',
     leaderboard: 'leaderboard-workspace',
     game: 'game-workspace',
+    challenges: 'challenges-workspace',
   };
   const shown = WORKSPACES[name];
   for (const id of new Set(Object.values(WORKSPACES))) $(id).hidden = id !== shown;
@@ -1018,6 +1039,7 @@ function selectSection(name) {
   if (sub && inSandbox) sub.textContent = 'Dữ liệu của bạn, chạy trên máy bạn';
   if (sub && inBoard) sub.textContent = 'Toàn lớp, tính từ trước tới nay';
   if (sub && inGame) sub.textContent = 'Vương Quốc Kẹo Ngọt';
+  if (sub && inChallenges) sub.textContent = 'Bài tập SQL theo nghiệp vụ';
   // The schema drawer belongs to the console only.
   $('open-schema').hidden = !inConsole;
   if (!inConsole) setSchemaDrawer(false);
@@ -1034,6 +1056,8 @@ function selectSection(name) {
     // Vao lai khu vuc dung the dang mo: so do thi khong can nap game.
     if ($('game-erd').hidden) ensureGame();
     else requestAnimationFrame(() => gameErd.show());
+  } else if (inChallenges) {
+    ensureChallenges();
   } else if (inBoard) {
     // Nap lai moi lan vao: diem doi sau moi query, va nguoi xem vao day chinh la
     // de xem con so MOI. Mot bang cu dung im thi te hon la khong co bang.

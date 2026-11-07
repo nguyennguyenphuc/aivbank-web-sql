@@ -238,6 +238,9 @@ class ChallengeSubmitResponse(BaseModel):
     already_solved: bool
     domain_points: int
     domain_solved: int
+    #: False khi kho tien do khong ghi duoc (chua chay 20_challenges.sql, hoac
+    #: aivb_app hong). Phan dinh van dung; chi la diem chua duoc luu.
+    progress_saved: bool = True
     takeaway: str | None = None
 
 

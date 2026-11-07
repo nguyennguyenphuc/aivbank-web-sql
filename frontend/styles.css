@@ -2422,3 +2422,175 @@ body.role-instructor .focus-float .icon-btn {
 @media (prefers-reduced-motion: reduce) {
   .erd-edge, .erd-node { transition: none; }
 }
+
+/* ==========================================================================
+   LUYEN SQL (frontend/challenges.js)
+   Three columns, each scrolling on its own: the problem list, the problem
+   (statement, lesson, map, ranking), and the editor with its verdict and
+   result. Same system as the console: white panels on green paper, underline
+   tabs, the PK/FK chip, one filled button (Nộp bài).
+   ========================================================================== */
+
+.challenges-workspace {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 0.95fr) minmax(0, 1.05fr);
+  background: var(--surface-sunken);
+}
+
+/* --- list column --------------------------------------------------------- */
+.ch-list-col {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  background: var(--surface-brand);
+  border-right: 1px solid var(--line);
+}
+.ch-list-head { padding: var(--space-7) var(--space-6) var(--space-5); }
+.ch-heading { margin: 0 0 var(--space-5); font-size: var(--text-lg); font-weight: var(--weight-bold); }
+.ch-score { display: grid; grid-template-columns: 1fr 1fr; margin: 0; }
+.ch-score > div { padding-left: var(--space-6); border-left: 1px solid var(--line); }
+.ch-score > div:first-child { padding-left: 0; border-left: 0; }
+.ch-score dt { font-size: var(--text-xs); color: var(--ink-muted); }
+.ch-score dd { margin: 0; font-size: var(--text-xl); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.ch-filters { display: grid; gap: var(--space-5); padding: 0 var(--space-6) var(--space-6); }
+.ch-field { display: grid; gap: var(--space-2); font-size: var(--text-sm); color: var(--ink-muted); font-weight: var(--weight-medium); }
+.ch-field .filter { padding-left: var(--space-5); min-height: var(--control-h-sm); }
+.ch-levels { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.ch-level-btn {
+  font: inherit;
+  font-size: var(--text-sm);
+  min-height: var(--control-h-sm);
+  padding: 0 var(--space-5);
+  border: 1px solid var(--line-input);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+  transition: background-color var(--duration-fast) var(--ease), color var(--duration-fast) var(--ease);
+}
+.ch-level-btn:hover { background: var(--surface-hover); }
+.ch-level-btn:active { background: var(--surface-muted); }
+.ch-level-btn:focus-visible { outline: var(--focus-ring); outline-offset: var(--focus-offset); }
+.ch-level-btn[aria-pressed="true"] { background: var(--brand-600); border-color: var(--brand-600); color: var(--on-brand); }
+.ch-list {
+  list-style: none;
+  margin: 0;
+  padding: 0 var(--space-4) var(--space-9);
+  overflow: auto;
+  flex: 1 1 auto;
+  min-height: 0;
+  border-top: 1px solid var(--line-soft);
+}
+.ch-item {
+  width: 100%;
+  display: grid;
+  gap: var(--space-2);
+  text-align: left;
+  font: inherit;
+  padding: var(--space-5) var(--space-4);
+  border: 0;
+  border-bottom: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+  min-height: var(--touch-target);
+}
+.ch-item:hover { background: var(--surface-hover); }
+.ch-item:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--focus-offset)); }
+.ch-item.is-active { background: var(--surface); box-shadow: inset 0 0 0 1px var(--brand-300); }
+.ch-item-title { font-weight: var(--weight-medium); overflow-wrap: break-word; min-width: 0; }
+.ch-item-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-2) var(--space-5); font-size: var(--text-xs); color: var(--ink-muted); }
+.ch-item-points { font-variant-numeric: tabular-nums; }
+
+/* Level is told by its word first; the ink only reinforces it. Every ink here
+   is a token already measured at >= 4.5:1 on white. */
+.ch-level { font-weight: var(--weight-bold); }
+.ch-level.is-easy { color: var(--brand-700); }
+.ch-level.is-medium { color: var(--warning); }
+.ch-level.is-difficult { color: var(--danger); }
+.ch-level.is-advanced { color: var(--value-bool); }
+.tag-solved { background: var(--ok-bg); border-color: var(--ok-line); color: var(--ok); font-weight: var(--weight-bold); }
+
+/* --- problem column ------------------------------------------------------ */
+.ch-problem {
+  min-height: 0;
+  overflow: auto;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+  padding: var(--space-7) var(--space-9) var(--space-11);
+}
+.ch-placeholder { min-height: 60%; }
+.ch-crumb { display: flex; flex-wrap: wrap; gap: var(--space-3); font-size: var(--text-sm); color: var(--ink-muted); }
+.ch-crumb-sep { color: var(--ink-faint); }
+.ch-crumb-here { color: var(--ink); }
+.ch-title {
+  margin: var(--space-4) 0 var(--space-4);
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+.ch-meta { display: flex; flex-wrap: wrap; align-items: baseline; gap: var(--space-3) var(--space-6); font-size: var(--text-sm); color: var(--ink-muted); margin-bottom: var(--space-6); }
+.ch-tabs { padding: 0; border-bottom: 1px solid var(--line); margin-bottom: var(--space-7); }
+.ch-statement, .ch-output, .ch-takeaway { margin: 0; max-width: 68ch; line-height: var(--leading-loose); font-size: var(--text-md); }
+.ch-output { color: var(--ink); }
+.ch-sub { margin: var(--space-9) 0 var(--space-4); font-size: var(--text-md); font-weight: var(--weight-bold); }
+.ch-tables { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--space-7); }
+.ch-table { margin: 0; }
+.ch-table-name { font-family: var(--font-mono); font-weight: var(--weight-bold); font-size: var(--text-sm); margin-bottom: var(--space-3); }
+.ch-cols, .ch-board { border-collapse: collapse; width: 100%; font-size: var(--text-sm); }
+.ch-cols th, .ch-cols td, .ch-board th, .ch-board td {
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+}
+.ch-cols th, .ch-board th { font-weight: var(--weight-medium); color: var(--ink-muted); }
+.ch-cols td:first-child { display: flex; align-items: baseline; gap: var(--space-3); }
+.ch-cols code { font-family: var(--font-mono); font-size: var(--text-xs); }
+.ch-board .num { text-align: right; font-variant-numeric: tabular-nums; }
+.ch-hints { margin: 0 0 var(--space-4); padding-left: var(--space-8); display: grid; gap: var(--space-3); max-width: 68ch; font-size: var(--text-md); }
+.ch-lesson { margin: 0; display: grid; grid-template-columns: 9rem minmax(0, 1fr); gap: var(--space-5) var(--space-7); max-width: 72ch; }
+.ch-lesson dt { font-weight: var(--weight-bold); color: var(--ink-muted); font-size: var(--text-sm); }
+.ch-lesson dd { margin: 0; line-height: var(--leading-loose); font-size: var(--text-md); }
+.ch-pane-erd { height: min(70vh, 640px); display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: var(--radius-md); overflow: hidden; }
+.ch-pane-erd[hidden] { display: none; }
+
+/* --- work column --------------------------------------------------------- */
+.ch-work {
+  min-height: 0;
+  display: grid;
+  grid-template-rows: minmax(200px, 40%) auto minmax(0, 1fr);
+  gap: var(--workspace-gap);
+  padding: var(--workspace-pad);
+}
+.ch-editor-panel .CodeMirror { min-height: 0; }
+.ch-verdict {
+  padding: var(--space-6) var(--space-7);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--line);
+  background: var(--surface);
+  font-size: var(--text-md);
+}
+.ch-verdict p { margin: 0; max-width: 72ch; line-height: var(--leading-normal); }
+.ch-verdict p + p { margin-top: var(--space-3); }
+.ch-verdict.is-pass { background: var(--ok-bg); border-color: var(--brand-600); }
+.ch-verdict.is-fail { background: var(--warning-bg); border-color: var(--warning); }
+.ch-verdict-head { font-weight: var(--weight-bold); font-size: var(--text-lg); }
+.ch-verdict-sub { font-weight: var(--weight-bold); color: var(--ink-muted); }
+
+@media (max-width: 1279px) {
+  .challenges-workspace { grid-template-columns: 260px minmax(0, 1fr); grid-template-rows: minmax(0, 1fr) minmax(0, 1fr); }
+  .ch-list-col { grid-row: 1 / span 2; }
+  .ch-problem { border-right: 0; border-bottom: 1px solid var(--line); }
+}
+@media (max-width: 900px) {
+  .challenges-workspace { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto auto; overflow: auto; }
+  .ch-list-col { grid-row: auto; max-height: 40vh; border-right: 0; border-bottom: 1px solid var(--line); }
+  .ch-problem { padding: var(--space-6); }
+  .ch-work { grid-template-rows: 260px auto minmax(300px, auto); }
+  .ch-lesson { grid-template-columns: minmax(0, 1fr); }
+}

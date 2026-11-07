@@ -182,6 +182,13 @@
           id="section-tab-sandbox" aria-controls="sandbox-workspace" aria-selected="false" tabindex="-1">
     <span class="section-tab-name">Thực hành SQL</span>
   </button>
+  <!-- Luyen SQL: bai tap kieu HackerRank, cham tren may chu (frontend/challenges.js,
+       backend/challenges.py). Khong co data-dataset-slot: moi bai tu mang dataset
+       cua no, khu vuc nay khong doi bo du lieu cua console. -->
+  <button class="section-tab" type="button" role="tab" data-section="challenges"
+          id="section-tab-challenges" aria-controls="challenges-workspace" aria-selected="false" tabindex="-1">
+    <span class="section-tab-name">Luyện SQL</span>
+  </button>
   <!-- Tro choi: an cho toi khi GET /game-sso/status noi may chu da bat game.
        `disabled` di kem `hidden` de phim mui ten cung bo qua no. -->
   <button class="section-tab" type="button" role="tab" data-section="game"
@@ -393,6 +400,8 @@
   </div>
   <div id="game-erd" class="subpanel" role="tabpanel" aria-labelledby="game-tab-erd" hidden></div>
 </section>
+
+<section id="challenges-workspace" class="challenges-workspace" aria-label="Luyện SQL" hidden></section>
 
 <section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
   <div class="progress-panel">

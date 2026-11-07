@@ -357,6 +357,88 @@ async function readWithProgress(file, report) {
   return at === out.length ? out : out.subarray(0, at);
 }
 
+/* --- bang mau cho bai UPDATE/DELETE cua khu vuc Luyen SQL ------------------
+ *
+ * Cung engine DuckDB voi Thuc hanh SQL (mot lan tai 34 MB), nhung KET NOI va
+ * SCHEMA rieng: hoc vien co the da nap mot file ten `sales.csv` o Thuc hanh SQL,
+ * va bang mau `sales` cua bai tap khong duoc de len no. `search_path` la thiet
+ * lap cua tung ket noi, nen ten khong tien to trong ket noi nay chi thay schema
+ * `luyen_sql`.
+ *
+ * Bat bien cua file van giu: module nay KHONG goi may chu. Dong du lieu mau do
+ * challenges.js lay tu API roi dua vao day.
+ */
+const DUCK_TYPE = (t) => {
+  const s = String(t || '').toUpperCase();
+  if (/^DECIMAL|^NUMERIC/.test(s)) return 'DOUBLE';
+  if (['SMALLINT', 'INTEGER', 'BIGINT', 'DOUBLE', 'FLOAT', 'BOOLEAN', 'DATE', 'TIMESTAMP', 'VARCHAR'].includes(s)) return s;
+  return 'VARCHAR';
+};
+
+export function createChallengeEngine({ onStatus } = {}) {
+  let connPromise = null;
+  const conn = () => {
+    if (!connPromise) {
+      connPromise = (async () => {
+        const { db } = await boot(onStatus);
+        const c = await db.connect();
+        await c.query('CREATE SCHEMA IF NOT EXISTS luyen_sql');
+        await c.query("SET search_path = 'luyen_sql'");
+        return { db, c };
+      })().catch((err) => {
+        connPromise = null;
+        throw err;
+      });
+    }
+    return connPromise;
+  };
+
+  /** Tao lai bang mau tu dong du lieu: xoa ban cu, dung dung kieu cot.
+   *
+   *  Qua CSV chu KHONG qua JSON: `read_json` can extension `json`, ma DuckDB-WASM
+   *  tai extension tu extensions.duckdb.org - bi CSP (connect-src 'self') chan,
+   *  va lop co the hoc offline. `read_csv` nam trong loi engine. Moi o deu dat
+   *  trong ngoac kep; NULL la \N khong ngoac, nen chuoi rong va NULL khong lan. */
+  async function loadRows(name, columns, types, rows) {
+    const { db, c } = await conn();
+    const cell = (v) => {
+      if (v === null || v === undefined) return '\\N';
+      const s = typeof v === 'object' && v.__exactDigits ? v.__exactDigits : String(v);
+      return `"${s.replace(/"/g, '""')}"`;
+    };
+    const csv = [columns.map((col) => `"${col.replace(/"/g, '""')}"`).join(',')]
+      .concat(rows.map((r) => r.map(cell).join(',')))
+      .join('\n');
+    const vfile = `luyen_sql_${name}.csv`;
+    await db.registerFileText(vfile, csv);
+    const spec = columns.map((col, i) => `'${col.replace(/'/g, "''")}': '${DUCK_TYPE(types[i])}'`).join(', ');
+    await c.query(`DROP TABLE IF EXISTS luyen_sql.${ident(name)}`);
+    await c.query(
+      `CREATE TABLE luyen_sql.${ident(name)} AS SELECT * FROM read_csv('${vfile}', header = true, ` +
+        `quote = '"', escape = '"', nullstr = '\\N', columns = {${spec}})`
+    );
+  }
+
+  async function run(sql) {
+    const { c } = await conn();
+    const t0 = performance.now();
+    const table = await c.query(sql);
+    return arrowToResult(table, performance.now() - t0, sql);
+  }
+
+  /** Toan bo bang sau khi hoc vien sua, dang {columns, rows} de nop cham. */
+  async function state(name) {
+    const { c } = await conn();
+    const table = await c.query(`SELECT * FROM luyen_sql.${ident(name)}`);
+    const columns = table.schema.fields.map((f) => f.name);
+    const rows = [];
+    for (const row of table) rows.push(columns.map((col) => cellValue(row[col])));
+    return { columns, rows };
+  }
+
+  return { loadRows, run, state };
+}
+
 export function createSandbox({ onStatus } = {}) {
   /** name -> { table, file, rows, columns } */
   const registered = new Map();

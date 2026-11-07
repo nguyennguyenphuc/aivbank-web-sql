@@ -986,8 +986,11 @@ def list_challenges(
     cat = _catalogue()
     try:
         solved = _challenge_store().solved(principal.username)
-    except ApiError:
-        solved = {}  # kho diem hong: van xem duoc de bai
+    except Exception:  # noqa: BLE001
+        # Kho diem hong, hoac chua chay database/schema/20_challenges.sql:
+        # van xem va lam duoc bai, chi chua luu tien do.
+        log.warning("challenge progress unavailable", exc_info=True)
+        solved = {}
     items = cat.list(domain)
     mine = [c for c in items if c.id in solved]
     return ChallengeListResponse(
@@ -1022,7 +1025,7 @@ def challenge_detail(
     ch = _challenge_or_404(challenge_id)
     try:
         solved = ch.id in _challenge_store().solved(principal.username)
-    except ApiError:
+    except Exception:  # noqa: BLE001 - xem challenges list
         solved = False
     return ChallengeDetailResponse(challenge=ch.public(solved=solved))
 
@@ -1100,7 +1103,8 @@ def challenge_submit(
         progress = _challenge_store().record(principal.username, ch, verdict["passed"], hashed)
     except Exception:
         log.exception("challenge progress write failed; verdict still returned")
-        progress = {"points_awarded": 0, "already_solved": False, "domain_points": 0, "domain_solved": 0}
+        progress = {"points_awarded": 0, "already_solved": False, "domain_points": 0,
+                    "domain_solved": 0, "progress_saved": False}
     return ChallengeSubmitResponse(
         **verdict,
         **progress,
