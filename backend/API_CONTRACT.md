@@ -8,6 +8,11 @@ below was captured from the running server against the real
 
 ### Changelog
 
+**1.5.1** - Adds `GET /schema/relationships` and `GET /schema/game`, the data
+behind the console's ERD tab (section 6b). Relationships come from the
+database's own `pg_constraint` and pass the same allowlist as `GET /schema` at
+**both** ends: an edge that touches a withheld table or column does not exist.
+
 **1.4.1** - Adds `GET /schema/marts` and `GET /schema/marts/{mart_name}`.
 Both endpoints use the authenticated role database and expose only visible
 tables with the `mart_` prefix. They never inspect the full source database.
@@ -301,13 +306,55 @@ the other five columns STUDENT, because the raw-staging exercise is built on the
 Consequences for the UI:
 
 * **Never cache a schema across sessions or roles.** Refetch `/schema` after every login.
-* **Never build a column list from the parameter book, the ERD or this document.** The
+* **Never build a column list from the parameter book, the workbook's ERD sheet or this
+  document.** (The console's own ERD tab is drawn from `GET /schema` plus
+  `GET /schema/relationships`, so it follows this rule.) The
   numbers here are documentation; the API response is the contract. Sheet 20 of the workbook
   still shows `dirty_flag` under `raw_account_transaction` — the delta overlay is what makes
   it INSTRUCTOR, and only the API has applied it.
 * A student query naming `dirty_flag` fails with `400 E_QUERY_FAILED` and a message that is
   **byte-identical** to a misspelled column. That is deliberate: there must be no way to
   distinguish "withheld" from "does not exist". Do not add a special case for it in the UI.
+
+---
+
+## 6b. ERD data (new in 1.5.1)
+
+### `GET /schema/relationships?dataset=<name>`
+
+Session required. Same `dataset` parameter and `503 E_DB_UNAVAILABLE` as `GET /schema`.
+
+```json
+{"ok": true, "relationships": [
+  {"from_table": "core_account", "from_columns": ["party_id"],
+   "to_table": "core_party", "to_columns": ["party_id"], "inferred": false}
+]}
+```
+
+* One entry per FOREIGN KEY constraint; `from_columns[i]` references `to_columns[i]`.
+  Partition copies of a constraint (`scm.sales_20xx`) are folded into the parent's.
+* An edge is listed only when both tables are in the caller's `GET /schema` and every
+  named column is too. Measured 2026-11-07: 74 edges for an `aivb` student, 14 for `scm`.
+
+### `GET /schema/game`
+
+Session required. The `jelly_analytics` schema of the game database, which students query
+with psql / Power BI on port 5433, not through this console. Only relations the class role
+`candy_reader` may SELECT are listed; the game's `public` schema is never read.
+
+```json
+{"ok": true, "schema_name": "jelly_analytics",
+ "tables": [{"name": "sessions", "kind": "table",
+             "columns": [{"name": "session_id", "type": "VARCHAR", "nullable": false, "primary_key": true}]}],
+ "relationships": [{"from_table": "sessions", "from_columns": ["user_id"],
+                    "to_table": "users", "to_columns": ["user_id"], "inferred": true}]}
+```
+
+* `jelly_analytics` declares no FOREIGN KEY, so its edges are **inferred**: a column named
+  `X` points at the other table whose single-column primary key is also `X`. Every such edge
+  carries `"inferred": true`; the UI must say so. A declared FK turns inference off.
+* `503 E_GAME_UNAVAILABLE` when the game is not enabled or its database cannot be reached.
+  Cached for 10 minutes per backend process.
 
 ---
 

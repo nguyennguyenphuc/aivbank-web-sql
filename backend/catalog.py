@@ -65,10 +65,24 @@ class ColumnInfo:
 
 
 @dataclass(frozen=True)
+class ForeignKeyInfo:
+    """Mot rang buoc FOREIGN KEY, doc tu `pg_constraint` cua CHINH database.
+
+    `columns[i]` tro toi `ref_columns[i]` - giu thu tu de FK nhieu cot van
+    ghep dung cap. Chi dung de ve so do ERD; guard khong bao gio dua vao no.
+    """
+
+    columns: tuple[str, ...]
+    ref_table: str
+    ref_columns: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class TableInfo:
     name: str
     columns: tuple[ColumnInfo, ...]
     row_count: int | None = None
+    foreign_keys: tuple[ForeignKeyInfo, ...] = ()
 
 
 @dataclass(frozen=True)
@@ -269,7 +283,18 @@ class Catalog:
                         # Every physical column of this table is withheld.
                         # Nothing to serve, so do not advertise the table.
                         continue
-                    info = TableInfo(name=info.name, columns=kept, row_count=info.row_count)
+                    kept_names = {c.name.lower() for c in kept}
+                    info = TableInfo(
+                        name=info.name,
+                        columns=kept,
+                        row_count=info.row_count,
+                        # Mot FK dung tren cot bi giu lai se lo ten cot do qua
+                        # so do ERD, nen no di cung cot.
+                        foreign_keys=tuple(
+                            fk for fk in info.foreign_keys
+                            if all(c.lower() in kept_names for c in fk.columns)
+                        ),
+                    )
                 self._tables[name] = info
 
         self.allowed_tables: frozenset[str] = frozenset(self._tables)
@@ -349,6 +374,31 @@ class Catalog:
 
     def list_tables(self) -> list[TableInfo]:
         return [self._tables[k] for k in sorted(self._tables)]
+
+    def relationships(self) -> list[tuple[str, ForeignKeyInfo]]:
+        """Cac canh FK ma phien nay duoc thay, dang (bang nguon, FK).
+
+        Fail-closed o CA HAI dau: mot canh chi ra ngoai khi bang nguon va bang
+        dich deu nam trong allowlist, va moi cot o ca hai dau deu nam trong cot
+        ma catalog nay phuc vu. Mot canh tro toi bang bi giu lai van noi len
+        rang bang do TON TAI - ma `hidden_count` co chu dinh khong bao gio noi.
+        `revoke()` thu hep `_tables`, nen ham nay tu dong thu hep theo.
+        """
+        out: list[tuple[str, ForeignKeyInfo]] = []
+        for name in sorted(self._tables):
+            info = self._tables[name]
+            src_cols = {c.name.lower() for c in info.columns}
+            for fk in info.foreign_keys:
+                target = self._tables.get(fk.ref_table.lower())
+                if target is None:
+                    continue
+                dst_cols = {c.name.lower() for c in target.columns}
+                if not all(c.lower() in src_cols for c in fk.columns):
+                    continue
+                if not all(c.lower() in dst_cols for c in fk.ref_columns):
+                    continue
+                out.append((info.name, fk))
+        return out
 
     @property
     def hidden_count(self) -> int:

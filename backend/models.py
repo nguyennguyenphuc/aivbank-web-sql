@@ -97,6 +97,35 @@ class SchemaResponse(BaseModel):
     tables: list[TableDetail]
 
 
+class RelationshipOut(BaseModel):
+    """Mot canh cua so do ERD: `from_columns[i]` tro toi `to_columns[i]`."""
+
+    from_table: str
+    from_columns: list[str]
+    to_table: str
+    to_columns: list[str]
+    #: True = suy ra tu ten cot vi database khong khai bao FK (chi co o game).
+    inferred: bool = False
+
+
+class RelationshipsResponse(BaseModel):
+    ok: Literal[True] = True
+    relationships: list[RelationshipOut]
+
+
+class GameTableOut(BaseModel):
+    name: str
+    kind: Literal["table", "view"]
+    columns: list[ColumnOut]
+
+
+class GameSchemaResponse(BaseModel):
+    ok: Literal[True] = True
+    schema_name: str
+    tables: list[GameTableOut]
+    relationships: list[RelationshipOut]
+
+
 class HealthResponse(BaseModel):
     ok: bool
     status: Literal["healthy", "degraded"]

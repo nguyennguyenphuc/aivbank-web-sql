@@ -112,9 +112,14 @@ from .models import (
     GamificationResponse,
     LeaderboardResponse,
     InstructorAnalyticsResponse,
+    GameSchemaResponse,
+    GameTableOut,
+    RelationshipOut,
+    RelationshipsResponse,
 )
+from . import game_schema
 
-API_VERSION = "1.5.0"
+API_VERSION = "1.5.1"
 
 logging.basicConfig(
     level=os.environ.get("AIVB_LOG_LEVEL", "INFO"),
@@ -996,6 +1001,71 @@ def full_schema(
                 ],
             )
             for t in tables
+        ],
+    )
+
+
+@app.get("/schema/relationships", response_model=RelationshipsResponse)
+def schema_relationships(
+    dataset: str | None = None,
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    """Cac canh FK cho so do ERD cua bo du lieu.
+
+    Loc bang `Catalog.relationships`: mot canh chi ra ngoai khi CA HAI dau deu
+    la bang ma phien nay thay trong GET /schema. Canh cham bang bi giu lai thi
+    khong ton tai, cung nguyen tac "khong co oracle" voi /schema/tables/{name}.
+    """
+    db = db_for_role(principal.role, dataset)
+    if db is None:
+        return _err(503, "E_DB_UNAVAILABLE", "The dataset is not available right now.")
+    return RelationshipsResponse(
+        relationships=[
+            RelationshipOut(
+                from_table=src,
+                from_columns=list(fk.columns),
+                to_table=fk.ref_table,
+                to_columns=list(fk.ref_columns),
+            )
+            for src, fk in db.catalog.relationships()
+        ]
+    )
+
+
+@app.get("/schema/game", response_model=GameSchemaResponse)
+def schema_game(principal: Principal = Depends(require_active_session)) -> Any:
+    """So do `jelly_analytics` cua database game, chi nhung gi lop hoc doc duoc.
+
+    Console khong chay truy van tren database nay; hoc vien dung psql / Power BI
+    qua cong 5433. Xem backend/game_schema.py.
+    """
+    try:
+        gs = game_schema.load_game_schema(settings)
+    except game_schema.GameSchemaUnavailable as exc:
+        log.warning("game schema unavailable: %s", exc)
+        return _err(503, "E_GAME_UNAVAILABLE", "The game database is not available right now.")
+    return GameSchemaResponse(
+        schema_name=gs.schema,
+        tables=[
+            GameTableOut(
+                name=t.name,
+                kind=t.kind,
+                columns=[
+                    ColumnOut(name=c.name, type=c.type, nullable=c.nullable, primary_key=c.primary_key)
+                    for c in t.columns
+                ],
+            )
+            for t in gs.tables
+        ],
+        relationships=[
+            RelationshipOut(
+                from_table=e.from_table,
+                from_columns=list(e.from_columns),
+                to_table=e.to_table,
+                to_columns=list(e.to_columns),
+                inferred=e.inferred,
+            )
+            for e in gs.relationships
         ],
     )
 

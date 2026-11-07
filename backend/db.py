@@ -37,7 +37,7 @@ import psycopg
 from psycopg_pool import ConnectionPool, PoolTimeout
 
 from . import pgtypes
-from .catalog import Catalog, ColumnInfo, TableInfo
+from .catalog import Catalog, ColumnInfo, ForeignKeyInfo, TableInfo
 from .config import Settings
 from .pg_function_policy import PgFunctionPolicy
 
@@ -224,6 +224,8 @@ class Database:
         for tname, col in pk_rows:
             pks.setdefault(tname, set()).add(col)
 
+        fks = fetch_foreign_keys(con, self.schema)
+
         grouped: dict[str, list[ColumnInfo]] = {}
         for tname, col, dtype, nullable, _pos, precision, scale in rows:
             grouped.setdefault(tname, []).append(
@@ -238,7 +240,9 @@ class Database:
                 )
             )
         return {
-            name: TableInfo(name=name, columns=tuple(cols))
+            name: TableInfo(
+                name=name, columns=tuple(cols), foreign_keys=fks.get(name, ())
+            )
             for name, cols in grouped.items()
         }
 
@@ -436,6 +440,51 @@ def _safe_cancel(con: psycopg.Connection) -> None:  # pragma: no cover
         con.cancel_safe()
     except Exception:
         pass
+
+
+#: Rang buoc FK nam GON trong mot schema, tung cap cot theo dung thu tu khai
+#: bao. `conparentid = 0`: bang phan vung (scm.sales_20xx) nhan mot ban sao FK
+#: cho MOI phan vung; chi giu rang buoc goc tren bang cha, khong thi so do ve
+#: mot canh cho tung nam du lieu. FK tro sang schema khac bi bo: dau kia khong
+#: nam trong catalog nao ma hoc vien duoc thay.
+_FOREIGN_KEY_SQL = """
+    SELECT lower(src.relname), c.conname, lower(dst.relname),
+           k.ord, sa.attname, da.attname
+    FROM pg_constraint c
+    JOIN pg_class src ON src.oid = c.conrelid
+    JOIN pg_class dst ON dst.oid = c.confrelid
+    CROSS JOIN LATERAL unnest(c.conkey, c.confkey)
+         WITH ORDINALITY AS k(src_att, dst_att, ord)
+    JOIN pg_attribute sa ON sa.attrelid = c.conrelid  AND sa.attnum = k.src_att
+    JOIN pg_attribute da ON da.attrelid = c.confrelid AND da.attnum = k.dst_att
+    WHERE c.contype = 'f'
+      AND c.conparentid = 0
+      AND src.relnamespace = %s::regnamespace
+      AND dst.relnamespace = %s::regnamespace
+    ORDER BY 1, 2, 4
+"""
+
+
+def fetch_foreign_keys(
+    con: psycopg.Connection, schema: str
+) -> dict[str, tuple[ForeignKeyInfo, ...]]:
+    """Moi FK trong `schema`, gom theo ten bang nguon (chu thuong).
+
+    Chi doc `pg_catalog`, khong cham du lieu. Ket qua CHUA loc quyen: Catalog
+    loc o ca hai dau (`Catalog.relationships`) truoc khi ra HTTP.
+    """
+    rows = con.execute(_FOREIGN_KEY_SQL, (schema, schema)).fetchall()
+    parts: dict[tuple[str, str], tuple[str, list[str], list[str]]] = {}
+    for src, conname, dst, _ord, src_col, dst_col in rows:
+        entry = parts.setdefault((src, conname), (dst, [], []))
+        entry[1].append(src_col)
+        entry[2].append(dst_col)
+    out: dict[str, list[ForeignKeyInfo]] = {}
+    for (src, _conname), (dst, cols, ref_cols) in parts.items():
+        out.setdefault(src, []).append(
+            ForeignKeyInfo(columns=tuple(cols), ref_table=dst, ref_columns=tuple(ref_cols))
+        )
+    return {name: tuple(items) for name, items in out.items()}
 
 
 def _pg_display_type(data_type: str, precision, scale) -> str:

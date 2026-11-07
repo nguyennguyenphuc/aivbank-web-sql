@@ -68,6 +68,8 @@ PROTECTED_GET = [
     "/schema",
     "/schema/tables",
     "/schema/tables/core_party",
+    "/schema/relationships",
+    "/schema/game",
     "/audit/recent",
 ]
 
