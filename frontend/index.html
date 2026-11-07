@@ -309,6 +309,7 @@
                  nguoc lai (hien san roi an di) lam hoc vien thay mot tab loe ra roi bien
                  mat sau ~5 giay - do la thoi gian /schema/marts tra ve qua duong ham. -->
             <button id="tab-button-mart" class="tab" data-tab="mart" role="tab" aria-controls="tab-mart" aria-selected="false" tabindex="-1" hidden>Data mart</button>
+          <button id="tab-button-erd" class="tab" data-tab="erd" role="tab" aria-controls="tab-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
           <button id="tab-button-history" class="tab" data-tab="history" role="tab" aria-controls="tab-history" aria-selected="false" tabindex="-1">Lịch sử</button>
           <button id="tab-button-detail" class="tab" data-tab="detail" role="tab" aria-controls="tab-detail" aria-selected="false" tabindex="-1">Chi tiết</button>
         </div>
@@ -339,6 +340,42 @@
           <span id="mart-summary" class="muted" role="status" aria-live="polite"></span>
         </div>
         <div id="mart-grid" class="grid-wrap"><p class="empty">Đăng nhập để xem data mart.</p></div>
+      </div>
+
+      <!-- So do ERD (frontend/erd.js). Bang va cot lay tu GET /schema, canh tu
+           GET /schema/relationships; nut "Game" doc GET /schema/game va chi hien
+           khi may chu bat game. Khong co ten nao viet san o day. -->
+      <div id="tab-erd" class="tabpanel erd-panel" role="tabpanel" aria-labelledby="tab-button-erd" hidden data-state="empty">
+        <div class="erd-tools">
+          <div class="erd-source" role="group" aria-label="Chọn database để xem sơ đồ">
+            <button type="button" class="erd-source-btn" data-erd-source="console" aria-pressed="true">Bộ dữ liệu đang mở</button>
+            <button type="button" class="erd-source-btn" data-erd-source="game" aria-pressed="false" hidden>Game (jelly_analytics)</button>
+          </div>
+          <label class="sr-only" for="erd-filter">Tìm bảng trên sơ đồ</label>
+          <input id="erd-filter" class="filter erd-filter" type="search" placeholder="Tìm bảng…" autocomplete="off" spellcheck="false" />
+          <span class="erd-status muted" role="status" aria-live="polite"></span>
+          <span class="spacer"></span>
+          <div class="erd-zoom" role="group" aria-label="Thu phóng sơ đồ">
+            <button type="button" class="icon-btn" data-erd-zoom="out" aria-label="Thu nhỏ" title="Thu nhỏ (-)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+            </button>
+            <button type="button" class="btn btn-ghost btn-sm" data-erd-zoom="fit" title="Vừa khung (0)">Vừa khung</button>
+            <button type="button" class="icon-btn" data-erd-zoom="in" aria-label="Phóng to" title="Phóng to (+)">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
+            </button>
+          </div>
+        </div>
+        <p class="erd-note banner banner-info" hidden></p>
+        <div class="erd-body">
+          <div class="erd-canvas" tabindex="0" aria-label="Sơ đồ quan hệ giữa các bảng. Kéo để di chuyển, cuộn chuột hoặc phím + và - để thu phóng, phím mũi tên để dịch, 0 để vừa khung.">
+            <svg class="erd-svg" role="group" aria-label="Sơ đồ ERD"></svg>
+          </div>
+          <aside class="erd-detail" aria-label="Chi tiết bảng" aria-live="polite"></aside>
+        </div>
+        <details class="erd-text">
+          <summary>Danh sách quan hệ dạng bảng</summary>
+          <div class="erd-edge-list"></div>
+        </details>
       </div>
 
       <div id="tab-history" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-history" hidden>

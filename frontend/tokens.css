@@ -237,6 +237,21 @@
   --duration-base: 180ms;
   --ease: cubic-bezier(.4, 0, .2, 1);
   --cell-max-w: 420px;
+
+  /* ------------------------------------------------------------ ERD tab
+     Every stroke a student must follow is >= 3:1 on the canvas (WCAG 1.4.11):
+     edges use --line-input (4.51:1 on white), a lit edge the brand green. */
+  --erd-canvas:      var(--surface-sunken);
+  --erd-grid:        var(--line-soft);
+  --erd-node:        var(--surface);
+  --erd-node-line:   var(--line-strong);
+  --erd-node-head:   var(--surface-muted);
+  --erd-edge:        var(--line-input);
+  --erd-edge-lit:    var(--brand-600);
+  --erd-pk:          var(--brand-700);
+  --erd-fk:          var(--ink-muted);
+  --erd-detail-w:    320px;
+  --erd-dim:         .22;
 }
 
 /* Motion is opt-out at the token level, so a component author cannot forget:

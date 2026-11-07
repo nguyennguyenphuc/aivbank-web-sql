@@ -333,6 +333,15 @@ export const api = {
         qs({ include_row_count: includeRowCount || null, dataset })
     ),
 
+  /** FK edges for the ERD tab. Filtered server-side at BOTH ends, so every
+   *  table it names is also in schema(); still the ONLY source of edges. */
+  relationships: (dataset = currentDataset) =>
+    request(`/schema/relationships${qs({ dataset })}`),
+
+  /** The game database's jelly_analytics schema (tables, columns, edges) for
+   *  the ERD tab. Not a console dataset: nothing here can be queried in /query. */
+  gameSchema: () => request('/schema/game'),
+
   gamificationMe: () => request("/gamification/me"),
   gameStatus: () => request("/game-sso/status"),
   leaderboard: (period = "week") => request(`/gamification/leaderboard?period=${encodeURIComponent(period)}`),

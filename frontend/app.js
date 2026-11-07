@@ -11,6 +11,7 @@ import { api, apiBase, apiOrigin, isCrossOrigin, setDataset, setUnauthorizedHand
 import { errorHint, isRetryable, isClientCode } from './errors.js';
 import { createEditor, insertAtCursor } from './editor.js';
 import { createSchemaPanel } from './schema.js';
+import { createErdPanel } from './erd.js';
 import { createResultsPanel } from './results.js';
 import { initPanes } from './panes.js';
 import { createMartPanel } from './mart.js';
@@ -70,6 +71,18 @@ const schemaPanel = createSchemaPanel({
 });
 
 const cm = createEditor($('sql'), { schemaRef: schemaPanel.ref, onRun: run });
+
+/* So do ERD dung CHUNG schema voi thanh ben (khong goi /schema lan hai), nen no
+ * khong the hien mot ten ma danh muc bang khong co. */
+const erdPanel = createErdPanel({
+  root: $('tab-erd'),
+  getConsoleSchema: async () => schemaPanel.ref.value || schemaPanel.load(),
+  getConsoleLabel: () => {
+    const name = document.querySelector('.section-tab[data-dataset-slot].is-active .section-tab-name');
+    return name ? name.textContent : '';
+  },
+  onInsert: (text) => insertAtCursor(cm, text),
+});
 
 async function loadPractice() {
   const epoch = sessionEpoch;
@@ -238,6 +251,8 @@ function selectTab(name) {
     p.classList.toggle('is-active', selected);
     p.hidden = !selected;
   });
+  // Sau khi panel hien: so do can kich thuoc that de "vua khung".
+  if (name === 'erd') requestAnimationFrame(() => erdPanel.show());
 }
 /* Uy quyen o `.tabs`, va hoi lai DOM moi lan bam - KHONG chup san mot mang nut.
  *
@@ -294,6 +309,8 @@ function setResultsMax(on) {
   // as zero-sized — the same trap as the hidden #app at onSession(). Without
   // this it comes back as a one-line sliver until the window is resized.
   if (!on) cm.refresh();
+  // Khung so do vua doi kich thuoc: ve lai cho vua.
+  requestAnimationFrame(() => erdPanel.refit());
 }
 
 expandButton.addEventListener('click', () => {
@@ -631,6 +648,7 @@ function wipeSessionState() {
   sessionEpoch += 1;
   history.purge();
   schemaPanel.clear();
+  erdPanel.clear();
   results.clear();
   martPanel.clear();
   results.clearDetail();
@@ -857,6 +875,7 @@ async function switchDataset(name) {
   if (sub && label) sub.textContent = label;
 
   schemaPanel.clear();
+  erdPanel.resetConsole();
   martPanel.clear();
   results.clear();
   results.clearDetail();
@@ -972,6 +991,8 @@ async function loadGameAvailability() {
   tab.hidden = !enabled;
   tab.disabled = !enabled;
   tab.setAttribute('aria-disabled', enabled ? 'false' : 'true');
+  // Cung tin hieu cho nut "Game" cua so do ERD: game tat thi khong co gi de ve.
+  erdPanel.setGameAvailable(enabled);
 }
 
 /** Gan `src` lan dau mo tab: game ~500 KB JS va tu SSO khi tai, khong co ly do
