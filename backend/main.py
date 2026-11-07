@@ -1013,7 +1013,10 @@ def challenge_leaderboard(
     # Cung luat voi /gamification/leaderboard: CHI hoc vien dang hoat dong.
     students = _auth().active_usernames(ROLE_STUDENT)
     return ChallengeLeaderboardResponse(
-        domain=domain, entries=_challenge_store().leaderboard(domain, only=students)
+        domain=domain,
+        entries=_challenge_store().leaderboard(
+            domain, only=students, live_ids=[c.id for c in _catalogue().list(domain)]
+        ),
     )
 
 
@@ -1100,7 +1103,10 @@ def challenge_submit(
         order_matters=ch.order_matters, tol=ch.float_tol,
     )
     try:
-        progress = _challenge_store().record(principal.username, ch, verdict["passed"], hashed)
+        progress = _challenge_store().record(
+            principal.username, ch, verdict["passed"], hashed,
+            live_ids=[c.id for c in _catalogue().list(ch.domain)],
+        )
     except Exception:
         log.exception("challenge progress write failed; verdict still returned")
         progress = {"points_awarded": 0, "already_solved": False, "domain_points": 0,

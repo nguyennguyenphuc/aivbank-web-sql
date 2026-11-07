@@ -102,3 +102,53 @@ def test_expected_state_query_wraps_sample(catalogue):
     for c in dml:
         q = ch.expected_state_query(c)
         assert q.startswith("WITH sample AS (") and c.sample_sql in q
+
+
+def test_points_only_count_challenges_still_in_the_catalogue(catalogue, gami_store):
+    """Bai da doi id / go khoi bo khong duoc cong vao tong hay bang xep hang.
+
+    Can PostgreSQL (aivb_app); fixture gami_store tu skip khi khong co.
+    """
+    import dataclasses
+
+    with gami_store._pool.connection() as con:
+        if con.execute("SELECT to_regclass('app.challenge_solved')").fetchone()[0] is None:
+            pytest.skip("chua chay database/schema/20_challenges.sql")
+    store = ch.ChallengeStore(gami_store._pool)
+    live = catalogue.list("scm")
+    live_ids = [c.id for c in live]
+    retired = dataclasses.replace(live[0], id="scm-retired-test")
+
+    store.record("alice", retired, True, "h0", live_ids=live_ids)
+    out = store.record("alice", live[1], True, "h1", live_ids=live_ids)
+
+    assert out["points_awarded"] == live[1].points
+    assert out["domain_points"] == live[1].points
+    assert out["domain_solved"] == 1
+    board = store.leaderboard("scm", only=frozenset({"alice"}), live_ids=live_ids)
+    assert board == [{"rank": 1, "username": "alice", "points": live[1].points, "solved": 1}]
+
+
+@pytest.mark.parametrize("sql", [
+    "UPDATE scm.items SET family = 'x'",
+    "SELECT 1; DELETE FROM scm.items",
+    "WITH gone AS (DELETE FROM scm.items RETURNING *) SELECT * FROM gone",
+    "SELECT set_config('default_transaction_read_only', 'off', false); SELECT 1",
+    "CREATE TABLE t AS SELECT 1",
+])
+def test_catalogue_refuses_server_sql_that_could_write(tmp_path, sql):
+    """SQL cua may chu (dap an, bang mau) chi duoc la MOT cau SELECT/WITH."""
+    bad = {
+        "domain": "scm", "dataset": "scm", "label": "x",
+        "challenges": [{
+            "id": "scm-bad", "level": "easy", "title": "t", "statement": "s",
+            "tables": ["items"], "reference_sql": sql,
+        }],
+    }
+    (tmp_path / "scm.json").write_text(json.dumps(bad), encoding="utf-8")
+    with pytest.raises(ch.CatalogueError):
+        ch.load_catalogue(tmp_path, datasets=["scm"])
+
+
+def test_read_only_check_ignores_words_inside_string_literals():
+    ch._check_read_only_sql("SELECT 'Sale; UPDATE ngay' AS x WHERE tier <> 'delete'", "ok")

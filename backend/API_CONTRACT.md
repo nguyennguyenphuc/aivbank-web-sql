@@ -27,6 +27,12 @@ every route; same web accounts, no separate sign-up. Answers never leave the ser
   submitted table state with `expected_state_sql` and never runs DML.
 * Progress lives in `aivb_app` (`database/schema/20_challenges.sql`), a scoreboard separate
   from `/gamification`. Points are awarded once, on the first correct submission.
+* `my_points`, `domain_points` and the leaderboard count only challenges that are still in
+  the catalogue. A retired or renamed challenge keeps its rows but stops counting.
+* Server-side SQL in the catalogue (`reference_sql`, `sample_sql`, `expected_state_sql`)
+  must be a single SELECT/WITH with no write keyword; the catalogue refuses to load
+  otherwise. It runs on the same read-only `*_api` role as student queries, which has no
+  write grant on any table, so neither students nor the answer key can change the data.
 
 **1.5.1** - Adds `GET /schema/relationships` and `GET /schema/game`, the data
 behind the console's ERD tab (section 6b). Relationships come from the

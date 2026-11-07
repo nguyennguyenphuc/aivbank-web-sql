@@ -2538,6 +2538,7 @@ body.role-instructor .focus-float .icon-btn {
 .ch-tabs { padding: 0; border-bottom: 1px solid var(--line); margin-bottom: var(--space-7); }
 .ch-statement, .ch-output, .ch-takeaway { margin: 0; max-width: 68ch; line-height: var(--leading-loose); font-size: var(--text-md); }
 .ch-output { color: var(--ink); }
+.ch-data-note { margin: var(--space-4) 0 0; max-width: 68ch; font-size: var(--text-sm); color: var(--ink-muted); }
 .ch-sub { margin: var(--space-9) 0 var(--space-4); font-size: var(--text-md); font-weight: var(--weight-bold); }
 .ch-tables { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr)); gap: var(--space-7); }
 .ch-table { margin: 0; }

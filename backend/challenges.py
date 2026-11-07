@@ -25,6 +25,7 @@ import hashlib
 import json
 import math
 import os
+import re
 import unicodedata
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -135,6 +136,31 @@ def load_catalogue(directory: Path | None = None, *, datasets: Iterable[str] | N
     return cat
 
 
+_STRING_LITERAL = re.compile(r"'(?:[^']|'')*'")
+_WRITE_WORD = re.compile(
+    r"\b(INSERT|UPDATE|DELETE|MERGE|TRUNCATE|DROP|ALTER|CREATE|GRANT|REVOKE|COPY|CALL|DO|"
+    r"VACUUM|REINDEX|CLUSTER|LOCK|SET|RESET|NOTIFY|LISTEN|PREPARE|EXECUTE)\b",
+    re.IGNORECASE,
+)
+
+
+def _check_read_only_sql(sql: str, label: str) -> None:
+    """Lop phong thu thu hai cho SQL cua may chu (dap an, bang mau).
+
+    Lop chinh la quyen cua PostgreSQL: cac vai tro *_api khong co quyen ghi bang
+    nao. Kiem nay chi de mot file de sua nham (them mot cau UPDATE, mot CTE ghi
+    du lieu, hai cau noi bang ';') bi tu choi NGAY KHI NAP, khong doi toi luc chay.
+    """
+    body = _STRING_LITERAL.sub("''", sql).strip()
+    if not re.match(r"^\(*\s*(SELECT|WITH)\b", body, re.IGNORECASE):
+        raise CatalogueError(f"{label} phai la mot cau SELECT/WITH")
+    if ";" in body:
+        raise CatalogueError(f"{label} chi duoc mot cau, khong co ';'")
+    word = _WRITE_WORD.search(body)
+    if word:
+        raise CatalogueError(f"{label} chua tu khoa ghi/doi trang thai {word.group(1)!r}")
+
+
 def _parse(raw: dict, domain: str, dataset: str, source: str) -> Challenge:
     def need(key: str) -> Any:
         if not raw.get(key):
@@ -153,6 +179,9 @@ def _parse(raw: dict, domain: str, dataset: str, source: str) -> Challenge:
         need("sample_sql")
         need("sample_table")
         need("expected_state_sql")
+    for key in ("reference_sql", "sample_sql", "expected_state_sql"):
+        if raw.get(key):
+            _check_read_only_sql(raw[key], f"{source}: bai {raw.get('id', '?')!r} {key}")
     return Challenge(
         id=need("id"),
         domain=domain,
@@ -288,8 +317,15 @@ class ChallengeStore:
             ).fetchall()
         return {r[0]: {"points": r[1], "attempts": r[2], "solved_at": r[3]} for r in rows}
 
-    def record(self, username: str, ch: Challenge, passed: bool, hashed: str) -> dict[str, Any]:
-        """Ghi mot lan nop. Diem chi cong o lan dung DAU TIEN."""
+    def record(
+        self, username: str, ch: Challenge, passed: bool, hashed: str, live_ids: list[str]
+    ) -> dict[str, Any]:
+        """Ghi mot lan nop. Diem chi cong o lan dung DAU TIEN.
+
+        `live_ids`: id cac bai dang co trong catalogue cua domain. Tong diem chi
+        tinh tren cac bai nay, giong GET /challenges; bai da doi id hoac da go
+        khoi bo khong con cong vao tong (dong cu van giu trong bang).
+        """
         now = dt.datetime.now(dt.timezone.utc).isoformat(timespec="seconds")
         with self._pool.connection() as con, con.transaction():
             con.execute(
@@ -315,8 +351,9 @@ class ChallengeStore:
                 )
                 awarded = ch.points if cur.rowcount else 0
             total = con.execute(
-                "SELECT COALESCE(SUM(points), 0), count(*) FROM app.challenge_solved WHERE username = %s AND domain = %s",
-                (username, ch.domain),
+                "SELECT COALESCE(SUM(points), 0), count(*) FROM app.challenge_solved "
+                "WHERE username = %s AND domain = %s AND challenge_id = ANY(%s)",
+                (username, ch.domain, list(live_ids)),
             ).fetchone()
         return {
             "points_awarded": awarded,
@@ -325,19 +362,22 @@ class ChallengeStore:
             "domain_solved": int(total[1]),
         }
 
-    def leaderboard(self, domain: str, only, limit: int = 20) -> list[dict[str, Any]]:
-        """Cung luat voi /gamification/leaderboard: CHI nhung ten trong `only`."""
+    def leaderboard(
+        self, domain: str, only, live_ids: list[str], limit: int = 20
+    ) -> list[dict[str, Any]]:
+        """Cung luat voi /gamification/leaderboard: CHI nhung ten trong `only`,
+        va chi diem cua cac bai dang co trong catalogue (`live_ids`)."""
         keep = tuple(only or ())
-        if not keep:
+        if not keep or not live_ids:
             return []
         holes = ",".join(["%s"] * len(keep))
         with self._pool.connection() as con:
             rows = con.execute(
                 "SELECT username, SUM(points), count(*), MAX(solved_at) FROM app.challenge_solved "
-                f"WHERE domain = %s AND username IN ({holes}) "
+                f"WHERE domain = %s AND challenge_id = ANY(%s) AND username IN ({holes}) "
                 "GROUP BY username ORDER BY SUM(points) DESC, count(*) DESC, MAX(solved_at) ASC, username "
                 "LIMIT %s",
-                (domain, *keep, max(1, min(int(limit), 100))),
+                (domain, list(live_ids), *keep, max(1, min(int(limit), 100))),
             ).fetchall()
         return [
             {"rank": i, "username": r[0], "points": int(r[1]), "solved": int(r[2])}

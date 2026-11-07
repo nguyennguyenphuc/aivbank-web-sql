@@ -24,6 +24,16 @@ import { createErdPanel } from './erd.js';
 const LEVEL_LABEL = { easy: 'Easy', medium: 'Medium', difficult: 'Difficult', advanced: 'Advanced' };
 const LEVELS = Object.keys(LEVEL_LABEL);
 
+/* Mot dong co dinh duoi "Dieu rut ra", thay cho cau "day la du lieu sinh" ma
+ * vong review 2 bat bo khoi tung takeaway. */
+const DATA_NOTE = {
+  scm: 'Giá, chi phí, tồn kho, PO, chuyến giao và last-mile là dữ liệu sinh cho khoá học: so sánh và thứ hạng có ý nghĩa, số tuyệt đối thì không.',
+};
+
+function takeawayNote(domain) {
+  return DATA_NOTE[domain] ? h('p', 'ch-data-note', DATA_NOTE[domain]) : null;
+}
+
 function h(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
@@ -402,6 +412,8 @@ export function createChallengesUi(root) {
         ? h('p', 'ch-takeaway', c.takeaway)
         : h('p', 'muted', 'Giải đúng bài này để mở phần rút ra: con số trong kết quả nói gì về doanh nghiệp.')
     );
+    const note = c.takeaway && takeawayNote(c.domain);
+    if (note) box.appendChild(note);
   }
 
   async function renderBoard() {
@@ -581,6 +593,8 @@ export function createChallengesUi(root) {
       if (v.takeaway) {
         verdictEl.appendChild(h('p', 'ch-verdict-sub', 'Điều rút ra'));
         verdictEl.appendChild(h('p', '', v.takeaway));
+        const note = takeawayNote(current && current.domain);
+        if (note) verdictEl.appendChild(note);
       }
       return;
     }
