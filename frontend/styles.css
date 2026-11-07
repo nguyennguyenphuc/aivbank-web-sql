@@ -1,3 +1,14 @@
+/* Hallmark · shape: app screen · genre: modern-minimal · theme: brand · redesign: full · scope: app
+ * paper: oklch(96.9% 0.008 130) · accent: oklch(42% 0.07 131) · display: Be Vietnam Pro · body: Be Vietnam Pro
+ * nav: one top bar holding brand, area tabs, server status and session · signature: the data map, one PK/FK glyph shared by the table catalog and the ERD tab · states: loading, empty, error, full on the catalog, results, data mart, ERD and leaderboard
+ * axes: green-tinted paper/one Vietnamese-drawn sans/eDA green · posture: restrained · contrast: pass · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H4 E4 S4 R4 V3 · weakest: V, a SQL console keeps its editor-over-results shape because that is the job; the variety went into the chrome (two bars became one) and the stats (a ruled row, no icon tiles) */
+/* Hallmark · waive 64 · --font-outlier is the mono, and .chip holds the table names a query used, SQL the student types in the editor · in this console mono means you can type it */
+/* Hallmark · dismissed 3 · .caret is a CSS triangle drawn with borders, the disclosure arrow of a table row, not a stripe on a card */
+/* Hallmark · answered F24 · .CodeMirror-hints is the autocomplete dropdown floating over the editor text, it needs both its edge and its lift */
+/* Hallmark · finish-review: subagent · 8 findings · 5 resolved 2 partial 1 answered · gap: none · partial: NOT NULL still takes its own line on plain columns; the sandbox on a phone keeps two scroll regions under a 250px editor tier */
+/* Hallmark · answered F14 · .auth-slot reserves two lines (62px) on purpose, the lockout notice is two lines and the Đăng nhập button must not jump under a student mid-click */
+
 /* =====================================================================
    AIV Bank — student SQL console, presentation layer
    =====================================================================
@@ -49,9 +60,14 @@ button, input, select, textarea { touch-action: manipulation; }
 }
 .skip-link:focus { transform: translateY(0); }
 
+/* A wide result grid scrolls inside its own frame; the page itself never
+ * scrolls sideways, which is what makes the top bar and the sidebar stay
+ * where the student left them. `clip`, not `hidden`: hidden makes the body a
+ * scroll container and silently breaks every `position: sticky` under it. */
 html, body {
   height: 100%;
   margin: 0;
+  overflow-x: clip;
 }
 
 body {
@@ -62,12 +78,11 @@ body {
   background: var(--surface-sunken);
   display: flex;
   flex-direction: column;
-  /* A wide result grid scrolls inside its own frame; the page itself never
-   * scrolls sideways, which is what makes the top bar and the sidebar stay
-   * where the student left them. */
-  overflow-x: hidden;
+  font-synthesis: none;
+  caret-color: var(--brand-700);
   -webkit-font-smoothing: antialiased;
 }
+::selection { background: var(--brand-100); color: var(--ink); }
 
 /* One focus treatment everywhere, never removed. */
 :focus-visible {
@@ -108,9 +123,7 @@ body {
   position: fixed;
   inset: 0;
   z-index: var(--z-modal);
-  background:
-    radial-gradient(120% 80% at 50% -10%, var(--brand-50), transparent 60%),
-    var(--surface-sunken);
+  background: var(--surface-sunken);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -119,16 +132,17 @@ body {
 }
 
 /* While gated, kill scrolling of anything underneath. */
-body.is-gated { overflow: hidden; }
+body.is-gated { overflow: clip; }
 
+/* A defined edge, no shadow: the card is the only thing on the page, it does
+ * not need to float above anything. */
 .auth-card {
   width: 100%;
-  max-width: 448px;
+  max-width: 420px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-lg);
   padding: var(--space-10) var(--space-10) var(--space-9);
-  box-shadow: var(--shadow-lg);
 }
 
 /* ------------------------------------------------------------- brand block */
@@ -149,11 +163,9 @@ body.is-gated { overflow: hidden; }
 
 .auth-brand-text {
   margin: 0;
-  font-family: var(--font-serif);
-  font-size: var(--text-lg);
+  font-size: var(--text-md);
   line-height: var(--leading-tight);
-  color: var(--brand-700);
-  letter-spacing: .01em;
+  color: var(--ink-muted);
 }
 
 /* --------------------------------------------------------------- auth steps */
@@ -161,12 +173,13 @@ body.is-gated { overflow: hidden; }
 .auth-step { display: block; }
 
 .auth-title {
-  font-family: var(--font-serif);
-  font-size: var(--text-xl);
+  font-size: var(--text-2xl);
   font-weight: var(--weight-bold);
   line-height: var(--leading-tight);
-  margin: 0 0 var(--space-2);
+  margin: 0 0 var(--space-3);
   color: var(--ink);
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 
 .auth-lead {
@@ -248,18 +261,18 @@ body.is-gated { overflow: hidden; }
   line-height: var(--leading-normal);
   background: var(--info-bg);
   border: 1px solid var(--info-line);
-  border-left: 3px solid var(--brand-600);
   border-radius: var(--radius-sm);
   color: var(--ink);
 }
 
+/* Messages are told apart by their whole box (fill, edge and ink), not by a
+ * coloured stripe down one side. */
 .auth-error {
   padding: var(--space-5) var(--space-6);
   font-size: var(--text-sm);
   line-height: var(--leading-normal);
   background: var(--danger-bg);
   border: 1px solid var(--danger-line);
-  border-left: 3px solid var(--danger);
   border-radius: var(--radius-sm);
   color: var(--danger-ink);
 }
@@ -270,7 +283,6 @@ body.is-gated { overflow: hidden; }
   line-height: var(--leading-normal);
   background: var(--ok-bg);
   border: 1px solid var(--ok-line);
-  border-left: 3px solid var(--brand-600);
   border-radius: var(--radius-sm);
   color: var(--brand-700);
 }
@@ -330,60 +342,63 @@ body.is-gated { overflow: hidden; }
  * three, health pills are dropped from the least important end (see the
  * breakpoint ladder at the bottom of this file) rather than wrapping the
  * session controls onto a second line where a student stops looking for them. */
+/* One bar (redesign 2026-11): brand | the areas | status | session | focus.
+ * The areas are the widest member and the only one allowed to shrink; it
+ * scrolls sideways inside itself rather than pushing the session controls
+ * off the bar, where a student stops looking for them. */
 .topbar {
   flex: 0 0 auto;
   display: flex;
-  align-items: center;
+  align-items: stretch;
   gap: var(--space-7);
-  min-height: var(--topbar-h);
-  padding: var(--space-4) var(--space-7);
+  height: var(--topbar-h);
+  padding: 0 var(--space-6) 0 var(--space-7);
   background: var(--surface);
   border-bottom: 1px solid var(--line);
-  box-shadow: var(--shadow-sm);
   flex-wrap: nowrap;
 }
+.topbar > * { align-self: center; }
+.topbar > .sections-bar { align-self: stretch; }
 
 .brand {
   display: flex;
   align-items: center;
   gap: var(--space-4);
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .brand-mark {
   flex: 0 0 auto;
-  width: 36px;
+  width: 30px;
   height: auto;
   display: block;
 }
 
+/* The wordmark, set the way the logo sets it: mixed case, untracked. */
 .brand-word {
-  font-family: var(--font-serif);
-  font-size: var(--text-base);
+  font-size: var(--text-lg);
   font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
   color: var(--ink);
   white-space: nowrap;
 }
 
-.brand-sep {
-  width: 1px;
-  height: 20px;
-  background: var(--line);
-  flex: 0 0 auto;
-}
-
+/* Context line beside the wordmark. app.js still rewrites the <small> on
+ * every area switch, but since the areas moved into this bar the selected
+ * tab says the same thing one step to the right, so it stays off screen. */
 .brand-text {
-  display: grid;
+  display: none;
   font-size: var(--text-sm);
   color: var(--ink);
   line-height: var(--leading-tight);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+  padding-left: var(--space-5);
+  border-left: 1px solid var(--line);
 }
-.brand-text strong { font-weight: var(--weight-bold); }
-.brand-text small { color: var(--ink-muted); font-size: var(--text-xs); }
+.brand-text strong { font-weight: var(--weight-medium); }
+.brand-text small { display: block; color: var(--ink-muted); font-size: var(--text-xs); }
 
 .icon-btn {
   width: var(--control-h-sm);
@@ -402,7 +417,9 @@ body.is-gated { overflow: hidden; }
               border-color var(--duration-fast) var(--ease);
 }
 .icon-btn:hover { color: var(--brand-700); background: var(--surface-hover); border-color: var(--line-strong); }
-.icon-btn svg, .reward-icon svg, .inline-icon {
+.icon-btn:active { background: var(--surface-muted); }
+.icon-btn:disabled { opacity: .55; cursor: not-allowed; }
+.icon-btn svg, .inline-icon {
   width: 20px;
   height: 20px;
   fill: none;
@@ -413,13 +430,17 @@ body.is-gated { overflow: hidden; }
 }
 .schema-toggle, .sidebar-close { display: none; }
 
+/* Server status: plain facts in a row, parted by hairlines, not a strip of
+ * pills. Only the first (ready or not) carries colour, because it is the only
+ * one that changes what a student should do. */
 .health {
   margin-left: auto;
   display: flex;
-  gap: var(--space-3);
+  align-items: center;
   flex-wrap: nowrap;
-  min-width: 0;
-  overflow: hidden;
+  /* Never shrinks: a fact cut mid-word ("tối đa 10,0") is worse than a fact
+   * left out. The ladder under RESPONSIVE decides which facts fit. */
+  flex: 0 0 auto;
 }
 
 /* ---------------------------------------------------------------- session --
@@ -433,8 +454,8 @@ body.is-gated { overflow: hidden; }
 .session-box {
   display: flex;
   align-items: center;
-  gap: var(--space-4);
-  padding-left: var(--space-7);
+  gap: var(--space-3);
+  padding-left: var(--space-6);
   border-left: 1px solid var(--line);
   flex: 0 0 auto;
 }
@@ -452,8 +473,7 @@ body.is-gated { overflow: hidden; }
 
 .role-badge {
   font-size: var(--text-xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
+  font-weight: var(--weight-medium);
   padding: var(--space-2) var(--space-5);
   border-radius: var(--radius-pill);
   border: 1px solid var(--ok-line);
@@ -462,15 +482,17 @@ body.is-gated { overflow: hidden; }
   white-space: nowrap;
 }
 
-/* SAFETY, not decoration. Solid amber fill + white text (5.02:1), uppercase,
- * wider tracking and a ring so it reads as a live warning from the back of a
- * lecture room, and can never be confused with the green student badge. */
+/* SAFETY, not decoration. Solid amber fill + white text (5.02:1), bold and a
+ * ring, on an amber bar with a 3px amber rule under it: it reads as a live
+ * warning from the back of a lecture room and can never be confused with the
+ * green student badge. The 2026-11 redesign took away the capitals and the
+ * tracking (labels stay in sentence case everywhere); fill, ring and the bar
+ * colour, which are what actually carry the warning, all stay. */
 .role-badge.is-instructor {
   background: var(--warning);
   border-color: var(--warning);
   color: var(--on-brand);
-  text-transform: uppercase;
-  letter-spacing: var(--tracking-wider);
+  font-weight: var(--weight-bold);
   box-shadow: 0 0 0 3px var(--warning-bg);
 }
 
@@ -480,20 +502,27 @@ body.role-instructor .topbar {
 }
 body.role-instructor .brand-word,
 body.role-instructor .brand-text { color: var(--ink); }
+/* --ink-muted on amber paper: re-measure before changing either token. */
+body.role-instructor .section-tab { color: var(--ink); }
 
 /* -------------------------------------------------------------------- pills */
 
 .pill {
   font-size: var(--text-xs);
-  padding: var(--space-2) var(--space-5);
-  border-radius: var(--radius-pill);
-  border: 1px solid var(--line);
-  background: var(--surface-sunken);
+  padding: 0 var(--space-5);
   color: var(--ink-muted);
   white-space: nowrap;
+  font-variant-numeric: tabular-nums;
 }
-.pill-ok  { background: var(--ok-bg);     border-color: var(--ok-line);     color: var(--ok); }
-.pill-err { background: var(--danger-bg); border-color: var(--danger-line); color: var(--danger-ink); }
+.pill + .pill { border-left: 1px solid var(--line); }
+.pill-ok  { color: var(--ok); font-weight: var(--weight-medium); }
+.pill-err {
+  color: var(--danger-ink);
+  font-weight: var(--weight-medium);
+  background: var(--danger-bg);
+  border-radius: var(--radius-sm);
+  padding-block: var(--space-2);
+}
 
 /* ==========================================================================
    BANNERS
@@ -511,32 +540,32 @@ body.role-instructor .brand-text { color: var(--ink); }
   line-height: var(--leading-normal);
   border-bottom: 1px solid transparent;
 }
+/* The service banner spans the window under the bar: a full-width band whose
+ * fill and rule say "warning", no side stripe. */
 .banner-warn {
   background: var(--warning-bg);
   border-color: var(--warning-line);
-  border-left: 4px solid var(--warning);
   color: var(--ink);
 }
 .banner-info {
   background: var(--info-bg);
   border: 1px solid var(--info-line);
-  border-left: 4px solid var(--brand-600);
   border-radius: var(--radius-sm);
   margin: var(--banner-mt) var(--space-6) 0;
   color: var(--ink);
 }
 /* Two states of the same banner slot, told apart at a glance: a cut result is
  * a warning (you are missing rows), a complete one is a confirmation. Reusing
- * .banner-info keeps the geometry identical so the grid never shifts. */
+ * .banner-info keeps the geometry identical so the grid never shifts. The
+ * warning's edge is the warning ink at full strength so it reads from across
+ * the room without a stripe. */
 .banner-cut {
   background: var(--warning-bg);
-  border-color: var(--warning-line);
-  border-left-color: var(--warning);
+  border-color: var(--warning);
 }
 .banner-full {
   background: var(--ok-bg);
   border-color: var(--ok-line);
-  border-left-color: var(--brand-600);
 }
 
 /* ==========================================================================
@@ -554,11 +583,12 @@ body.role-instructor .brand-text { color: var(--ink); }
   background: var(--surface-sunken);
 }
 
+/* White panels on the green-tinted paper, a hairline edge and no shadow: the
+ * edge already separates them, a shadow on top of it said the same twice. */
 .panel {
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: var(--radius-md);
-  box-shadow: var(--shadow-sm);
   display: flex;
   flex-direction: column;
   min-height: 0;
@@ -652,24 +682,18 @@ body.results-max .pane-sep { display: none; }
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-7) var(--space-6) var(--space-4);
+  padding: var(--space-7) var(--space-6) var(--space-5);
 }
-.section-kicker {
-  display: block;
-  margin-bottom: var(--space-1);
-  color: var(--brand-600);
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wider);
-  line-height: var(--leading-tight);
-  text-transform: uppercase;
-}
+/* The heading opens the column on its own: the subject in its first words,
+ * no label above it announcing it. */
 .sidebar-title {
   font-size: var(--text-lg);
+  line-height: var(--leading-tight);
   margin: 0;
-  letter-spacing: normal;
   font-weight: var(--weight-bold);
   color: var(--ink);
+  overflow-wrap: break-word;
+  min-width: 0;
 }
 .sidebar-title .count {
   color: var(--brand-700);
@@ -696,7 +720,7 @@ body.results-max .pane-sep { display: none; }
   top: 50%;
   width: 11px;
   height: 11px;
-  margin-top: -7px;
+  margin-top: calc(-1 * var(--space-3));
   border: 1.5px solid var(--ink-muted);
   border-radius: 50%;
   pointer-events: none;
@@ -795,6 +819,8 @@ body.results-max .pane-sep { display: none; }
 }
 .tbl-cols {
   margin-left: auto;
+  display: inline-flex;
+  gap: var(--space-4);
   font-size: var(--text-xs);
   color: var(--ink-muted);
   white-space: nowrap;
@@ -836,15 +862,42 @@ body.results-max .pane-sep { display: none; }
   border-left: 2px solid var(--line-soft);
   margin-left: var(--space-6);
 }
+/* Two tiers: the name (never squeezed) and its type, then the key tags under
+ * them. A PK is NOT NULL by definition, so it does not say so twice. */
 .col {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: baseline;
-  gap: var(--space-3);
+  align-content: center;
+  gap: var(--space-1) var(--space-4);
   min-height: var(--touch-target);
   padding: var(--space-2) var(--space-3);
   border-radius: var(--radius-xs);
   cursor: pointer;
   font-size: var(--text-sm);
+}
+.col-tags {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+}
+/* NOT NULL is a constraint, not a key: it reads as quiet SQL beside the
+ * PK/FK chips, so a column that is only NOT NULL stays one light line. */
+.col-tags .tag-nn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font-family: var(--font-mono);
+  color: var(--ink-muted);
+}
+.col-ref {
+  font-family: var(--font-mono);
+  font-size: var(--text-2xs);
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+  min-width: 0;
 }
 .col:hover { background: var(--surface-hover); }
 .col-name {
@@ -855,7 +908,6 @@ body.results-max .pane-sep { display: none; }
 }
 .col.is-pk .col-name { font-weight: var(--weight-bold); }
 .col-type {
-  margin-left: auto;
   font-size: var(--text-2xs);
   color: var(--ink-muted);
   font-family: var(--font-mono);
@@ -864,7 +916,6 @@ body.results-max .pane-sep { display: none; }
 
 .tag {
   font-size: var(--text-2xs);
-  letter-spacing: .04em;
   padding: var(--space-1) var(--space-3);
   border-radius: var(--radius-xs);
   background: var(--surface-muted);
@@ -872,11 +923,20 @@ body.results-max .pane-sep { display: none; }
   color: var(--ink-muted);
   white-space: nowrap;
 }
+/* PK and FK: the same two glyphs, in the same two inks, as the ERD tab
+ * (--erd-pk, --erd-fk). Learn them once in the catalog, read them on the map. */
 .tag-pk {
-  background: var(--warning-bg);
-  border-color: var(--warning-line);
-  color: var(--warning);
+  background: var(--brand-50);
+  border-color: var(--brand-300);
+  color: var(--erd-pk);
   font-weight: var(--weight-bold);
+}
+.tag-fk {
+  background: var(--surface);
+  border-color: var(--line-strong);
+  color: var(--erd-fk);
+  font-weight: var(--weight-bold);
+  cursor: help;
 }
 /* "nothing was cut", stated in the meta row. Its loud counterpart, the
  * truncation warning, stays a full-width banner — see results.js §9.5. */
@@ -916,18 +976,20 @@ body.results-max .pane-sep { display: none; }
   min-height: var(--toolbar-h);
   padding: var(--space-4) var(--space-6);
   border-bottom: 1px solid var(--line-soft);
-  background: var(--surface-brand);
+  background: var(--surface);
   flex: 0 0 auto;
   flex-wrap: wrap;
   row-gap: var(--space-3);
 }
+/* The panel's own name, as a heading, where the label-over-title pair was. */
 .panel-context {
-  display: grid;
-  min-width: 160px;
-  margin-right: var(--space-4);
+  margin: 0 var(--space-4) 0 0;
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
   line-height: var(--leading-tight);
+  color: var(--ink);
+  white-space: nowrap;
 }
-.panel-context strong { font-size: var(--text-base); }
 .spacer { flex: 1 1 auto; }
 
 /* -------------------------------------------------------------------- btns */
@@ -950,21 +1012,24 @@ body.results-max .pane-sep { display: none; }
 }
 .btn:hover { background: var(--surface-hover); border-color: var(--line-strong); }
 .btn:active { background: var(--surface-muted); }
-.btn:disabled { opacity: .5; cursor: default; }
+/* Disabled on three channels (opacity, the cursor, and the native `disabled`
+ * attribute the selector itself requires), so it never rests on fade alone. */
+.btn:disabled { opacity: .55; cursor: not-allowed; }
 .btn:disabled:hover { background: var(--surface); border-color: var(--line); }
 
+/* The one filled control on any screen. */
 .btn-primary {
   background: var(--brand-600);
   border-color: var(--brand-600);
   color: var(--on-brand);
   font-weight: var(--weight-bold);
-  box-shadow: var(--shadow-xs);
 }
 .btn-primary:hover { background: var(--brand-700); border-color: var(--brand-700); }
 .btn-primary:active { background: var(--brand-800); border-color: var(--brand-800); }
 .btn-primary:disabled:hover { background: var(--brand-600); border-color: var(--brand-600); }
 
 .btn-ghost { background: transparent; }
+.btn-ghost:disabled:hover { background: transparent; }
 .btn-sm { min-height: var(--control-h-sm); font-size: var(--text-sm); padding: var(--space-3) var(--space-5); }
 
 kbd {
@@ -1003,6 +1068,11 @@ kbd {
   box-shadow: none;
 }
 
+/* The server's two limits, beside the row-cap field they explain. Same pill
+ * voice as the status facts in the bar: plain text parted by a hairline. */
+.limits { display: inline-flex; align-items: center; flex-wrap: wrap; row-gap: var(--space-2); }
+.limits .pill:first-child { padding-left: 0; }
+
 .run-status {
   font-size: var(--text-sm);
   color: var(--ink-muted);
@@ -1028,7 +1098,8 @@ kbd {
   overflow: hidden;
 }
 .load-progress::-webkit-progress-bar { background: var(--surface-sunken); }
-.load-progress::-webkit-progress-value { background: var(--brand-600); transition: width var(--duration-fast) linear; }
+/* No transition on the bar's width: progress is a fact, set as it arrives. */
+.load-progress::-webkit-progress-value { background: var(--brand-600); }
 .load-progress::-moz-progress-bar { background: var(--brand-600); }
 /* Khong co `value` = chua biet tong dung luong. Cho mot vach chay qua lai de no
    khac han voi "0%", vi hai trang thai do noi hai dieu khac nhau. */
@@ -1042,16 +1113,19 @@ kbd {
   .load-progress:not([value]) { animation: none; background: var(--brand-100); }
 }
 
+/* Two tips, two spans with air between them, instead of one line stitched
+ * together with a middle dot. */
 .hint-line {
   display: var(--hint-line-display);
   margin: 0;
-  padding: var(--space-3) var(--space-5);
+  padding: var(--space-3) var(--space-6);
   font-size: var(--text-xs);
   color: var(--ink-muted);
   border-top: 1px solid var(--line-soft);
-  background: var(--surface-sunken);
+  background: var(--surface);
   flex: 0 0 auto;
 }
+.hint-line > span + span { margin-left: var(--space-9); }
 /* The base kbd chip is translucent white, made for the green Run button; on
    this sunken strip it vanishes. Give it a solid fill and an edge here. */
 .hint-line kbd {
@@ -1132,7 +1206,7 @@ li.CodeMirror-hint-active .hint-name { color: var(--on-brand); }
   display: flex;
   align-items: stretch;
   border-bottom: 1px solid var(--line);
-  background: var(--surface-brand);
+  background: var(--surface);
   flex: 0 0 auto;
 }
 .tabs {
@@ -1171,26 +1245,29 @@ body.results-max .editor-panel { display: none; }
 body.results-max .schema-toggle { display: none !important; }
 body.results-max .layout { grid-template-columns: minmax(0, 1fr); }
 body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
+/* Underline tabs. Every tab carries the same weight so the row never shifts
+ * when the selection moves; the selected one changes ink and gains the rule. */
 .tab {
   font-family: var(--font-sans);
   font-size: var(--text-md);
+  font-weight: var(--weight-medium);
   background: none;
   border: 0;
   min-height: var(--tab-h);
-  padding: var(--space-4) var(--space-5);
+  padding: var(--space-4) var(--space-6);
   cursor: pointer;
   color: var(--ink-muted);
   border-bottom: 2px solid transparent;
+  white-space: nowrap;
   transition: color var(--duration-fast) var(--ease),
               border-color var(--duration-fast) var(--ease);
 }
-.tab:hover { color: var(--ink); }
+.tab:hover { color: var(--ink); border-bottom-color: var(--line-strong); }
+.tab:active { color: var(--brand-800); }
+.tab:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--focus-offset)); }
 .tab.is-active {
   color: var(--brand-700);
   border-bottom-color: var(--brand-600);
-  font-weight: var(--weight-bold);
-  background: var(--surface);
-  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
 }
 
 .tabpanel {
@@ -1280,7 +1357,7 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   position: sticky;
   top: 0;
   z-index: 2;
-  background: var(--surface-brand);
+  background: var(--surface-code);
   border-bottom: 1px solid var(--line-strong);
   display: table-cell;
   padding: var(--colhead-pad-y) var(--space-5);
@@ -1301,8 +1378,6 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   font-weight: var(--weight-normal);
   display: var(--colhead-type-display);
   margin-left: var(--colhead-type-gap);
-  text-transform: uppercase;
-  letter-spacing: .03em;
 }
 
 .grid td { font-family: var(--font-mono); }
@@ -1343,7 +1418,6 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   color: var(--value-null);
   font-style: italic;
   font-size: var(--text-xs);
-  letter-spacing: .04em;
   text-decoration: underline dotted var(--line-strong);
   text-underline-offset: 3px;
 }
@@ -1420,12 +1494,12 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
    ERROR BOX
    ========================================================================== */
 
+/* The whole box says "error": danger fill, the danger ink as its edge. */
 .errorbox {
   margin: var(--space-5) var(--space-6) 0;
   padding: var(--space-6) var(--space-6);
   background: var(--danger-bg);
-  border: 1px solid var(--danger-line);
-  border-left: 4px solid var(--danger);
+  border: 1px solid var(--danger);
   border-radius: var(--radius-sm);
   flex: 0 0 auto;
 }
@@ -1492,25 +1566,19 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   min-width: 0;
 }
 
+/* History is a list, not a stack of cards: rows parted by hairlines, the row
+ * under the pointer tinted. A failed run is told by its red status badge
+ * (.pill-err, history.js) and red SQL, not by a stripe down the row. */
 .hist {
-  border: 1px solid var(--line);
-  border-left: 3px solid var(--brand-300);
-  border-radius: var(--radius-sm);
-  padding: var(--space-4) var(--space-5);
-  margin-bottom: var(--space-4);
+  border-bottom: 1px solid var(--line-soft);
+  padding: var(--space-5) var(--space-4);
   cursor: pointer;
   min-height: var(--touch-target);
-  background: var(--surface);
-  transition: border-color var(--duration-base) var(--ease),
-              box-shadow var(--duration-base) var(--ease);
+  border-radius: var(--radius-sm);
+  transition: background-color var(--duration-fast) var(--ease);
 }
-.hist:hover {
-  border-color: var(--brand-600);
-  border-left-color: var(--brand-600);
-  box-shadow: var(--shadow-sm);
-}
-.hist-err { border-left-color: var(--danger); }
-.hist-err:hover { border-left-color: var(--danger); border-color: var(--danger-line); }
+.hist:hover { background: var(--surface-hover); }
+.hist-err .hist-sql { color: var(--danger-ink); }
 .hist-meta {
   display: flex;
   align-items: center;
@@ -1581,25 +1649,35 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
    scroll horizontally, only .grid-wrap may.
    ========================================================================== */
 
-/* Health-pill ladder. app.js appends them most-important-first (server status,
- * table count, row cap, timeout, version), so dropping from the end always
- * keeps the ones a student needs to interpret a failed query. */
+/* Health ladder. app.js appends the facts most-important-first (server
+ * status, table count, row cap, timeout, version), so dropping from the end
+ * always keeps the ones a student needs to interpret a failed query. The bar
+ * now also holds the area tabs, so the ladder starts one step earlier. */
+/* Measured at 1440 with all five areas visible: brand, five tabs, one status
+ * fact and the session controls fill the bar. Each extra fact needs ~150px. */
+.health .pill:nth-child(n + 4) { display: none; }
+@media (max-width: 1759px) {
+  .health .pill:nth-child(n + 3) { display: none; }
+}
 @media (max-width: 1599px) {
-  .health .pill:nth-child(n + 5) { display: none; }
+  .health .pill:nth-child(n + 2) { display: none; }
 }
 
-@media (max-width: 1439px) {
-  .health .pill:nth-child(n + 4) { display: none; }
+/* Measured at 1280: the five areas need the wordmark's ~160px. The mark
+ * stays, and it is the same logo. */
+@media (max-width: 1365px) {
+  .brand-word { display: none; }
 }
 
+/* At 1279 and under the status fact and the user name go; the server state
+ * still reaches the student through #service-banner when it matters, and the
+ * role badge still says whose session this is. Narrower still, the areas
+ * scroll sideways inside .sections (a tab row scrolls, it never wraps). */
 @media (max-width: 1279px) {
   :root { --sidebar-w: 280px; }
-  .brand-text { display: none; }
-  .brand-sep { display: none; }
   .workspace { padding: var(--space-5) var(--space-6) var(--space-6); }
-  .topbar { gap: var(--space-5); padding-inline: var(--space-6); }
-  .health .pill:nth-child(n + 3) { display: none; }
-  .session-user { max-width: 120px; }
+  .topbar { gap: var(--space-5); padding-inline: var(--space-6) var(--space-5); }
+  .health, .session-user { display: none; }
 }
 
 .mart-panel { min-width: 0; }
@@ -1647,38 +1725,98 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   flex-direction: column;
   min-height: 0;
 }
-.progress-panel { gap: var(--space-7); padding: var(--space-7); overflow: auto; }
+/* Redesign 2026-11: one sheet of paper with a ruled stat row and a ruled
+ * ranking, instead of four icon cards over a stack of boxed rows. The width is
+ * capped: a ranking of names and three numbers is unreadable stretched across
+ * a 1920px window. */
+.progress-panel {
+  gap: var(--space-9);
+  padding: var(--space-9) var(--space-9) var(--space-11);
+  overflow: auto;
+  width: 100%;
+  max-width: 1040px;
+  margin-inline: auto;
+}
 .progress-head, .leaderboard-head { display: flex; align-items: center; justify-content: space-between; gap: var(--space-5); }
-.progress-title { margin: 0; font: var(--weight-bold) var(--text-xl)/var(--leading-tight) var(--font-serif); color: var(--ink); }
-.reward-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: var(--space-5); }
-.reward-card { display: grid; grid-template-columns: auto 1fr; column-gap: var(--space-4); align-items: center; padding: var(--space-6); border: 1px solid var(--line); border-radius: var(--radius-md); background: var(--surface-sunken); }
-.reward-card strong { font-size: var(--text-xl); color: var(--brand-700); }
-.reward-card span:last-child { grid-column: 2; color: var(--ink-muted); font-size: var(--text-xs); }
-.reward-icon { grid-row: span 2; width: var(--touch-target); height: var(--touch-target); display: grid; place-items: center; border-radius: var(--radius-md); background: var(--brand-100); color: var(--brand-700); }
-.reward-icon svg { width: 22px; height: 22px; }
-.leaderboard-block, .instructor-dashboard { border-top: 1px solid var(--line-soft); padding-top: var(--space-6); }
-.leaderboard-block h3, .instructor-dashboard h3 { margin: 0 0 var(--space-5); font-size: var(--text-base); color: var(--ink); }
-.leaderboard-list, .analytics-list { display: grid; gap: var(--space-3); }
-.leaderboard-row, .analytics-row { padding: var(--space-4) var(--space-5); border: 1px solid var(--line-soft); border-radius: var(--radius-sm); background: var(--surface); color: var(--ink-muted); font-size: var(--text-sm); }
-.leaderboard-row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto auto auto; gap: var(--space-5); align-items: center; }
-.leaderboard-row .rank { color: var(--brand-700); font-weight: var(--weight-bold); }
-.leaderboard-queries, .leaderboard-streak { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
-/* Dong cua chinh minh. Vien trai chu khong phai to nen: bang nay doc theo cot,
-   mot mang mau lam lech thang hang cua cac con so ben canh. */
-.leaderboard-row.is-me { border-color: var(--brand-600); box-shadow: inset 3px 0 0 var(--brand-600); }
-.leaderboard-row.is-me strong { color: var(--brand-700); }
-.leaderboard-metric { display: inline-flex; align-items: center; gap: var(--space-2); }
+.progress-title {
+  margin: 0;
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--ink);
+  overflow-wrap: break-word;
+  min-width: 0;
+}
+/* Four figures in a row, parted by vertical hairlines: no leading padding on
+ * the first, no trailing rule on the last. The figure is the content, the
+ * label sits under it a step smaller. */
+.reward-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  margin: 0;
+  padding-block: var(--space-7);
+  border-block: 1px solid var(--line);
+}
+.reward-card {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-2);
+  padding: 0 var(--space-9);
+  border-left: 1px solid var(--line);
+}
+.reward-card:first-child { padding-left: 0; border-left: 0; }
+.reward-card dt { color: var(--ink-muted); font-size: var(--text-sm); }
+.reward-card dd { margin: 0; }
+.reward-card strong {
+  font-size: var(--text-2xl);
+  font-weight: var(--weight-bold);
+  line-height: var(--leading-tight);
+  color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+.leaderboard-block h3, .instructor-dashboard h3 { margin: 0 0 var(--space-5); font-size: var(--text-lg); color: var(--ink); }
+.instructor-dashboard { border-top: 1px solid var(--line-soft); padding-top: var(--space-6); }
+.leaderboard-list { display: grid; border-top: 1px solid var(--line); }
+.analytics-list { display: grid; gap: var(--space-3); }
+.analytics-row { padding: var(--space-4) var(--space-5); border-bottom: 1px solid var(--line-soft); color: var(--ink-muted); font-size: var(--text-sm); }
+.leaderboard-row {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr) 96px 120px 120px;
+  gap: var(--space-5);
+  align-items: center;
+  min-height: var(--touch-target);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--ink-muted);
+  font-size: var(--text-sm);
+}
+.leaderboard-row strong { color: var(--ink); font-weight: var(--weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.leaderboard-row .rank { color: var(--ink); font-weight: var(--weight-bold); font-variant-numeric: tabular-nums; }
+.leaderboard-queries, .leaderboard-streak { color: var(--ink-muted); font-variant-numeric: tabular-nums; white-space: nowrap; text-align: right; }
+/* Dong cua chinh minh: mot nen nhat ca dong, ten va hang dam mau thuong hieu.
+   Khong vien trai: cot so ben canh van thang hang voi cac dong khac. */
+.leaderboard-row.is-me { background: var(--brand-50); }
+.leaderboard-row.is-me strong,
+.leaderboard-row.is-me .rank { color: var(--brand-700); font-weight: var(--weight-bold); }
+.leaderboard-metric { display: inline-flex; align-items: center; justify-content: flex-end; gap: var(--space-2); font-variant-numeric: tabular-nums; color: var(--ink); }
 .leaderboard-metric .inline-icon { width: 16px; height: 16px; color: var(--brand-600); }
 .analytics-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: var(--space-4); margin-bottom: var(--space-6); }
 .analytics-card { display: grid; gap: var(--space-2); padding: var(--space-5); border-radius: var(--radius-sm); background: var(--surface-muted); }
 .analytics-card strong { color: var(--brand-700); font-size: var(--text-lg); }
 .analytics-card span, .analytics-list h4 { color: var(--ink-muted); font-size: var(--text-xs); }
-@media (max-width: 900px) { .reward-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .analytics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) {
+  .reward-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: var(--space-7); }
+  /* Two per row: the third figure starts a new row, so it loses its rule. */
+  .reward-card:nth-child(3) { padding-left: 0; border-left: 0; }
+  .analytics-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .progress-panel { padding: var(--space-7) var(--space-6) var(--space-10); }
+}
 /* Hep thi ba con so xuong dong duoi ten, van giu thu tu doc: diem, query, chuoi. */
 @media (max-width: 600px) {
-  .reward-grid, .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-  .leaderboard-row { grid-template-columns: 24px minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
-  .leaderboard-row .leaderboard-metric, .leaderboard-queries, .leaderboard-streak { grid-column: 2; }
+  .analytics-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .reward-card { padding: 0 var(--space-6); }
+  .leaderboard-row { grid-template-columns: 32px minmax(0, 1fr); gap: var(--space-2) var(--space-4); }
+  .leaderboard-row .leaderboard-metric, .leaderboard-queries, .leaderboard-streak { grid-column: 2; justify-content: flex-start; text-align: left; }
 }
 
 /* ==========================================================================
@@ -1697,11 +1835,37 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
     padding-inline: var(--space-4);
   }
   .schema-toggle { display: inline-grid; }
-  /* "E2E DATA ANALYTICS" cannot wrap. Drop the secondary label rather than let
-     the brand push the session box off the bar; the word itself goes at 600px. */
-  .brand-sep, .brand-text, .health, .session-user { display: none; }
+  /* The area tabs need every pixel the bar has: the status facts and the
+     user name step out, the session controls stay. */
+  .brand-text, .health, .session-user { display: none; }
   .brand { min-width: 0; }
   .session-box { margin-left: auto; gap: var(--space-2); border-left: 0; padding-left: 0; }
+  /* One bar is a desktop idea. Here the areas take a second row of their own,
+     full width, so every area is visible instead of four hiding behind a
+     sideways scroll the student cannot see. */
+  .topbar {
+    height: auto;
+    flex-wrap: wrap;
+    row-gap: 0;
+    padding-top: var(--space-3);
+  }
+  .topbar > .sections-bar {
+    order: 10;
+    flex: 1 0 100%;
+    height: var(--tab-h);
+    margin-inline: calc(-1 * var(--space-4));
+    padding-inline: var(--space-2);
+    border-top: 1px solid var(--line-soft);
+    margin-top: var(--space-3);
+  }
+  /* The row scrolls: its right edge fades so a cut tab reads as "more this
+     way", not as the end of the list. app.js scrolls the selected area in. */
+  .sections {
+    mask-image: linear-gradient(to right, var(--ink) calc(100% - var(--space-10)), transparent);
+  }
+  /* The catalog drawer is narrow: the row count yields before the name does. */
+  .tbl-cols > span + span { display: none; }
+  .section-tab { padding-inline: var(--space-5); }
   .layout { grid-template-columns: minmax(0, 1fr); position: relative; }
   /* Sidebar la ngan keo o be ngang nay, khong con mep de keo. */
   .pane-sep { display: none; }
@@ -1720,7 +1884,9 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
     transform: translateX(-105%);
     transition: transform var(--duration-base) var(--ease);
   }
-  body.is-schema-open { overflow: hidden; }
+  /* `clip`, not `hidden`: same lock behind the drawer, without turning the
+     body into a scroll container that breaks sticky children. */
+  body.is-schema-open { overflow: clip; }
   body.is-schema-open .sidebar { transform: translateX(0); }
   .sidebar-close { display: inline-grid; }
   .schema-backdrop {
@@ -1741,7 +1907,7 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   .workspace { padding: var(--space-4); gap: var(--space-4); }
   .toolbar { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
   .toolbar .field { margin-left: auto; }
-  .num { width: 72px; }
+  .num { width: 92px; }
   .auth-input, .filter, .num, .CodeMirror { font-size: var(--text-lg); }
   .hint-line { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .tabs { gap: 0; padding-inline: var(--space-2); }
@@ -1763,18 +1929,14 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
    sandbox is a different place with different rules.
    ===================================================================== */
 
+/* Lives INSIDE .topbar since the 2026-11 redesign. It is the member of the
+ * bar allowed to shrink (min-width: 0), and it scrolls sideways inside itself
+ * when the areas do not fit, so it can never squeeze the session controls. */
 .sections-bar {
-  /* KHONG duoc co lai. #app la mot flex column va .layout mang flex: 1 1 auto,
-   * nen neu thanh nay de mac dinh (0 1 auto) thi .layout se ep no tu ~70px
-   * xuong con 13px - van "hien thi", van bam duoc, nhung khong doc duoc va
-   * khong ai nhan ra do la mot thanh dieu huong. Da xay ra dung nhu vay. */
-  flex: 0 0 auto;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  padding: 0 var(--space-6);
-  background: var(--surface);
-  border-bottom: 1px solid var(--line);
+  align-items: stretch;
 }
 .sections {
   flex: 1 1 auto;
@@ -1782,44 +1944,48 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
   align-self: stretch;
   display: flex;
   align-items: stretch;
-  gap: var(--space-1);
+  gap: var(--space-2);
   overflow-x: auto;
   scrollbar-width: none;
 }
 .sections::-webkit-scrollbar { display: none; }
 
+/* Same grammar as the result tabs one level down: an underline marks where
+ * you are. Name over a one-line fact (the table count) where there is one. */
 .section-tab {
   appearance: none;
   border: 0;
-  border-bottom: 3px solid transparent;
+  border-bottom: 2px solid transparent;
   background: transparent;
   color: var(--ink-muted);
   font-family: inherit;
   text-align: left;
-  padding: var(--space-4) var(--space-5);
+  padding: 0 var(--space-6);
   cursor: pointer;
   white-space: nowrap;
-  display: grid;
-  gap: var(--space-1);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0;
   transition: color var(--duration-fast) var(--ease),
               border-color var(--duration-fast) var(--ease),
               background-color var(--duration-fast) var(--ease);
 }
-.section-tab:hover:not(:disabled) { background: var(--surface-hover); color: var(--ink); }
+.section-tab:hover:not(:disabled) { color: var(--ink); border-bottom-color: var(--line-strong); }
+.section-tab:active:not(:disabled) { color: var(--brand-800); }
 .focus-toggle { width: var(--control-h-sm); height: var(--control-h-sm); }
 .section-tab:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--focus-offset)); }
 
 .section-tab-name {
-  font-size: var(--text-base);
-  font-weight: var(--weight-bold);
-  letter-spacing: var(--tracking-wide);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  line-height: var(--leading-tight);
 }
-.section-tab-sub { font-size: var(--text-xs); color: var(--ink-muted); }
+.section-tab-sub { font-size: var(--text-2xs); line-height: var(--leading-tight); color: var(--ink-muted); }
 
 .section-tab.is-active {
   color: var(--brand-700);
   border-bottom-color: var(--brand-600);
-  background: var(--surface-brand);
 }
 .section-tab.is-active .section-tab-sub { color: var(--ink-muted); }
 
@@ -1830,7 +1996,6 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 body.role-instructor .section-tab.is-active {
   border-bottom-color: var(--warning);
   color: var(--ink);
-  background: var(--warning-bg);
 }
 
 /* =====================================================================
@@ -1840,8 +2005,8 @@ body.role-instructor .section-tab.is-active {
    may chu, an no di la hoc vien khong biet vi sao query loi. Loi ra duy nhat
    con lai la .focus-float, nen no luon nam tren cung va khong bao gio an. */
 
-body.is-focus .topbar,
-body.is-focus .sections-bar { display: none; }
+/* The area tabs live inside .topbar now, so hiding the bar hides both. */
+body.is-focus .topbar { display: none; }
 
 .focus-float {
   position: fixed;
@@ -1951,14 +2116,17 @@ body.role-instructor .focus-float .icon-btn {
   font-size: var(--text-xs);
   line-height: var(--leading-normal);
   color: var(--ink-muted);
-  padding: var(--space-3) var(--space-4);
-  border-left: 3px solid var(--ok);
+  padding: var(--space-4) var(--space-5);
+  border: 1px solid var(--ok-line);
   background: var(--ok-bg);
-  border-radius: var(--radius-xs);
+  border-radius: var(--radius-sm);
 }
 .sandbox-privacy strong { color: var(--ink); }
 
 .sandbox-tables { display: grid; gap: var(--space-3); }
+/* "No file yet" is one line under the drop zone, not a 140px block: on a
+ * phone that block was what squeezed the results pane down to ~110px. */
+.sandbox-tables > .empty { min-height: 0; padding: var(--space-5) var(--space-4); }
 
 .sbtable {
   border: 1px solid var(--line);
@@ -2025,7 +2193,8 @@ body.role-instructor .focus-float .icon-btn {
   font-weight: var(--weight-medium);
 }
 .erd-source-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
-.erd-filter { width: 200px; min-height: var(--control-h-sm); }
+/* No magnifier here, so no room kept for one. */
+.erd-filter { width: 200px; min-height: var(--control-h-sm); padding-left: var(--space-5); }
 .erd-status { font-size: var(--text-sm); }
 .erd-zoom { display: inline-flex; align-items: center; gap: var(--space-2); }
 .erd-note { margin: var(--space-4) var(--space-5) 0; font-size: var(--text-sm); }
@@ -2095,6 +2264,10 @@ body.role-instructor .focus-float .icon-btn {
   fill: var(--ink-muted);
 }
 .erd-col { font-family: var(--font-mono); font-size: var(--text-xs); fill: var(--ink); }
+/* The SVG twin of .tag-fk / .tag-pk: same edge, fill and ink, so the chip a
+ * student learns in the catalog is the chip they read on the map. */
+.erd-chip { fill: var(--surface); stroke: var(--line-strong); stroke-width: 1; }
+.erd-chip.is-pk { fill: var(--brand-50); stroke: var(--brand-300); }
 .erd-key {
   font-family: var(--font-sans);
   font-size: var(--text-2xs);
@@ -2138,13 +2311,8 @@ body.role-instructor .focus-float .icon-btn {
 .erd-detail-sub { margin: var(--space-7) 0 var(--space-4); font-size: var(--text-md); }
 .erd-legend { list-style: none; margin: var(--space-5) 0; padding: 0; display: grid; gap: var(--space-4); }
 .erd-legend li { display: flex; align-items: center; gap: var(--space-5); color: var(--ink); }
+.erd-legend .tag { flex: 0 0 auto; }
 .erd-swatch { flex: 0 0 auto; width: 26px; position: relative; }
-.erd-swatch.is-pk::before, .erd-swatch.is-fk::before {
-  font-size: var(--text-2xs);
-  font-weight: var(--weight-bold);
-}
-.erd-swatch.is-pk::before { content: "PK"; color: var(--erd-pk); }
-.erd-swatch.is-fk::before { content: "FK"; color: var(--erd-fk); }
 .erd-swatch.is-edge { border-top: 2px solid var(--erd-edge); }
 .erd-swatch.is-inferred { border-top: 2px dashed var(--erd-edge); }
 .erd-warn { color: var(--warning); }
@@ -2154,14 +2322,13 @@ body.role-instructor .focus-float .icon-btn {
 .erd-cols, .erd-joins { list-style: none; margin: 0; padding: 0; }
 .erd-col-row {
   display: grid;
-  grid-template-columns: 26px minmax(0, 1fr) auto;
+  grid-template-columns: 30px minmax(0, 1fr) auto;
   gap: var(--space-4);
   align-items: baseline;
   padding: var(--space-2) 0;
   border-bottom: 1px solid var(--line-soft);
 }
-.erd-col-key { font-size: var(--text-2xs); font-weight: var(--weight-bold); color: var(--erd-fk); }
-.erd-col-key.is-pk { color: var(--erd-pk); }
+.erd-col-key { display: flex; }
 .erd-col-name { font-family: var(--font-mono); font-size: var(--text-sm); overflow-wrap: anywhere; min-width: 0; }
 .erd-col-type { font-size: var(--text-2xs); color: var(--ink-muted); }
 .erd-join {
@@ -2172,10 +2339,12 @@ body.role-instructor .focus-float .icon-btn {
   padding: var(--space-4) 0;
   border-bottom: 1px solid var(--line-soft);
 }
+/* Breaks at the spaces of the SQL (before ON, around =), never inside an
+ * identifier: a split "product_version_i/d" reads as two names. */
 .erd-join-sql {
   font-family: var(--font-mono);
   font-size: var(--text-xs);
-  overflow-wrap: anywhere;
+  overflow-wrap: break-word;
   min-width: 0;
   grid-column: 1;
 }
@@ -2205,7 +2374,12 @@ body.role-instructor .focus-float .icon-btn {
 @media (max-width: 900px) {
   .erd-body { grid-template-columns: minmax(0, 1fr); grid-template-rows: minmax(280px, 1fr) auto; }
   .erd-detail { border-left: 0; border-top: 1px solid var(--line-soft); max-height: 40vh; }
-  .erd-filter { width: 100%; order: 3; }
+  /* Two rows, not three: the source toggle, then search and zoom sharing one. */
+  .erd-tools { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
+  .erd-source { flex: 1 0 100%; }
+  .erd-source-btn { flex: 1 1 0; }
+  .erd-status, .erd-tools > .spacer { display: none; }
+  .erd-filter { width: auto; flex: 1 1 120px; }
 }
 @media (prefers-reduced-motion: reduce) {
   .erd-edge, .erd-node { transition: none; }

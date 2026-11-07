@@ -3,7 +3,8 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>E2E Data Analytics — Bảng điều khiển SQL học viên</title>
+<title>E2E Data Analytics: Bảng điều khiển SQL học viên</title>
+<meta name="description" content="Nơi học viên eDA viết SQL trên dữ liệu ngân hàng và chuỗi cung ứng, xem sơ đồ quan hệ giữa các bảng và theo dõi tiến độ luyện tập." />
 <meta name="color-scheme" content="light" />
 <!-- Favicon is the real brand mark, served from web/assets. No CDN, no data-URI
      placeholder: the tab icon should be the same logo as the one on screen. -->
@@ -84,7 +85,7 @@
       <button id="login-submit" class="btn btn-primary auth-submit" type="submit">Đăng nhập</button>
 
       <p class="auth-foot">
-        Dùng tài khoản do giảng viên cấp. Quên mật khẩu thì liên hệ giảng viên —
+        Dùng tài khoản do giảng viên cấp. Quên mật khẩu thì liên hệ giảng viên:
         giao diện này không tự đặt lại được.
       </p>
     </form>
@@ -137,26 +138,20 @@
 
 <a class="skip-link" href="#main-workspace">Bỏ qua điều hướng, đến vùng làm việc</a>
 
+<!-- ===================== ONE BAR =====================
+     Redesign 2026-11: the brand, the areas, the server status and the session
+     share one 56px bar instead of two stacked ones (64px + ~70px), and the
+     rows they gave back go to the result grid. Every id, role and data-*
+     hook below is the one app.js already reads; only their parent changed. -->
 <header class="topbar">
   <button id="open-schema" class="icon-btn schema-toggle" type="button" aria-label="Mở danh sách bảng" aria-controls="schema-sidebar" aria-expanded="false">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
   </button>
   <div class="brand">
     <img class="brand-mark" src="assets/logo-mark.png" alt="" width="256" height="249" aria-hidden="true" />
-    <span class="brand-word">E2E DATA ANALYTICS</span>
-    <span class="brand-sep" aria-hidden="true"></span>
+    <span class="brand-word">E2E Data Analytics</span>
     <span class="brand-text"><strong>SQL Workspace</strong><small>Thực hành dữ liệu ngân hàng</small></span>
   </div>
-  <div id="health" class="health" aria-live="polite">
-    <span class="pill pill-muted">Đang kết nối…</span>
-  </div>
-  <div id="session-box" class="session-box" hidden>
-    <span id="session-role" class="role-badge"></span>
-    <span id="session-user" class="session-user"></span>
-    <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
-    <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
-  </div>
-</header>
 
 <!-- ===================== SECTIONS =====================
      Three top-level areas, not a dataset dropdown. The first two are the same
@@ -203,11 +198,22 @@
     <span class="section-tab-name">Bảng xếp hạng</span>
   </button>
 </nav>
-<button id="focus-toggle" class="icon-btn focus-toggle" type="button" aria-pressed="false"
-        aria-label="Phóng to khu vực đang mở" title="Phóng to khu vực đang mở (Esc để thoát)">
-  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
-</button>
 </div>
+
+  <div id="health" class="health" aria-live="polite">
+    <span class="pill pill-muted">Đang kết nối…</span>
+  </div>
+  <div id="session-box" class="session-box" hidden>
+    <span id="session-role" class="role-badge"></span>
+    <span id="session-user" class="session-user"></span>
+    <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
+    <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
+  </div>
+  <button id="focus-toggle" class="icon-btn focus-toggle" type="button" aria-pressed="false"
+          aria-label="Phóng to khu vực đang mở" title="Phóng to khu vực đang mở (Esc để thoát)">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
+  </button>
+</header>
 
 <!-- Che do phong to an ca thanh tieu de lan thanh tab, nen loi ra phai nam o
      day, noi khong bao gio bi an cung. #focus-schema thay cho nut mo danh sach
@@ -226,14 +232,13 @@
 <div id="service-banner" class="banner banner-warn" hidden></div>
 
 <main id="main-workspace" class="layout" tabindex="-1">
-  <h1 class="sr-only">Không gian thực hành SQL — E2E Data Analytics</h1>
+  <h1 class="sr-only">Không gian thực hành SQL, E2E Data Analytics</h1>
 
   <!-- ===================== SIDEBAR: schema explorer ===================== -->
   <div id="schema-backdrop" class="schema-backdrop" hidden></div>
   <aside id="schema-sidebar" class="sidebar" aria-label="Danh sách bảng">
     <div class="sidebar-head">
       <div>
-        <span class="section-kicker">Khám phá dữ liệu</span>
         <h2 class="sidebar-title">Danh mục bảng <span id="table-count" class="count"></span></h2>
       </div>
       <button id="refresh-schema" class="btn btn-ghost btn-sm" type="button" title="Tải lại danh sách từ máy chủ">
@@ -272,10 +277,7 @@
 
     <div class="editor-panel panel">
       <div class="toolbar">
-        <div class="panel-context">
-          <span class="section-kicker">Trình soạn thảo</span>
-          <strong>Viết truy vấn SQL</strong>
-        </div>
+        <h2 class="panel-context">Viết truy vấn SQL</h2>
         <button id="run" class="btn btn-primary" type="button">
           Chạy <kbd id="run-kbd">Ctrl+Enter</kbd>
         </button>
@@ -284,14 +286,15 @@
           Số dòng tối đa
           <input id="max-rows" class="num" type="number" min="1" step="50" />
         </label>
+        <span id="limits" class="limits"></span>
         <span class="spacer"></span>
         <span id="run-status" class="run-status"></span>
       </div>
       <label class="sr-only" for="sql">Câu truy vấn SQL</label>
       <textarea id="sql"></textarea>
       <p class="hint-line">
-        Mẹo: bôi đen một đoạn rồi nhấn Ctrl/Cmd + Enter để chỉ chạy đoạn đó ·
-        Ctrl + Space để gợi ý tên bảng/cột.
+        <span>Mẹo: bôi đen một đoạn rồi nhấn Ctrl/Cmd + Enter để chỉ chạy đoạn đó.</span>
+        <span>Ctrl + Space để gợi ý tên bảng/cột.</span>
       </p>
     </div>
 
@@ -414,12 +417,15 @@
       <div><h2 class="progress-title">Luyện tập hôm nay</h2></div>
       <button id="progress-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button>
     </div>
-    <div class="reward-grid">
-      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" /></svg></span><strong id="reward-stars">0</strong><span>Điểm sao</span></div>
-      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m4 8 4-4h8l4 4-8 12L4 8Zm0 0h16M8 4l4 16 4-16" /></svg></span><strong id="reward-diamonds">0</strong><span>Kim cương</span></div>
-      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 3.5c.6 3.2-1.8 4.5-1.8 7.1 0 1.4.9 2.4 2.1 2.4 2.2 0 3.1-2.7 2.5-5.2 2.7 2 4.2 4.5 4.2 7.1A8.5 8.5 0 0 1 3.5 15c0-4.1 2.7-7.7 6.4-10-.1 2.7.9 4.2 2.1 4.8.3-2.7.4-4.3 1.5-6.3Z" /></svg></span><strong id="reward-streak">0</strong><span>Ngày liên tiếp</span></div>
-      <div class="reward-card"><span class="reward-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h14v16H5zM8 8h8M8 12h5M8 16h7" /></svg></span><strong id="reward-today">0</strong><span>Query hôm nay</span></div>
-    </div>
+    <!-- Bon con so cua chinh nguoi xem, mot hang, ngan bang vach mo: con so lon
+         la noi dung, nhan nho ben duoi. Khong o icon (gate 3): bon icon trang
+         tri cu da bo, id cua tung con so giu nguyen cho app.js. -->
+    <dl class="reward-grid">
+      <div class="reward-card"><dt>Điểm sao</dt><dd><strong id="reward-stars">0</strong></dd></div>
+      <div class="reward-card"><dt>Kim cương</dt><dd><strong id="reward-diamonds">0</strong></dd></div>
+      <div class="reward-card"><dt>Ngày liên tiếp</dt><dd><strong id="reward-streak">0</strong></dd></div>
+      <div class="reward-card"><dt>Query hôm nay</dt><dd><strong id="reward-today">0</strong></dd></div>
+    </dl>
     <section class="leaderboard-block">
       <div class="leaderboard-head"><h3>Bảng xếp hạng</h3><span id="leaderboard-status" class="muted" role="status" aria-live="polite"></span></div>
       <div id="leaderboard-list" class="leaderboard-list"><p class="empty">Đang tải…</p></div>
@@ -432,7 +438,6 @@
   <div class="sandbox-left">
     <div class="sidebar-head">
       <div>
-        <span class="section-kicker">Dữ liệu của bạn</span>
         <h2 class="sidebar-title">File đã nạp <span id="sandbox-count" class="count"></span></h2>
       </div>
       <button id="sandbox-reset" class="btn btn-ghost btn-sm" type="button" hidden>Xoá hết</button>
@@ -444,7 +449,7 @@
         <path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
       </svg>
       <p class="dropzone-lead">Kéo thả file vào đây</p>
-      <p class="dropzone-hint">hoặc bấm để chọn — CSV, TSV, Parquet, JSON</p>
+      <p class="dropzone-hint">hoặc bấm để chọn: CSV, TSV, Parquet, JSON</p>
       <input id="sandbox-file" type="file" multiple hidden
              accept=".csv,.tsv,.tab,.txt,.parquet,.pq,.json,.ndjson,.jsonl" />
     </div>
@@ -477,8 +482,8 @@
       <textarea id="sandbox-sql" spellcheck="false"
                 placeholder="Nạp một file rồi gõ SELECT ở đây…"></textarea>
       <p class="hint-line">
-        Mẹo: bôi đen một đoạn rồi nhấn <kbd id="sandbox-kbd">Ctrl+Enter</kbd> để chỉ chạy đoạn đó ·
-        Ctrl + Space để gợi ý tên bảng/cột của bạn.
+        <span>Mẹo: bôi đen một đoạn rồi nhấn <kbd id="sandbox-kbd">Ctrl+Enter</kbd> để chỉ chạy đoạn đó.</span>
+        <span>Ctrl + Space để gợi ý tên bảng/cột của bạn.</span>
       </p>
     </div>
 

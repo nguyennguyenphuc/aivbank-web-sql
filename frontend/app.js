@@ -444,8 +444,14 @@ async function loadHealth() {
     const tablePill = pill(`${h.table_count} bảng`, 'pill-muted');
     tablePill.id = 'health-tables';
     box.appendChild(tablePill);
-    box.appendChild(pill(`tối đa ${Number(h.max_rows).toLocaleString('en-US')} dòng`, 'pill-muted'));
-    box.appendChild(pill(`giới hạn ${h.query_timeout_s}s / truy vấn`, 'pill-muted'));
+    // Hai gioi han nam canh o "So dong toi da" (redesign 2026-11), khong o thanh
+    // tren: do la noi hoc vien dang nghi toi gioi han, va thanh tren khong con
+    // du cho cho ca nam su kien o moi be ngang. Cung chu, cung so.
+    const limits = $('limits');
+    limits.replaceChildren(
+      pill(`tối đa ${Number(h.max_rows).toLocaleString('en-US')} dòng`, 'pill-muted'),
+      pill(`giới hạn ${h.query_timeout_s}s / truy vấn`, 'pill-muted'),
+    );
     box.appendChild(pill(`v${h.version}`, 'pill-muted'));
 
     if (!healthy) {
@@ -656,6 +662,7 @@ function wipeSessionState() {
   cm.setValue('');
   $('run-status').textContent = '';
   $('health').innerHTML = '';
+  $('limits').replaceChildren();
   $('session-box').hidden = true;
   $('session-user').textContent = '';
   $('session-role').textContent = '';
@@ -908,6 +915,8 @@ function selectSection(name) {
     b.setAttribute('aria-selected', on ? 'true' : 'false');
     b.tabIndex = on ? 0 : -1;
   }
+  // Tren man hep hang khu vuc cuon ngang: khu vuc dang mo phai nam trong tam nhin.
+  target.scrollIntoView({ block: 'nearest', inline: 'nearest' });
 
   const inSandbox = name === 'sandbox';
   const inBoard = name === 'leaderboard';

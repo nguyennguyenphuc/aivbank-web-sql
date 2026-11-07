@@ -15,6 +15,9 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
   let schema = null;
   const expanded = new Set();
   const rowCounts = new Map();
+  /** "bang.cot" (chu thuong) -> "bang_dich.cot_dich", tu GET /schema/relationships.
+   *  Chi de gan nhan FK; thieu no (may chu cu, loi mang) thi danh muc van du. */
+  let fkRefs = new Map();
 
   filterEl.addEventListener('input', render);
   refreshBtn.addEventListener('click', () => load(true));
@@ -26,12 +29,22 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
     schema = null;
     expanded.clear();
     rowCounts.clear();
+    fkRefs = new Map();
     countEl.textContent = '';
     // `empty-loading` is presentation only: it swaps the empty-state glyph for
     // a "waiting" one. The text and the control flow are unchanged.
     listEl.innerHTML = '<p class="empty empty-loading">Đang tải danh sách bảng…</p>';
     try {
-      const data = await api.schema();
+      // Hai cau hoi song song; cau thu hai khong bao gio lam hong cau thu nhat.
+      const [data, rel] = await Promise.all([
+        api.schema(),
+        api.relationships().catch(() => null),
+      ]);
+      for (const r of (rel && rel.relationships) || []) {
+        (r.from_columns || []).forEach((c, i) => {
+          fkRefs.set(`${r.from_table}.${c}`.toLowerCase(), `${r.to_table}.${(r.to_columns || [])[i] || ''}`);
+        });
+      }
       const tables = (data.tables || []).map((t) => ({
         name: t.name,
         columns: t.columns || [],
@@ -89,8 +102,12 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
       // of the list — this adds a tooltip, not a second source of names.
       head.title = table.name;
       const rc = rowCounts.get(table.name);
-      head.querySelector('.tbl-cols').textContent =
-        rc === undefined ? `${table.columns.length} cột` : `${table.columns.length} cột · ${rc.toLocaleString('en-US')} dòng`;
+      // Hai con so la hai o rieng, khong noi bang dau cham giua (redesign 2026-11).
+      const meta = head.querySelector('.tbl-cols');
+      meta.appendChild(document.createElement('span')).textContent = `${table.columns.length} cột`;
+      if (rc !== undefined) {
+        meta.appendChild(document.createElement('span')).textContent = `${rc.toLocaleString('en-US')} dòng`;
+      }
       head.addEventListener('click', () => toggle(table));
       item.appendChild(head);
 
@@ -119,25 +136,46 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
           const ty = document.createElement('span');
           ty.className = 'col-type';
           ty.textContent = c.type;
+          // Hai tang (redesign 2026-11): ten cot va kieu o tren, cac nhan o
+          // duoi. Mot hang thi PK/FK/NOT NULL an mat ten cot, ma ten cot moi la
+          // thu hoc vien can doc.
           li.appendChild(nm);
+          li.appendChild(ty);
+          const tags = document.createElement('span');
+          tags.className = 'col-tags';
           if (c.primary_key) {
             const pk = document.createElement('span');
             pk.className = 'tag tag-pk';
             pk.textContent = 'PK';
-            li.appendChild(pk);
+            tags.appendChild(pk);
           }
-          if (c.nullable === false) {
+          // Cung ky hieu voi tab So do ERD: thay FK o day la biet cot nay JOIN
+          // duoc sang bang nao, khong phai mo so do moi biet.
+          const ref = fkRefs.get(`${table.name}.${c.name}`.toLowerCase());
+          if (ref) {
+            const fk = document.createElement('span');
+            fk.className = 'tag tag-fk';
+            fk.textContent = 'FK';
+            fk.title = `Khoá ngoại, trỏ tới ${ref}`;
+            tags.appendChild(fk);
+            const target = document.createElement('span');
+            target.className = 'col-ref';
+            target.textContent = ref.split('.')[0];
+            tags.appendChild(target);
+            li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo. Khoá ngoại, trỏ tới ${ref}`);
+          }
+          if (c.nullable === false && !c.primary_key) {
             const nn = document.createElement('span');
-            nn.className = 'tag';
+            nn.className = 'tag tag-nn';
             nn.textContent = 'NOT NULL';
-            li.appendChild(nn);
+            tags.appendChild(nn);
           }
-          li.appendChild(ty);
+          if (tags.childNodes.length) li.appendChild(tags);
           li.title = 'Bấm để chèn tên cột';
           li.addEventListener('click', () => onInsert(c.name));
           li.setAttribute('role', 'button');
           li.tabIndex = 0;
-          li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo`);
+          if (!li.hasAttribute('aria-label')) li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo`);
           li.addEventListener('keydown', (event) => {
             if (event.key !== 'Enter' && event.key !== ' ') return;
             event.preventDefault();
@@ -190,6 +228,7 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
     schema = null;
     expanded.clear();
     rowCounts.clear();
+    fkRefs = new Map();
     filterEl.value = '';
     countEl.textContent = '';
     listEl.innerHTML = '';

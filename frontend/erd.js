@@ -449,7 +449,12 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       const isFk = t.fkCols.has(c.name.toLowerCase());
       const key = c.pk ? 'PK' : isFk ? 'FK' : '';
       if (key) {
-        const k = el('text', { class: 'erd-key' + (c.pk ? ' is-pk' : ''), x: 12, y }, g);
+        // Cung chiec the voi danh muc bang (.tag-pk / .tag-fk): mot o vien, chu dam.
+        el('rect', {
+          class: 'erd-chip' + (c.pk ? ' is-pk' : ''),
+          x: 8, y: y - 11, width: 24, height: 14, rx: 3,
+        }, g);
+        const k = el('text', { class: 'erd-key' + (c.pk ? ' is-pk' : ''), x: 20, y, 'text-anchor': 'middle' }, g);
         k.textContent = key;
       }
       const typeChars = Math.min(12, (c.type || '').length);
@@ -537,16 +542,16 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       const intro = h('div', 'erd-intro');
       intro.appendChild(h('h3', 'erd-detail-title', 'Đọc sơ đồ'));
       const ul = h('ul', 'erd-legend');
-      const li = (cls, text) => {
+      const li = (cls, text, glyph = '') => {
         const item = h('li');
-        item.appendChild(h('span', `erd-swatch ${cls}`));
+        item.appendChild(h('span', cls, glyph));
         item.appendChild(h('span', '', text));
         ul.appendChild(item);
       };
-      li('is-pk', 'PK: khoá chính, mỗi dòng một giá trị riêng');
-      li('is-fk', 'FK: khoá ngoại, trỏ tới khoá chính của bảng bên trái');
-      li('is-edge', 'Nét liền: quan hệ database khai báo');
-      if (model.edges.some((e) => e.inferred)) li('is-inferred', 'Nét đứt: quan hệ suy ra từ tên cột');
+      li('tag tag-pk', 'khoá chính, mỗi dòng một giá trị riêng', 'PK');
+      li('tag tag-fk', 'khoá ngoại, trỏ tới khoá chính của bảng bên trái', 'FK');
+      li('erd-swatch is-edge', 'Nét liền: quan hệ database khai báo');
+      if (model.edges.some((e) => e.inferred)) li('erd-swatch is-inferred', 'Nét đứt: quan hệ suy ra từ tên cột');
       intro.appendChild(ul);
       intro.appendChild(h('p', 'muted', 'Bấm một bảng để xem đủ cột và câu JOIN tới các bảng nối với nó.'));
       if (!model.edges.length) {
@@ -586,7 +591,9 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
     for (const c of t.columns) {
       const li = h('li', 'erd-col-row');
       const key = c.pk ? 'PK' : t.fkCols.has(c.name.toLowerCase()) ? 'FK' : '';
-      li.appendChild(h('span', 'erd-col-key' + (c.pk ? ' is-pk' : ''), key));
+      const keyCell = h('span', 'erd-col-key');
+      if (key) keyCell.appendChild(h('span', c.pk ? 'tag tag-pk' : 'tag tag-fk', key));
+      li.appendChild(keyCell);
       li.appendChild(h('code', 'erd-col-name', c.name));
       li.appendChild(h('span', 'erd-col-type', c.type || ''));
       cols.appendChild(li);
@@ -601,7 +608,17 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       const other = e.from === t.name ? to : from;
       const sql = `JOIN ${other} ON ${on}`;
       const li = h('li', 'erd-join');
-      li.appendChild(h('code', 'erd-join-sql', sql));
+      // Cho phep xuong dong sau moi dau cham ("bang.<wbr>cot"), khong bao gio
+      // giua mot ten: "product_version_i / d" doc thanh hai ten.
+      const code = h('code', 'erd-join-sql');
+      sql.split('.').forEach((part, i) => {
+        if (i) {
+          code.appendChild(document.createTextNode('.'));
+          code.appendChild(document.createElement('wbr'));
+        }
+        code.appendChild(document.createTextNode(part));
+      });
+      li.appendChild(code);
       if (e.inferred) li.appendChild(h('span', 'erd-join-note', 'suy luận'));
       const btn = h('button', 'btn btn-ghost btn-sm', source === 'game' ? 'Sao chép' : 'Chèn');
       btn.type = 'button';

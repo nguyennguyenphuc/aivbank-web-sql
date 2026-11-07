@@ -1,0 +1,32 @@
+[
+ {
+  "mode": "redesign",
+  "depth": "full",
+  "scope": "app",
+  "shape": "app screen",
+  "theme": "brand",
+  "axes": "green-tinted paper/Be Vietnam Pro/eDA green",
+  "hero": "none (app)",
+  "nav": "one top bar: brand, area tabs, status, session",
+  "footer": "none (app)",
+  "imagery": "product (ERD built from live schema)",
+  "photos": [],
+  "entry": "console",
+  "fingerprint": "app-shell/one-bar/sidebar-catalog/editor-over-results/ruled-stats/erd-tab",
+  "sections": [
+   "top bar",
+   "table catalog",
+   "editor",
+   "results tabs incl. ERD",
+   "leaderboard",
+   "sandbox",
+   "login gate"
+  ],
+  "signature": "the data map: one PK/FK chip shared by the table catalog and the ERD tab",
+  "waived": [
+   "64"
+  ],
+  "prompt": "redesign the student SQL console frontend; add an ERD per database",
+  "date": "2026-11-07"
+ }
+]
