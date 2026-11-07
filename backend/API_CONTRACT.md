@@ -8,6 +8,26 @@ below was captured from the running server against the real
 
 ### Changelog
 
+**1.5.1 (Luyện SQL)** - Adds the HackerRank-style practice area. Session required on
+every route; same web accounts, no separate sign-up. Answers never leave the server.
+
+| Route | Returns |
+|---|---|
+| `GET /challenges?domain=` | `{domains, challenges:[{id, domain, level, points, title, topic, kind, solved}], my_points, my_solved}` |
+| `GET /challenges/{id}` | `{challenge}`: statement, output spec, lesson, hints, tables; `takeaway` only once solved |
+| `GET /challenges/{id}/sample` | `{table, columns, column_types, rows}`: the input table of a `dml` challenge |
+| `POST /challenges/{id}/submit` | body `{sql}` (select) or `{state:{columns, rows}}` (dml). Returns `{passed, reason, your_cols, expected_cols, your_rows, expected_rows, matched_rows, points_awarded, already_solved, domain_points, domain_solved, progress_saved, takeaway?}` |
+| `GET /challenges/leaderboard?domain=` | `{domain, entries:[{rank, username, points, solved}]}`: active students only |
+
+* The catalogue is `backend/challenges/<domain>.json`; the dataset of a challenge is set by
+  the server from its domain, never taken from the client.
+* A student's SQL goes through the same guard as `POST /query`. Feedback on a wrong answer is
+  counts only (`reason`: `columns`, `rows` or `order`), never a row of the answer.
+* `dml` challenges (UPDATE / DELETE) run in the browser on the sample; the server compares the
+  submitted table state with `expected_state_sql` and never runs DML.
+* Progress lives in `aivb_app` (`database/schema/20_challenges.sql`), a scoreboard separate
+  from `/gamification`. Points are awarded once, on the first correct submission.
+
 **1.5.1** - Adds `GET /schema/relationships` and `GET /schema/game`, the data
 behind the console's ERD tab (section 6b). Relationships come from the
 database's own `pg_constraint` and pass the same allowlist as `GET /schema` at
