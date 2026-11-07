@@ -84,6 +84,75 @@ export function tableNameFor(filename, taken) {
   return `${name}_${n}`;
 }
 
+/* --- relationships between the student's own files ------------------------- */
+
+/* File CSV/Parquet/JSON khong luu khoa ngoai, nen so do ERD o Thuc hanh SQL phai
+ * SUY RA quan he. Hai buoc, ca hai chay trong trinh duyet:
+ *
+ *   1. matchByName (ham thuan, test duoc bang Node): cot nao TRONG GIONG khoa
+ *      cua mot bang khac. `orders.customer_id` -> `customers.id`,
+ *      `order_items.product_id` -> `products.product_id`.
+ *   2. inferRelationships (trong createSandbox): kiem tra tren du lieu that -
+ *      khoa chinh phai duy nhat va khong NULL, va >= 95% gia tri cua cot ben
+ *      kia phai co trong khoa do. Ten giong nhau ma du lieu khong khop thi bo. */
+
+/** Cot co ten trong nhu mot khoa: id, ..._id, ..._key, ..._code, ma_...
+ *  (khong lay moi duoi "id": `paid`, `valid` khong phai khoa). */
+export function isKeyish(column) {
+  const c = String(column).toLowerCase();
+  return c === 'id' || /(_id|_key|_code)$/.test(c) || c.startsWith('ma_');
+}
+
+/** Dang so it don gian cua mot ten bang tieng Anh; ten tieng Viet khong co so
+ *  nhieu nen giu nguyen. */
+function singular(word) {
+  if (/ies$/.test(word)) return word.slice(0, -3) + 'y';
+  if (/(sses|xes|zes|ches|shes)$/.test(word)) return word.slice(0, -2);
+  if (/[^s]s$/.test(word)) return word.slice(0, -1);
+  return word;
+}
+
+/** Nhung goc ten ma mot cot `<goc>_id` co the tro toi bang nay: chinh ten,
+ *  so it, va phan sau dau `_` cuoi (dim_customer -> customer). */
+function stems(table) {
+  const t = String(table).toLowerCase();
+  const last = t.includes('_') ? t.slice(t.lastIndexOf('_') + 1) : t;
+  return [...new Set([t, singular(t), last, singular(last)])].filter(Boolean);
+}
+
+/**
+ * Ung vien quan he chi theo TEN. `tables`: [{ name, columns: [{name}], pk }],
+ * `pk` la ten cot khoa chinh da kiem chung (hoac null). Tra ve
+ * [{ from, col, to, toCol }], khong co canh tu tro, khong trung.
+ */
+export function matchByName(tables) {
+  const out = [];
+  const seen = new Set();
+  for (const t of tables) {
+    for (const { name: col } of t.columns) {
+      const c = col.toLowerCase();
+      // Khoa chinh cua chinh no khong phai khoa ngoai; `id` tran thi khong noi
+      // duoc toi bang nao mot cach chac chan.
+      if (c === 'id' || (t.pk && c === t.pk.toLowerCase())) continue;
+      for (const u of tables) {
+        if (u === t || !u.pk) continue;
+        const k = u.pk.toLowerCase();
+        const byPk = c === k;
+        const byStem = k === 'id' && stems(u.name).some((s) => c === `${s}_id`);
+        if (!byPk && !byStem) continue;
+        const key = `${t.name}.${col}->${u.name}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        out.push({ from: t.name, col, to: u.name, toCol: u.pk });
+      }
+    }
+  }
+  return out;
+}
+
+/** Dinh danh SQL an toan cho ten lay tu file cua hoc vien. */
+const ident = (s) => `"${String(s).replace(/"/g, '""')}"`;
+
 /* --- engine ---------------------------------------------------------------- */
 
 let bootPromise = null;
@@ -381,6 +450,88 @@ export function createSandbox({ onStatus } = {}) {
     registered.clear();
   }
 
+  /**
+   * So do ERD cua cac file da nap: bang, khoa chinh suy ra, quan he suy ra.
+   * Cung hinh dang voi GET /schema/game de erd.js ve duoc ma khong biet nguon.
+   * Chi doc (SELECT tren cac view da dang ky), khong goi may chu.
+   */
+  async function inferRelationships() {
+    const list = Array.from(registered.values());
+    if (!list.length) return { tables: [], relationships: [] };
+    const { conn } = await boot(onStatus);
+    const MAX_CHECKS = 200;
+    let checks = 0;
+
+    // 1. Khoa chinh: trong cac cot trong giong khoa, cot nao duy nhat va khong NULL.
+    const withPk = [];
+    for (const t of list) {
+      const cands = t.columns.map((c) => c.name).filter(isKeyish).slice(0, 8);
+      let pk = null;
+      if (cands.length && checks < MAX_CHECKS) {
+        checks += 1;
+        try {
+          const parts = cands.map(
+            (c, i) => `count(DISTINCT ${ident(c)}) AS d${i}, count(${ident(c)}) AS n${i}`
+          );
+          const r = (await conn.query(`SELECT count(*) AS total, ${parts.join(', ')} FROM ${ident(t.table)}`)).get(0);
+          const total = Number(r.total);
+          const unique = cands.filter((_, i) => total > 0 && Number(r[`d${i}`]) === total && Number(r[`n${i}`]) === total);
+          const lower = (s) => s.toLowerCase();
+          pk =
+            unique.find((c) => lower(c) === 'id') ||
+            unique.find((c) => stems(t.table).some((s) => lower(c) === `${s}_id`)) ||
+            unique[0] ||
+            null;
+        } catch (_) {
+          pk = null; // mot bang loi khong lam hong ca so do
+        }
+      }
+      withPk.push({ name: t.table, columns: t.columns, pk });
+    }
+
+    // 2. Ghep theo ten, roi 3. giu canh nao du lieu xac nhan (>= 95% khop).
+    const edges = [];
+    for (const m of matchByName(withPk)) {
+      if (checks >= MAX_CHECKS) break;
+      checks += 1;
+      try {
+        const r = (
+          await conn.query(
+            `SELECT count(${ident(m.col)}) AS total, ` +
+              `count(*) FILTER (WHERE ${ident(m.col)} IS NOT NULL AND ${ident(m.col)} NOT IN ` +
+              `(SELECT ${ident(m.toCol)} FROM ${ident(m.to)} WHERE ${ident(m.toCol)} IS NOT NULL)) AS miss ` +
+              `FROM ${ident(m.from)}`
+          )
+        ).get(0);
+        const total = Number(r.total);
+        const miss = Number(r.miss);
+        if (total > 0 && (total - miss) / total >= 0.95) {
+          edges.push({
+            from_table: m.from,
+            from_columns: [m.col],
+            to_table: m.to,
+            to_columns: [m.toCol],
+            inferred: true,
+          });
+        }
+      } catch (_) {
+        /* kieu du lieu khong so duoc (so voi chu): khong phai quan he */
+      }
+    }
+
+    return {
+      tables: withPk.map((t) => ({
+        name: t.name,
+        kind: 'table',
+        columns: t.columns.map((c) => ({ name: c.name, type: c.type, primary_key: c.name === t.pk })),
+      })),
+      relationships: edges,
+      note:
+        'File không lưu khoá ngoại; các quan hệ nét đứt được suy ra từ tên cột và kiểm tra trên ' +
+        'chính dữ liệu của bạn (từ 95% giá trị khớp trở lên). Mọi thứ chạy trên máy bạn.',
+    };
+  }
+
   /** A starter query built from whatever is actually loaded — never a
    *  hardcoded table name, for the same reason the console never hardcodes
    *  one: the names must come from the data in front of the student. */
@@ -396,6 +547,7 @@ export function createSandbox({ onStatus } = {}) {
     drop,
     reset,
     starterSql,
+    inferRelationships,
     tables: () => Array.from(registered.values()),
     isBooted: () => bootPromise !== null,
   };

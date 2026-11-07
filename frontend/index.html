@@ -345,41 +345,11 @@
         <div id="mart-grid" class="grid-wrap"><p class="empty">Đăng nhập để xem data mart.</p></div>
       </div>
 
-      <!-- So do ERD (frontend/erd.js). Bang va cot lay tu GET /schema, canh tu
-           GET /schema/relationships; nut "Game" doc GET /schema/game va chi hien
-           khi may chu bat game. Khong co ten nao viet san o day. -->
-      <div id="tab-erd" class="tabpanel erd-panel" role="tabpanel" aria-labelledby="tab-button-erd" hidden data-state="empty">
-        <div class="erd-tools">
-          <div class="erd-source" role="group" aria-label="Chọn database để xem sơ đồ">
-            <button type="button" class="erd-source-btn" data-erd-source="console" aria-pressed="true">Bộ dữ liệu đang mở</button>
-            <button type="button" class="erd-source-btn" data-erd-source="game" aria-pressed="false" hidden>Game (jelly_analytics)</button>
-          </div>
-          <label class="sr-only" for="erd-filter">Tìm bảng trên sơ đồ</label>
-          <input id="erd-filter" class="filter erd-filter" type="search" placeholder="Tìm bảng…" autocomplete="off" spellcheck="false" />
-          <span class="erd-status muted" role="status" aria-live="polite"></span>
-          <span class="spacer"></span>
-          <div class="erd-zoom" role="group" aria-label="Thu phóng sơ đồ">
-            <button type="button" class="icon-btn" data-erd-zoom="out" aria-label="Thu nhỏ" title="Thu nhỏ (-)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
-            </button>
-            <button type="button" class="btn btn-ghost btn-sm" data-erd-zoom="fit" title="Vừa khung (0)">Vừa khung</button>
-            <button type="button" class="icon-btn" data-erd-zoom="in" aria-label="Phóng to" title="Phóng to (+)">
-              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
-            </button>
-          </div>
-        </div>
-        <p class="erd-note banner banner-info" hidden></p>
-        <div class="erd-body">
-          <div class="erd-canvas" tabindex="0" aria-label="Sơ đồ quan hệ giữa các bảng. Kéo để di chuyển, cuộn chuột hoặc phím + và - để thu phóng, phím mũi tên để dịch, 0 để vừa khung.">
-            <svg class="erd-svg" role="group" aria-label="Sơ đồ ERD"></svg>
-          </div>
-          <aside class="erd-detail" aria-label="Chi tiết bảng" aria-live="polite"></aside>
-        </div>
-        <details class="erd-text">
-          <summary>Danh sách quan hệ dạng bảng</summary>
-          <div class="erd-edge-list"></div>
-        </details>
-      </div>
+      <!-- So do ERD cua bo du lieu DANG MO (frontend/erd.js dung panel vao day).
+           Bang va cot lay tu GET /schema, canh tu GET /schema/relationships.
+           Moi khu vuc mot so do cua chinh no: game va Thuc hanh SQL co so do
+           rieng trong khu vuc cua chung. Khong co ten nao viet san o day. -->
+      <div id="tab-erd" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-erd" hidden></div>
 
       <div id="tab-history" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-history" hidden>
         <div class="history-head">
@@ -406,9 +376,22 @@
 <!-- Game match-3 (thu muc game/), phuc vu o /game/ va nhung bang iframe cung
      origin. `src` chi duoc gan lan dau mo tab (ensureGame trong app.js). Dang
      nhap vao game la tu dong: game xin ve SSO tu /game-sso/token. -->
+<!-- Hai the trong khu vuc Tro choi: choi game, va so do ERD cua chinh database
+     game (jelly_analytics, GET /schema/game). Class `subtab`/`subpanel` chu KHONG
+     phai `tab`/`tabpanel`: selectTab() cua console dong mo MOI `.tab` trong
+     trang, va se an mat the o day moi lan console doi the. -->
 <section id="game-workspace" class="game-workspace" aria-label="Trò chơi" hidden>
-  <iframe id="game-frame" class="game-frame" title="Vương Quốc Kẹo Ngọt"
-          allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+  <div class="subtabs" role="tablist" aria-label="Trò chơi">
+    <button id="game-tab-play" class="subtab is-active" type="button" role="tab" data-subtab="game-play"
+            aria-controls="game-play" aria-selected="true">Chơi</button>
+    <button id="game-tab-erd" class="subtab" type="button" role="tab" data-subtab="game-erd"
+            aria-controls="game-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
+  </div>
+  <div id="game-play" class="subpanel game-play" role="tabpanel" aria-labelledby="game-tab-play">
+    <iframe id="game-frame" class="game-frame" title="Vương Quốc Kẹo Ngọt"
+            allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
+  </div>
+  <div id="game-erd" class="subpanel" role="tabpanel" aria-labelledby="game-tab-erd" hidden></div>
 </section>
 
 <section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
@@ -491,12 +474,25 @@
          aria-orientation="horizontal" tabindex="0"
          aria-label="Kéo để đổi chiều cao ô soạn thảo — mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
     <div class="results-panel panel">
-      <div id="sandbox-error" class="errorbox" hidden></div>
-      <div id="sandbox-truncated" class="banner banner-info" hidden></div>
-      <div id="sandbox-meta" class="result-meta" hidden></div>
-      <div id="sandbox-grid" class="grid-wrap">
-        <p class="empty">Chưa có kết quả. Nạp một file rồi chạy một câu SELECT.</p>
+      <!-- So do ERD cua chinh cac file da nap: quan he suy ra NGAY TRONG trinh
+           duyet (sandbox.js inferRelationships), khong gui gi len may chu. -->
+      <div class="results-head">
+        <div class="subtabs" role="tablist" aria-label="Nội dung vùng kết quả thực hành">
+          <button id="sandbox-tab-result" class="subtab is-active" type="button" role="tab" data-subtab="sandbox-result"
+                  aria-controls="sandbox-result" aria-selected="true">Kết quả</button>
+          <button id="sandbox-tab-erd" class="subtab" type="button" role="tab" data-subtab="sandbox-erd"
+                  aria-controls="sandbox-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
+        </div>
       </div>
+      <div id="sandbox-result" class="subpanel" role="tabpanel" aria-labelledby="sandbox-tab-result">
+        <div id="sandbox-error" class="errorbox" hidden></div>
+        <div id="sandbox-truncated" class="banner banner-info" hidden></div>
+        <div id="sandbox-meta" class="result-meta" hidden></div>
+        <div id="sandbox-grid" class="grid-wrap">
+          <p class="empty">Chưa có kết quả. Nạp một file rồi chạy một câu SELECT.</p>
+        </div>
+      </div>
+      <div id="sandbox-erd" class="subpanel" role="tabpanel" aria-labelledby="sandbox-tab-erd" hidden></div>
     </div>
   </section>
 

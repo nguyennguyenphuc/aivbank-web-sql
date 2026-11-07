@@ -72,16 +72,92 @@ const schemaPanel = createSchemaPanel({
 
 const cm = createEditor($('sql'), { schemaRef: schemaPanel.ref, onRun: run });
 
-/* So do ERD dung CHUNG schema voi thanh ben (khong goi /schema lan hai), nen no
- * khong the hien mot ten ma danh muc bang khong co. */
+/* So do ERD cua bo du lieu DANG MO, va chi bo do: moi khu vuc mot so do cua
+ * chinh no (game va Thuc hanh SQL co panel rieng ben duoi). Dung CHUNG schema
+ * voi thanh ben (khong goi /schema lan hai), nen no khong the hien mot ten ma
+ * danh muc bang khong co. */
 const erdPanel = createErdPanel({
   root: $('tab-erd'),
-  getConsoleSchema: async () => schemaPanel.ref.value || schemaPanel.load(),
-  getConsoleLabel: () => {
+  load: async () => {
+    const schema = schemaPanel.ref.value || (await schemaPanel.load());
+    if (!schema) throw { message: 'Chưa tải được danh sách bảng.' };
+    const rel = await api.relationships();
+    return { tables: schema.tables, relationships: rel.relationships || [] };
+  },
+  title: () => {
     const name = document.querySelector('.section-tab[data-dataset-slot].is-active .section-tab-name');
     return name ? name.textContent : '';
   },
-  onInsert: (text) => insertAtCursor(cm, text),
+  actionLabel: 'Chèn',
+  onUse: (sql) => {
+    insertAtCursor(cm, sql + '\n');
+    return 'Đã chèn';
+  },
+  emptyText: 'Bộ dữ liệu này chưa có bảng nào bạn xem được.',
+});
+
+/** Hang the con (Tro choi, Thuc hanh SQL). Khong dung class `tab`: selectTab()
+ *  cua console dong mo moi `.tab` trong trang. Mui ten trai/phai, Home, End
+ *  giong hang the cua console. `onSelect(panelId)` chay sau khi panel hien. */
+function wireSubtabs(tablist, onSelect) {
+  const tabs = () => [...tablist.querySelectorAll('.subtab')];
+  const pick = (btn) => {
+    for (const b of tabs()) {
+      const on = b === btn;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-selected', String(on));
+      b.tabIndex = on ? 0 : -1;
+      $(b.dataset.subtab).hidden = !on;
+    }
+    onSelect?.(btn.dataset.subtab);
+  };
+  tablist.addEventListener('click', (e) => {
+    const b = e.target.closest('.subtab');
+    if (b) pick(b);
+  });
+  tablist.addEventListener('keydown', (e) => {
+    const list = tabs();
+    const i = list.indexOf(document.activeElement);
+    if (i < 0) return;
+    const next = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: list.length - 1 }[e.key];
+    if (next === undefined) return;
+    e.preventDefault();
+    const b = list[(next + list.length) % list.length];
+    b.focus();
+    pick(b);
+  });
+  return { select: (panelId) => pick(tabs().find((b) => b.dataset.subtab === panelId)) };
+}
+
+/* So do cua database game, trong khu vuc Tro choi. Console khong chay truy van
+ * tren database nay, nen nut la "Sao chep" chu khong phai "Chen". */
+const gameErd = createErdPanel({
+  root: $('game-erd'),
+  load: async () => {
+    const g = await api.gameSchema();
+    return {
+      tables: g.tables || [],
+      relationships: g.relationships || [],
+      note:
+        `Schema ${g.schema_name || 'jelly_analytics'} của database game. Console không chạy truy vấn ` +
+        'trên database này: dùng psql hoặc Power BI qua cổng 5433. ' +
+        ((g.relationships || []).some((r) => r.inferred)
+          ? 'Database không khai báo khoá ngoại, nên đường nét đứt là quan hệ suy ra từ tên cột.'
+          : ''),
+    };
+  },
+  title: () => 'Game (jelly_analytics)',
+  actionLabel: 'Sao chép',
+  onUse: async (sql) => {
+    await navigator.clipboard.writeText(sql);
+    return 'Đã chép';
+  },
+  errorText: (err) =>
+    err && err.error_code === 'E_GAME_UNAVAILABLE' ? 'Database game chưa sẵn sàng trên máy chủ này.' : null,
+});
+wireSubtabs(document.querySelector('#game-workspace .subtabs'), (id) => {
+  if (id === 'game-erd') requestAnimationFrame(() => gameErd.show());
+  else ensureGame();
 });
 
 async function loadPractice() {
@@ -882,7 +958,7 @@ async function switchDataset(name) {
   if (sub && label) sub.textContent = label;
 
   schemaPanel.clear();
-  erdPanel.resetConsole();
+  erdPanel.clear();
   martPanel.clear();
   results.clear();
   results.clearDetail();
@@ -955,7 +1031,9 @@ function selectSection(name) {
     // the console hits behind the login gate (see refresh() calls after boot).
     if (sandboxUi) requestAnimationFrame(() => sandboxUi.cm.refresh());
   } else if (inGame) {
-    ensureGame();
+    // Vao lai khu vuc dung the dang mo: so do thi khong can nap game.
+    if ($('game-erd').hidden) ensureGame();
+    else requestAnimationFrame(() => gameErd.show());
   } else if (inBoard) {
     // Nap lai moi lan vao: diem doi sau moi query, va nguoi xem vao day chinh la
     // de xem con so MOI. Mot bang cu dung im thi te hon la khong co bang.
@@ -1000,8 +1078,6 @@ async function loadGameAvailability() {
   tab.hidden = !enabled;
   tab.disabled = !enabled;
   tab.setAttribute('aria-disabled', enabled ? 'false' : 'true');
-  // Cung tin hieu cho nut "Game" cua so do ERD: game tat thi khong co gi de ve.
-  erdPanel.setGameAvailable(enabled);
 }
 
 /** Gan `src` lan dau mo tab: game ~500 KB JS va tu SSO khi tai, khong co ly do
@@ -1016,6 +1092,8 @@ function resetGame() {
   gameLoaded = false;
   const frame = $('game-frame');
   if (frame) frame.src = 'about:blank';
+  // So do game la du lieu cua phien truoc; nguoi sau tai lai khi mo the.
+  gameErd.clear();
 }
 
 /* --------------------------- the sandbox itself --------------------------- */
@@ -1114,6 +1192,24 @@ function ensureSandbox() {
   });
   $('sandbox-kbd').textContent = IS_MAC ? '⌘+Enter' : 'Ctrl+Enter';
 
+  /* So do ERD cua chinh cac file da nap. Quan he suy ra trong trinh duyet
+   * (sandbox.js inferRelationships): khong gui gi len may chu, dung bat bien
+   * cua khu vuc nay. */
+  const sbErd = createErdPanel({
+    root: $('sandbox-erd'),
+    load: async () => (engine && engine.tables().length ? engine.inferRelationships() : { tables: [] }),
+    title: () => 'File của bạn',
+    actionLabel: 'Chèn',
+    onUse: (sql) => {
+      insertAtCursor(sbCm, sql + '\n');
+      return 'Đã chèn';
+    },
+    emptyText: 'Nạp ít nhất một file để vẽ sơ đồ. Nạp hai file trở lên có cột chung (ví dụ customer_id) để thấy quan hệ.',
+  });
+  wireSubtabs(document.querySelector('#sandbox-workspace .subtabs'), (id) => {
+    if (id === 'sandbox-erd') requestAnimationFrame(() => sbErd.show());
+  });
+
   function renderTables() {
     const tables = engine ? engine.tables() : [];
     sbSchema = {
@@ -1123,6 +1219,9 @@ function ensureSandbox() {
     resetBtn.hidden = !tables.length;
     runBtn.disabled = !tables.length;
     listEl.replaceChildren();
+    // Bo file doi thi so do cu sai: xoa, va ve lai ngay neu dang xem the so do.
+    sbErd.clear();
+    if (!$('sandbox-erd').hidden) requestAnimationFrame(() => sbErd.show());
 
     if (!tables.length) {
       const p = document.createElement('p');

@@ -16,8 +16,12 @@
  * có hiệu ứng tự chạy.
  */
 
-import { api } from './api.js';
 import { errorHint } from './errors.js';
+
+/** Mỗi panel một hậu tố id riêng: ba sơ đồ (console, game, thực hành) cùng ở
+ *  trên một trang, và `url(#erd-many)` trỏ nhầm sang <marker> của một panel
+ *  đang ẩn thì đầu mũi tên không được vẽ. */
+let instances = 0;
 
 const SVG = 'http://www.w3.org/2000/svg';
 const NODE_W = 248;
@@ -215,7 +219,62 @@ export const __erdInternals = { buildModel, layout, neighbours };
 
 /* ----------------------------------------------------------------- panel --- */
 
-export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInsert }) {
+/**
+ * Một panel sơ đồ, không biết dữ liệu của nó từ đâu tới.
+ *
+ *   load()      async -> { tables, relationships, note? }  (cùng hình dạng với
+ *               GET /schema/game; console ghép /schema + /schema/relationships,
+ *               Thực hành SQL suy ra từ file trong trình duyệt)
+ *   title()     tên database đang vẽ, hiện ở đầu thanh công cụ
+ *   actionLabel "Chèn" (có editor để chèn) hoặc "Sao chép" (database không chạy
+ *               được ở đây, như game)
+ *   onUse(sql)  làm việc đó với câu JOIN
+ *   emptyText   câu cho trạng thái rỗng (không có bảng nào)
+ *   errorText   (err) -> câu cho trạng thái lỗi, nếu nguồn có lỗi riêng cần nói
+ *
+ * Mỗi khu vực một panel, mỗi panel một database: không có nút chuyển nguồn.
+ */
+export function createErdPanel({
+  root,
+  load,
+  title = () => '',
+  actionLabel = 'Chèn',
+  onUse = () => {},
+  emptyText = 'Chưa có bảng nào để vẽ.',
+  errorText = null,
+}) {
+  const uid = `erd${++instances}`;
+  root.classList.add('erd-panel');
+  root.dataset.state = 'empty';
+  root.innerHTML = `
+    <div class="erd-tools">
+      <strong class="erd-title"></strong>
+      <label class="sr-only" for="${uid}-filter">Tìm bảng trên sơ đồ</label>
+      <input id="${uid}-filter" class="filter erd-filter" type="search" placeholder="Tìm bảng…" autocomplete="off" spellcheck="false" />
+      <span class="erd-status muted" role="status" aria-live="polite"></span>
+      <span class="spacer"></span>
+      <div class="erd-zoom" role="group" aria-label="Thu phóng sơ đồ">
+        <button type="button" class="icon-btn" data-erd-zoom="out" aria-label="Thu nhỏ" title="Thu nhỏ (-)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
+        </button>
+        <button type="button" class="btn btn-ghost btn-sm" data-erd-zoom="fit" title="Vừa khung (0)">Vừa khung</button>
+        <button type="button" class="icon-btn" data-erd-zoom="in" aria-label="Phóng to" title="Phóng to (+)">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M12 5v14" /></svg>
+        </button>
+      </div>
+    </div>
+    <p class="erd-note banner banner-info" hidden></p>
+    <div class="erd-body">
+      <div class="erd-canvas" tabindex="0" aria-label="Sơ đồ quan hệ giữa các bảng. Kéo để di chuyển, cuộn chuột hoặc phím + và - để thu phóng, phím mũi tên để dịch, 0 để vừa khung.">
+        <svg class="erd-svg" role="group" aria-label="Sơ đồ ERD"></svg>
+      </div>
+      <aside class="erd-detail" aria-label="Chi tiết bảng" aria-live="polite"></aside>
+    </div>
+    <details class="erd-text">
+      <summary>Danh sách quan hệ dạng bảng</summary>
+      <div class="erd-edge-list"></div>
+    </details>`;
+
   const q = (sel) => root.querySelector(sel);
   const canvas = q('.erd-canvas');
   const svg = q('.erd-svg');
@@ -223,13 +282,11 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
   const detailEl = q('.erd-detail');
   const noteEl = q('.erd-note');
   const filterEl = q('.erd-filter');
-  const srcConsole = q('[data-erd-source="console"]');
-  const srcGame = q('[data-erd-source="game"]');
+  const titleEl = q('.erd-title');
   const listEl = q('.erd-edge-list');
 
-  let source = 'console';
-  /** Kết quả đã tải, theo nguồn. Bị xoá khi đổi bộ dữ liệu hoặc đăng xuất. */
-  const loaded = { console: null, game: null };
+  /** Kết quả đã tải. Bị xoá khi nguồn đổi (đổi bộ dữ liệu, nạp file) hoặc đăng xuất. */
+  let loaded = null;
   let model = null;
   let focus = null; // tên bảng đang ở chế độ tập trung
   let selected = null;
@@ -237,8 +294,6 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
   let drawn = null;
   let token = 0;
 
-  srcConsole.addEventListener('click', () => setSource('console'));
-  srcGame.addEventListener('click', () => setSource('game'));
   q('[data-erd-zoom="in"]').addEventListener('click', () => zoomBy(1.2));
   q('[data-erd-zoom="out"]').addEventListener('click', () => zoomBy(1 / 1.2));
   q('[data-erd-zoom="fit"]').addEventListener('click', fit);
@@ -249,48 +304,17 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
     if (hit) select(hit, { focusNode: true });
   });
 
-  function setSource(next) {
-    if (next === source) return;
-    source = next;
-    focus = null;
-    selected = null;
-    // Từ khoá của database kia không khớp bảng nào ở đây: giữ lại là làm mờ cả sơ đồ.
-    filterEl.value = '';
-    paintSource();
-    show();
-  }
-
-  function paintSource() {
-    srcConsole.setAttribute('aria-pressed', String(source === 'console'));
-    srcGame.setAttribute('aria-pressed', String(source === 'game'));
-    srcConsole.textContent = getConsoleLabel() || 'Bộ dữ liệu đang mở';
-  }
-
-  function setGameAvailable(on) {
-    srcGame.hidden = !on;
-    if (!on && source === 'game') setSource('console');
-  }
-
   /** Gọi mỗi lần tab ERD được mở. Chỉ tải khi chưa có. */
   async function show() {
-    paintSource();
-    if (loaded[source]) return render();
+    titleEl.textContent = title() || '';
+    if (loaded) return render();
     const my = ++token;
     setState('loading');
     try {
-      let data;
-      if (source === 'game') {
-        const g = await api.gameSchema();
-        data = buildModel(g.tables || [], g.relationships || []);
-        data.schemaName = g.schema_name;
-      } else {
-        const schema = await getConsoleSchema();
-        if (!schema) throw { message: 'Chưa tải được danh sách bảng.' };
-        const rel = await api.relationships();
-        data = buildModel(schema.tables, rel.relationships || []);
-      }
+      const data = await load();
       if (my !== token) return;
-      loaded[source] = data;
+      loaded = buildModel(data.tables || [], data.relationships || []);
+      loaded.note = data.note || '';
       render();
     } catch (err) {
       if (my !== token) return;
@@ -313,9 +337,7 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       statusEl.textContent = '';
       const box = h('div', 'erd-error');
       box.setAttribute('role', 'alert');
-      const msg = source === 'game' && err && err.error_code === 'E_GAME_UNAVAILABLE'
-        ? 'Database game chưa sẵn sàng trên máy chủ này.'
-        : (err && err.message) || 'Không tải được sơ đồ.';
+      const msg = (errorText && errorText(err)) || (err && err.message) || 'Không tải được sơ đồ.';
       box.appendChild(h('p', 'erd-error-text', `${msg} ${errorHint(err && err.error_code)}`.trim()));
       const retry = h('button', 'btn btn-ghost btn-sm', 'Thử lại');
       retry.type = 'button';
@@ -326,22 +348,16 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
   }
 
   function render() {
-    model = loaded[source];
+    model = loaded;
     root.dataset.state = 'full';
     canvas.classList.remove('is-loading');
-    noteEl.hidden = source !== 'game';
-    if (source === 'game') {
-      noteEl.textContent =
-        `Schema ${model.schemaName || 'jelly_analytics'} của database game. Console không chạy ` +
-        'truy vấn trên database này: dùng psql hoặc Power BI qua cổng 5433. ' +
-        (model.edges.some((e) => e.inferred)
-          ? 'Database không khai báo khoá ngoại, nên đường nét đứt là quan hệ suy ra từ tên cột.'
-          : '');
-    }
+    noteEl.hidden = !model.note;
+    noteEl.textContent = model.note;
     if (!model.tables.length) {
+      root.dataset.state = 'empty';
       statusEl.textContent = '';
       svg.replaceChildren();
-      detailEl.replaceChildren(h('p', 'empty', 'Bộ dữ liệu này chưa có bảng nào bạn xem được.'));
+      detailEl.replaceChildren(h('p', 'empty', emptyText));
       listEl.replaceChildren();
       return;
     }
@@ -370,12 +386,12 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
     const defs = el('defs', {}, svg);
     // Crow's foot: "nhiều" ở đầu bảng giữ khoá ngoại, "một" ở đầu bảng được tham chiếu.
     const many = el('marker', {
-      id: 'erd-many', viewBox: '0 0 14 14', refX: '1', refY: '7',
+      id: `${uid}-many`, viewBox: '0 0 14 14', refX: '1', refY: '7',
       markerWidth: '14', markerHeight: '14', orient: 'auto-start-reverse', markerUnits: 'userSpaceOnUse',
     }, defs);
     el('path', { d: 'M1 7 L13 1 M1 7 L13 7 M1 7 L13 13', class: 'erd-mark' }, many);
     const one = el('marker', {
-      id: 'erd-one', viewBox: '0 0 14 14', refX: '13', refY: '7',
+      id: `${uid}-one`, viewBox: '0 0 14 14', refX: '13', refY: '7',
       markerWidth: '14', markerHeight: '14', orient: 'auto', markerUnits: 'userSpaceOnUse',
     }, defs);
     el('path', { d: 'M7 1 L7 13 M11 1 L11 13', class: 'erd-mark' }, one);
@@ -402,8 +418,8 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       const path = el('path', {
         d,
         class: 'erd-edge' + (e.inferred ? ' is-inferred' : ''),
-        'marker-start': 'url(#erd-many)',
-        'marker-end': 'url(#erd-one)',
+        'marker-start': `url(#${uid}-many)`,
+        'marker-end': `url(#${uid}-one)`,
         'data-from': e.from,
         'data-to': e.to,
       }, edgeLayer);
@@ -551,7 +567,7 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       li('tag tag-pk', 'khoá chính, mỗi dòng một giá trị riêng', 'PK');
       li('tag tag-fk', 'khoá ngoại, trỏ tới khoá chính của bảng bên trái', 'FK');
       li('erd-swatch is-edge', 'Nét liền: quan hệ database khai báo');
-      if (model.edges.some((e) => e.inferred)) li('erd-swatch is-inferred', 'Nét đứt: quan hệ suy ra từ tên cột');
+      if (model.edges.some((e) => e.inferred)) li('erd-swatch is-inferred', 'Nét đứt: quan hệ suy luận, không có khoá ngoại khai báo');
       intro.appendChild(ul);
       intro.appendChild(h('p', 'muted', 'Bấm một bảng để xem đủ cột và câu JOIN tới các bảng nối với nó.'));
       if (!model.edges.length) {
@@ -620,9 +636,9 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
       });
       li.appendChild(code);
       if (e.inferred) li.appendChild(h('span', 'erd-join-note', 'suy luận'));
-      const btn = h('button', 'btn btn-ghost btn-sm', source === 'game' ? 'Sao chép' : 'Chèn');
+      const btn = h('button', 'btn btn-ghost btn-sm', actionLabel);
       btn.type = 'button';
-      btn.setAttribute('aria-label', `${source === 'game' ? 'Sao chép' : 'Chèn vào editor'}: ${sql}`);
+      btn.setAttribute('aria-label', `${actionLabel === 'Chèn' ? 'Chèn vào editor' : actionLabel}: ${sql}`);
       btn.addEventListener('click', () => use(sql, btn));
       li.appendChild(btn);
       joins.appendChild(li);
@@ -630,18 +646,14 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
     detailEl.appendChild(joins);
   }
 
+  /** onUse trả về câu xác nhận ngắn ("Đã chèn", "Đã chép"); ném lỗi thì báo
+   *  thất bại ngay trên nút, không có hộp thoại nào. */
   async function use(sql, btn) {
-    if (source === 'game') {
-      try {
-        await navigator.clipboard.writeText(sql);
-        flash(btn, 'Đã chép');
-      } catch (_) {
-        flash(btn, 'Không chép được');
-      }
-      return;
+    try {
+      flash(btn, (await onUse(sql)) || 'Xong');
+    } catch (_) {
+      flash(btn, 'Không được');
     }
-    onInsert(sql + '\n');
-    flash(btn, 'Đã chèn');
   }
 
   function flash(btn, text) {
@@ -774,22 +786,12 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
 
   /* ------------------------------------------------------------ lifecycle -- */
 
-  /** Đổi bộ dữ liệu: sơ đồ của bộ cũ phải đi, cùng lý do với schemaPanel.clear(). */
-  function resetConsole() {
-    token++;
-    loaded.console = null;
-    if (source === 'console') {
-      filterEl.value = '';
-      wipe();
-    }
-  }
-
-  /** Đăng xuất: không gì của phiên trước được ở lại. */
+  /** Nguồn đã đổi (đổi bộ dữ liệu, nạp/xoá file) hoặc đăng xuất: sơ đồ cũ
+   *  phải đi ngay, cùng lý do với schemaPanel.clear(); lần mở tab sau tải lại.
+   *  Tên bảng cũ trong ô tìm cũng đi, nếu không nó làm mờ cả sơ đồ mới. */
   function clear() {
     token++;
-    loaded.console = null;
-    loaded.game = null;
-    source = 'console';
+    loaded = null;
     filterEl.value = '';
     wipe();
   }
@@ -807,5 +809,5 @@ export function createErdPanel({ root, getConsoleSchema, getConsoleLabel, onInse
     root.dataset.state = 'empty';
   }
 
-  return { show, clear, resetConsole, setGameAvailable, refit: fit };
+  return { show, clear, refit: fit };
 }

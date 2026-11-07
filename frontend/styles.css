@@ -1279,6 +1279,48 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 }
 .tabpanel.is-active { display: flex; }
 
+/* Sub-areas (Trò chơi: Chơi / Sơ đồ ERD; Thực hành SQL: Kết quả / Sơ đồ ERD).
+ * Same look as the result tabs above, separate classes on purpose: the
+ * console's selectTab() opens and closes every `.tab` / `.tabpanel` on the
+ * page, and would hide these each time the console switched. */
+.subtabs {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.subtabs::-webkit-scrollbar { display: none; }
+.subtab {
+  flex: 0 0 auto;
+  font-family: var(--font-sans);
+  font-size: var(--text-md);
+  font-weight: var(--weight-medium);
+  background: none;
+  border: 0;
+  min-height: var(--tab-h);
+  padding: var(--space-4) var(--space-6);
+  cursor: pointer;
+  color: var(--ink-muted);
+  border-bottom: 2px solid transparent;
+  white-space: nowrap;
+  transition: color var(--duration-fast) var(--ease),
+              border-color var(--duration-fast) var(--ease);
+}
+.subtab:hover { color: var(--ink); border-bottom-color: var(--line-strong); }
+.subtab:active { color: var(--brand-800); }
+.subtab:focus-visible { outline: var(--focus-ring); outline-offset: calc(-1 * var(--focus-offset)); }
+.subtab.is-active { color: var(--brand-700); border-bottom-color: var(--brand-600); }
+.subpanel {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+}
+
 /* ==========================================================================
    RESULT GRID
    ========================================================================== */
@@ -1709,9 +1751,18 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 .game-workspace {
   flex: 1 1 auto;
   display: flex;
+  flex-direction: column;
   min-height: 0;
   background: var(--surface-game);
 }
+/* The sub-tab row sits on paper, above the game's own yellow surface. */
+.game-workspace > .subtabs {
+  flex: 0 0 auto;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line);
+}
+.game-play { flex-direction: row; }
+#game-erd { background: var(--surface); }
 .game-frame {
   flex: 1 1 auto;
   width: 100%;
@@ -2169,30 +2220,18 @@ body.role-instructor .focus-float .icon-btn {
   padding: var(--space-4) var(--space-5);
   border-bottom: 1px solid var(--line-soft);
 }
-.erd-source {
-  display: inline-flex;
-  border: 1px solid var(--line-input);
-  border-radius: var(--radius-sm);
-  overflow: hidden;
-}
-.erd-source-btn {
-  font: inherit;
-  font-size: var(--text-sm);
-  min-height: var(--control-h-sm);
-  padding: 0 var(--space-6);
-  border: 0;
-  background: var(--surface);
-  color: var(--ink-muted);
-  cursor: pointer;
-}
-.erd-source-btn + .erd-source-btn { border-left: 1px solid var(--line-input); }
-.erd-source-btn:hover { color: var(--ink); background: var(--surface-hover); }
-.erd-source-btn[aria-pressed="true"] {
-  background: var(--brand-600);
-  color: var(--on-brand);
+/* Which database this map draws. Text, not a switch: each area has its own
+ * map of its own database (console, Trò chơi, Thực hành SQL). */
+.erd-title {
+  font-size: var(--text-md);
   font-weight: var(--weight-medium);
+  color: var(--ink);
+  white-space: nowrap;
 }
-.erd-source-btn:focus-visible { outline: var(--focus-ring); outline-offset: -2px; }
+/* A panel root that is not a .tabpanel (game, sandbox) still needs the column. */
+.erd-panel { display: flex; flex-direction: column; flex: 1 1 auto; min-height: 0; min-width: 0; }
+.erd-panel[hidden] { display: none; }
+.tabpanel.erd-panel:not(.is-active) { display: none; }
 /* No magnifier here, so no room kept for one. */
 .erd-filter { width: 200px; min-height: var(--control-h-sm); padding-left: var(--space-5); }
 .erd-status { font-size: var(--text-sm); }
@@ -2376,8 +2415,7 @@ body.role-instructor .focus-float .icon-btn {
   .erd-detail { border-left: 0; border-top: 1px solid var(--line-soft); max-height: 40vh; }
   /* Two rows, not three: the source toggle, then search and zoom sharing one. */
   .erd-tools { padding: var(--space-3) var(--space-4); gap: var(--space-3); }
-  .erd-source { flex: 1 0 100%; }
-  .erd-source-btn { flex: 1 1 0; }
+  .erd-title { flex: 1 0 100%; }
   .erd-status, .erd-tools > .spacer { display: none; }
   .erd-filter { width: auto; flex: 1 1 120px; }
 }
