@@ -417,7 +417,7 @@ export function createChallengesUi(root) {
     box.replaceChildren();
     const l = c.lesson || {};
     const dl = h('dl', 'ch-lesson');
-    for (const [k, label] of [['concept', 'Khái niệm'], ['formula', 'Công thức'], ['why', 'Vì sao quan trọng'], ['lab', 'Học thêm']]) {
+    for (const [k, label] of [['concept', 'Khái niệm'], ['formula', 'Công thức'], ['why', 'Vì sao quan trọng'], ['used_in', 'Dùng ở đâu']]) {
       if (!l[k]) continue;
       dl.append(h('dt', '', label), h('dd', '', l[k]));
     }

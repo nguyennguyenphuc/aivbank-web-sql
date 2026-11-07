@@ -152,3 +152,18 @@ def test_catalogue_refuses_server_sql_that_could_write(tmp_path, sql):
 
 def test_read_only_check_ignores_words_inside_string_literals():
     ch._check_read_only_sql("SELECT 'Sale; UPDATE ngay' AS x WHERE tier <> 'delete'", "ok")
+
+
+def test_lessons_stand_alone_without_external_material(catalogue):
+    """Noi dung bai tu dung duoc: khong tro toi lab Python hay bai giang cu
+    (hoc vien khong co cac tai lieu do). Dong cuoi tab Nghiep vu la
+    `lesson.used_in` ("Dung o dau"), khong con `lesson.lab`."""
+    import re
+
+    bad = re.compile(r"\bLab\s*\d|\bbài giảng\b", re.IGNORECASE)
+    for c in catalogue.list("scm"):
+        assert "lab" not in c.lesson, c.id
+        assert c.lesson.get("used_in"), c.id
+        texts = [c.title, c.statement, c.output, c.takeaway, *c.hints, *map(str, c.lesson.values())]
+        for t in texts:
+            assert not bad.search(t or ""), (c.id, t)

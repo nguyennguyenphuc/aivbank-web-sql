@@ -43,6 +43,15 @@ services:
     # day du o `database/schema/15_class_roles.sql` muc 3.
     command: ["postgres", "-c", "max_connections=350"]
 
+    # /dev/shm mac dinh cua Docker la 64MB. PostgreSQL dung no cho bo nho dong
+    # cua truy van song song (dynamic_shared_memory_type=posix): mot truy van
+    # nang tren `scm.sales` (vd NOT EXISTS / hash join song song) bao
+    # "could not resize shared memory segment ... No space left on device".
+    # Ghi nhan 2026-11-08 khi review bai Luyen SQL m18. 1g la du cho
+    # max_parallel_workers=8 voi work_mem mac dinh; chi la tran, khong cap truoc.
+    # Doi gia tri nay phai dung lai container postgres (--no-deps).
+    shm_size: 1g
+
   restore:
     volumes:
       - ../database/dumps:/app/database/dumps:ro
