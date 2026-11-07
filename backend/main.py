@@ -116,8 +116,15 @@ from .models import (
     GameTableOut,
     RelationshipOut,
     RelationshipsResponse,
+    ChallengeDetailResponse,
+    ChallengeLeaderboardResponse,
+    ChallengeListResponse,
+    ChallengeSampleResponse,
+    ChallengeSubmitRequest,
+    ChallengeSubmitResponse,
 )
 from . import game_schema
+from . import challenges as challenge_mod
 
 API_VERSION = "1.5.1"
 
@@ -470,6 +477,25 @@ def _gamification() -> GamificationStore:
             "The practice-rewards service is not available.",
         )
     return store
+
+
+def _catalogue() -> "challenge_mod.Catalogue":
+    """Ngan hang bai cua khu vuc Luyen SQL. Nap lan dau goi, roi giu.
+
+    Nap luoi chu khong trong lifespan: test va cac app phu dung chung module nay
+    khong phai tra gia doc file. File hong thi nem ngay (CatalogueError) thay vi
+    phuc vu mot bai khong co dap an - nop mai khong bao gio dung.
+    """
+    cat = _state.get("challenges")
+    if cat is None:
+        cat = challenge_mod.load_catalogue(datasets=settings.datasets.keys())
+        _state["challenges"] = cat
+    return cat
+
+
+def _challenge_store() -> "challenge_mod.ChallengeStore":
+    # Dung CHUNG pool voi kho diem (aivb_app_rw co CONNECTION LIMIT).
+    return challenge_mod.ChallengeStore(_gamification()._pool)
 
 
 # ---------------------------------------------------------------------------
@@ -908,6 +934,179 @@ def gamification_leaderboard(period: str = "all", principal: Principal = Depends
         period=period,
         entries=_gamification().leaderboard(period, only=students),
     )
+
+# ---------------------------------------------------------------------------
+# Luyen SQL (bai tap kieu HackerRank) - backend/challenges.py
+#
+# Dap an (`reference_sql`, `expected_state_sql`) KHONG BAO GIO nam trong mot
+# response: moi endpoint o day chi tra `Challenge.public()` va con so cham bai.
+# Dataset cua mot bai do MAY CHU gan theo domain cua bai, khong nhan tu client.
+# ---------------------------------------------------------------------------
+
+
+def _challenge_or_404(challenge_id: str):
+    ch = _catalogue().get(challenge_id)
+    if ch is None:
+        raise ApiError(404, "E_UNKNOWN_CHALLENGE", "This challenge does not exist.")
+    return ch
+
+
+def _challenge_db(principal: Principal, ch) -> Database:
+    db = db_for_role(principal.role, ch.dataset)
+    if db is None:
+        raise ApiError(503, "E_DB_UNAVAILABLE", "The dataset is not available right now.")
+    return db
+
+
+#: (dataset, sql) -> (thoi diem, ket qua). Dap an chi doi khi du lieu duoc nap
+#: lai (restore), nen giu mot gio: bai nang nhat (A3, ~4s) khong phai chay lai
+#: dap an cho moi lan nop cua ca lop.
+_TRUSTED_CACHE: dict[tuple[str, str], tuple[float, Any]] = {}
+_TRUSTED_TTL_S = 3600.0
+
+
+def _run_trusted(db: Database, sql: str):
+    """Chay cau dap an: KHONG qua guard (no la cua may chu), nhung van tren ket
+    noi chi-doc, co timeout, va trong `slot()` nhu moi truy van khac."""
+    key = (db.dataset, sql)
+    hit = _TRUSTED_CACHE.get(key)
+    if hit and time.monotonic() - hit[0] < _TRUSTED_TTL_S:
+        return hit[1]
+    with db.slot():
+        result = db.execute(sql, timeout_s=settings.query_timeout_s, row_limit=challenge_mod.MAX_COMPARE_ROWS)
+    _TRUSTED_CACHE[key] = (time.monotonic(), result)
+    return result
+
+
+@app.get("/challenges", response_model=ChallengeListResponse)
+def list_challenges(
+    domain: str | None = None,
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    cat = _catalogue()
+    try:
+        solved = _challenge_store().solved(principal.username)
+    except ApiError:
+        solved = {}  # kho diem hong: van xem duoc de bai
+    items = cat.list(domain)
+    mine = [c for c in items if c.id in solved]
+    return ChallengeListResponse(
+        domains=list(cat.domains.values()),
+        challenges=[
+            {k: v for k, v in c.public(solved=c.id in solved).items()
+             if k in ("id", "domain", "level", "points", "title", "topic", "kind", "solved")}
+            for c in items
+        ],
+        my_points=sum(solved[c.id]["points"] for c in mine),
+        my_solved=len(mine),
+    )
+
+
+@app.get("/challenges/leaderboard", response_model=ChallengeLeaderboardResponse)
+def challenge_leaderboard(
+    domain: str = "scm",
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    # Cung luat voi /gamification/leaderboard: CHI hoc vien dang hoat dong.
+    students = _auth().active_usernames(ROLE_STUDENT)
+    return ChallengeLeaderboardResponse(
+        domain=domain, entries=_challenge_store().leaderboard(domain, only=students)
+    )
+
+
+@app.get("/challenges/{challenge_id}", response_model=ChallengeDetailResponse)
+def challenge_detail(
+    challenge_id: str,
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    ch = _challenge_or_404(challenge_id)
+    try:
+        solved = ch.id in _challenge_store().solved(principal.username)
+    except ApiError:
+        solved = False
+    return ChallengeDetailResponse(challenge=ch.public(solved=solved))
+
+
+@app.get("/challenges/{challenge_id}/sample", response_model=ChallengeSampleResponse)
+def challenge_sample(
+    challenge_id: str,
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    """Ban sao nho cho bai dml. Day la DE BAI (du lieu dau vao), khong phai dap an."""
+    ch = _challenge_or_404(challenge_id)
+    if ch.kind != "dml":
+        raise ApiError(400, "E_NOT_DML", "This challenge has no sample table.")
+    result = _run_trusted(_challenge_db(principal, ch), ch.sample_sql)
+    return ChallengeSampleResponse(
+        table=ch.sample_table,
+        columns=result.columns,
+        column_types=result.column_types,
+        rows=[[_jsonable(v) for v in row] for row in result.rows],
+    )
+
+
+@app.post("/challenges/{challenge_id}/submit", response_model=ChallengeSubmitResponse)
+def challenge_submit(
+    challenge_id: str,
+    req: ChallengeSubmitRequest,
+    _csrf: None = Depends(csrf_guard),
+    principal: Principal = Depends(require_active_session),
+) -> Any:
+    ch = _challenge_or_404(challenge_id)
+    db = _challenge_db(principal, ch)
+    try:
+        if ch.kind == "select":
+            if not (req.sql or "").strip():
+                return _err(400, "E_EMPTY", "Write a query before submitting.")
+            # Cau cua hoc vien di DUNG con duong cua /query: guard, slot, timeout.
+            with db.slot():
+                validated = validate(
+                    req.sql,
+                    db.catalog,
+                    db.function_policy,
+                    max_sql_chars=settings.max_sql_chars,
+                    row_limit=challenge_mod.MAX_COMPARE_ROWS,
+                )
+                yours = db.execute(
+                    validated.sql,
+                    timeout_s=settings.query_timeout_s,
+                    row_limit=challenge_mod.MAX_COMPARE_ROWS,
+                )
+            expected = _run_trusted(db, ch.reference_sql)
+            your_cols, your_rows = yours.columns, yours.rows
+            hashed = challenge_mod.sql_hash(req.sql)
+        else:
+            state = req.state or {}
+            your_cols = list(state.get("columns") or [])
+            your_rows = list(state.get("rows") or [])
+            if not your_cols or len(your_cols) > challenge_mod.MAX_STATE_COLS or len(your_rows) > challenge_mod.MAX_STATE_ROWS:
+                return _err(400, "E_BAD_STATE", "Submit the edited sample table (load it first).")
+            expected = _run_trusted(db, challenge_mod.expected_state_query(ch))
+            hashed = challenge_mod.sql_hash(json.dumps(your_rows, default=str)[:20000])
+    except GuardRejection as rej:
+        return _err(400, rej.code, rej.message)
+    except ServiceBusy as exc:
+        return _err(503, "E_SERVICE_BUSY", str(exc))
+    except QueryTimeout as exc:
+        return _err(408, "E_TIMEOUT", str(exc))
+    except QueryFailed as exc:
+        return _err(400, "E_QUERY_FAILED", exc.message)
+
+    verdict = challenge_mod.compare(
+        your_cols, your_rows, expected.columns, expected.rows,
+        order_matters=ch.order_matters, tol=ch.float_tol,
+    )
+    try:
+        progress = _challenge_store().record(principal.username, ch, verdict["passed"], hashed)
+    except Exception:
+        log.exception("challenge progress write failed; verdict still returned")
+        progress = {"points_awarded": 0, "already_solved": False, "domain_points": 0, "domain_solved": 0}
+    return ChallengeSubmitResponse(
+        **verdict,
+        **progress,
+        takeaway=ch.takeaway if verdict["passed"] else None,
+    )
+
 
 @app.get("/admin/analytics/queries", response_model=InstructorAnalyticsResponse)
 def instructor_analytics(principal: Principal = Depends(require_instructor)) -> Any:

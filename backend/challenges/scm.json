@@ -1,0 +1,372 @@
+{
+  "domain": "scm",
+  "dataset": "scm",
+  "label": "Supply Chain",
+  "note": "Dap an trong file nay KHONG BAO GIO duoc gui ra trinh duyet (backend/challenges.py HIDDEN_FIELDS). So lieu dap an tinh truc tiep tren database scm ngay 2026-11-07, khong chep tu tai lieu khoa hoc (tai lieu lech so giua cac phien ban).",
+  "challenges": [
+    {
+      "id": "scm-e1-mang-luoi-dc",
+      "level": "easy",
+      "topic": "Basic Select",
+      "title": "Mạng lưới kho phân phối",
+      "tables": ["warehouses"],
+      "statement": "Công ty giao hàng cho 54 cửa hàng thông qua các trung tâm phân phối (DC). Hãy liệt kê mã kho và thành phố đặt kho của tất cả DC.",
+      "output": "Hai cột: warehouse_id, city. Sắp xếp theo warehouse_id tăng dần.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Trung tâm phân phối (DC) là kho trung gian: nhà cung cấp giao vào DC, DC gom hàng và giao định kỳ hằng tuần cho từng cửa hàng.",
+        "formula": "Một DC phục vụ nhiều cửa hàng gần nó; khoảng cách DC tới cửa hàng (km_to_dc trong shipments) quyết định thời gian giao.",
+        "why": "Biết có bao nhiêu DC và đặt ở đâu là bước đầu để hiểu vì sao một số cửa hàng hay nhận hàng trễ.",
+        "lab": "Lab 07: OTIF, khoảng cách và trọng tâm (center of gravity)."
+      },
+      "hints": ["Bảng warehouses có đúng một dòng cho mỗi DC.", "Chỉ cần SELECT hai cột và ORDER BY warehouse_id."],
+      "reference_sql": "SELECT warehouse_id, city FROM warehouses ORDER BY warehouse_id",
+      "takeaway": "Chỉ có 3 DC (Hà Nội, Đà Nẵng, TP.HCM) cho 54 cửa hàng ở 22 thành phố: cửa hàng ở xa DC sẽ là ứng viên đầu tiên khi tìm nguyên nhân giao trễ."
+    },
+    {
+      "id": "scm-e2-dinh-dang-cua-hang",
+      "level": "easy",
+      "topic": "Aggregation",
+      "title": "Đếm cửa hàng theo định dạng",
+      "tables": ["stores"],
+      "statement": "Mỗi cửa hàng thuộc một định dạng (cột type, từ A tới E). Hãy đếm số cửa hàng của từng định dạng.",
+      "output": "Hai cột: type, so_cua_hang. Sắp xếp theo type tăng dần.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Định dạng cửa hàng (store format) gom các cửa hàng có quy mô và cách vận hành giống nhau, ví dụ đại siêu thị và cửa hàng tiện lợi.",
+        "formula": "COUNT(*) ... GROUP BY type: một dòng cho mỗi nhóm.",
+        "why": "So sánh KPI giữa hai cửa hàng khác định dạng là so khập khiễng; phân tích luôn bắt đầu bằng việc biết mỗi nhóm có bao nhiêu phần tử.",
+        "lab": "Lab 04: phân cụm cửa hàng, nên đóng hay tái cấu trúc."
+      },
+      "hints": ["GROUP BY type gom các cửa hàng cùng định dạng.", "Đặt tên cột đếm bằng AS so_cua_hang."],
+      "reference_sql": "SELECT type, COUNT(*) AS so_cua_hang FROM stores GROUP BY type ORDER BY type",
+      "takeaway": "Các định dạng có số lượng rất lệch nhau: khi so sánh doanh thu hay lượt khách, hãy so trong cùng một định dạng trước."
+    },
+    {
+      "id": "scm-e3-ncc-hang-tuoi",
+      "level": "easy",
+      "topic": "Basic Select",
+      "title": "Nhà cung cấp hàng tươi",
+      "tables": ["suppliers"],
+      "statement": "Hàng tươi sống phải về kho nhanh nên nhà cung cấp (NCC) hàng tươi cam kết giao trong 3 ngày (promised_lead_days = 3). Hãy liệt kê các NCC đó.",
+      "output": "Ba cột: supplier_id, supplier_name, family. Sắp xếp theo family, rồi supplier_id.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Lead time cam kết là số ngày NCC hứa giao kể từ khi nhận đơn đặt hàng (PO).",
+        "formula": "Trong bộ dữ liệu: 3 ngày cho các nhóm hàng tươi, 7 ngày cho các nhóm còn lại.",
+        "why": "Lead time càng ngắn thì tồn kho an toàn cần giữ càng ít (SS = z·σ·√L), nhưng giao trễ một ngày với hàng tươi là mất hàng.",
+        "lab": "Lab 06: tồn kho an toàn và điểm đặt hàng lại (ROP)."
+      },
+      "hints": ["Lọc bằng WHERE promised_lead_days = 3.", "ORDER BY nhận nhiều cột: ORDER BY family, supplier_id."],
+      "reference_sql": "SELECT supplier_id, supplier_name, family FROM suppliers WHERE promised_lead_days = 3 ORDER BY family, supplier_id",
+      "takeaway": "Mỗi nhóm hàng tươi có 2 NCC: nếu một NCC trễ, công ty vẫn còn nguồn thứ hai. Đây là lý do thiết kế 'mỗi family 2 NCC'."
+    },
+    {
+      "id": "scm-e4-mat-hang-tuoi",
+      "level": "easy",
+      "topic": "Aggregation",
+      "title": "Nhóm hàng có nhiều mặt hàng tươi nhất",
+      "tables": ["items"],
+      "statement": "Cột perishable = 1 đánh dấu mặt hàng dễ hỏng. Hãy đếm số mặt hàng dễ hỏng trong từng nhóm hàng (family).",
+      "output": "Hai cột: family, so_mat_hang. Chỉ các family có ít nhất một mặt hàng dễ hỏng. Sắp xếp theo so_mat_hang giảm dần, rồi family.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Hàng dễ hỏng (perishable) có hạn dùng ngắn: tồn quá nhiều thì phải huỷ, tồn quá ít thì thiếu hàng.",
+        "formula": "WHERE lọc dòng TRƯỚC khi GROUP BY gom nhóm.",
+        "why": "Nhóm có nhiều mặt hàng tươi cần đặt hàng thường xuyên hơn và theo dõi thiếu hàng sát hơn.",
+        "lab": "Lab 05: phân loại ABC × XYZ."
+      },
+      "hints": ["WHERE perishable = 1 trước, GROUP BY family sau.", "Sắp xếp hai tầng: ORDER BY so_mat_hang DESC, family."],
+      "reference_sql": "SELECT family, COUNT(*) AS so_mat_hang FROM items WHERE perishable = 1 GROUP BY family ORDER BY so_mat_hang DESC, family",
+      "takeaway": "Hàng tươi chỉ tập trung ở vài nhóm (bánh mì, thịt, rau quả, sữa…): chính sách tồn kho cho các nhóm này phải khác hẳn nhóm hàng khô."
+    },
+    {
+      "id": "scm-e5-giao-dung-han-tuan",
+      "level": "easy",
+      "topic": "Aggregation",
+      "title": "Tỉ lệ giao đúng hạn trong một tuần",
+      "tables": ["shipments"],
+      "statement": "Mỗi dòng của shipments là một chuyến DC giao cho một cửa hàng trong một tuần. on_time = 1 nghĩa là chuyến đó tới đúng hạn. Với tuần '2017-07-03/2017-07-09', hãy tính số chuyến, tỉ lệ giao đúng hạn (%) và số ngày giao thực tế trung bình.",
+      "output": "Ba cột: so_chuyen, ti_le_dung_han (phần trăm, làm tròn 2 chữ số), so_ngay_tb (làm tròn 2 chữ số).",
+      "lesson": {
+        "concept": "OTD (On-Time Delivery): tỉ lệ chuyến giao tới đúng hạn hoặc sớm hơn hạn.",
+        "formula": "OTD = số chuyến đúng hạn / tổng số chuyến. Vì on_time là 0/1 nên AVG(on_time) chính là tỉ lệ đó.",
+        "why": "OTD thấp là cửa hàng hết hàng trên kệ dù kho vẫn còn. Mục tiêu thường là từ 95% trở lên.",
+        "lab": "Lab 07: OTIF và OTD."
+      },
+      "hints": ["Cột week là chuỗi, so sánh bằng WHERE week = '2017-07-03/2017-07-09'.", "AVG của một cột 0/1 là tỉ lệ; nhân 100.0 để ra phần trăm.", "ROUND(x, 2) cần x kiểu numeric: dùng ROUND(AVG(actual_days)::numeric, 2)."],
+      "reference_sql": "SELECT COUNT(*) AS so_chuyen, ROUND(100.0 * AVG(on_time), 2) AS ti_le_dung_han, ROUND(AVG(actual_days)::numeric, 2) AS so_ngay_tb FROM shipments WHERE week = '2017-07-03/2017-07-09'",
+      "takeaway": "Một con số OTD của cả tuần che mất cửa hàng nào kéo tỉ lệ xuống: bài Medium tiếp theo sẽ tách nó theo kho và cửa hàng."
+    },
+    {
+      "id": "scm-e6-kiem-dinh-chat-luong",
+      "level": "easy",
+      "topic": "UPDATE",
+      "kind": "dml",
+      "title": "Chấm kết quả kiểm định lô hàng",
+      "tables": ["purchase_orders"],
+      "sample_table": "purchase_orders",
+      "statement": "Bạn có bản sao 40 đơn đặt hàng (PO) tháng 7/2017, tất cả đang ở trạng thái inspection_result = 'Pending'. Quy định: lô có tỉ lệ lỗi defect_rate > 0.02 (2%) là 'Fail', còn lại là 'Pass'. Hãy UPDATE bảng purchase_orders cho đúng quy định, rồi bấm Nộp bài.",
+      "output": "Bảng purchase_orders sau khi cập nhật, đủ 40 dòng và 7 cột như ban đầu.",
+      "lesson": {
+        "concept": "Kiểm định chất lượng đầu vào (incoming inspection): mỗi lô nhận về được kiểm, lô vượt ngưỡng lỗi bị trả lại NCC.",
+        "formula": "defect_rate = qty_defect / qty_received. Ngưỡng của công ty: 2%.",
+        "why": "Tỉ lệ lô Fail là một tiêu chí chấm điểm NCC (bài Difficult D2) và là lý do đổi NCC.",
+        "lab": "Lab 07: chất lượng NCC."
+      },
+      "hints": ["Bài này chạy trên bản sao trong trình duyệt, không đụng database thật.", "Một câu UPDATE với CASE làm được cả hai trạng thái: SET inspection_result = CASE WHEN defect_rate > 0.02 THEN 'Fail' ELSE 'Pass' END.", "Hoặc hai câu UPDATE, mỗi câu một WHERE."],
+      "sample_sql": "SELECT po_id, supplier_id, item_nbr, qty_received, qty_defect, defect_rate, 'Pending'::text AS inspection_result FROM purchase_orders WHERE po_date >= '2017-07-01' AND po_date < '2017-08-01' AND received_date IS NOT NULL ORDER BY po_id LIMIT 40",
+      "expected_state_sql": "SELECT po_id, supplier_id, item_nbr, qty_received, qty_defect, defect_rate, CASE WHEN defect_rate > 0.02 THEN 'Fail' ELSE 'Pass' END AS inspection_result FROM sample",
+      "takeaway": "Kiểm định là một quy tắc nghiệp vụ biến thành một câu UPDATE: viết rõ ngưỡng (> hay ≥ 2%) quan trọng không kém viết đúng cú pháp."
+    },
+    {
+      "id": "scm-e7-loai-hang-tra-lai",
+      "level": "easy",
+      "topic": "DELETE",
+      "kind": "dml",
+      "title": "Tách hàng trả lại khỏi dữ liệu bán",
+      "tables": ["sales"],
+      "sample_table": "sales",
+      "statement": "Bạn có bản sao 40 dòng bán hàng của cửa hàng 3 trong tháng 7/2017. Dòng có unit_sales âm là hàng khách trả lại, không phải nhu cầu. Để chuẩn bị dữ liệu dự báo nhu cầu, hãy DELETE các dòng trả hàng khỏi bảng sales, rồi bấm Nộp bài.",
+      "output": "Bảng sales sau khi xoá: chỉ còn các dòng có unit_sales không âm, đủ 5 cột như ban đầu.",
+      "lesson": {
+        "concept": "Dữ liệu bán thật có dòng âm (hàng trả lại) và dòng số lẻ (hàng bán theo cân). Bộ dữ liệu cố tình giữ chúng để học viên phải xử lý.",
+        "formula": "Nhu cầu dùng cho dự báo = các dòng unit_sales ≥ 0; hàng trả lại được theo dõi riêng như một KPI chất lượng.",
+        "why": "Cộng cả dòng âm vào nhu cầu làm dự báo thấp hơn thực tế, dẫn tới đặt hàng thiếu.",
+        "lab": "Lab 02: làm sạch và ghép dữ liệu."
+      },
+      "hints": ["Bài này chạy trên bản sao trong trình duyệt.", "DELETE FROM sales WHERE ... — điều kiện là unit_sales < 0.", "Chạy SELECT COUNT(*) FROM sales trước và sau để thấy số dòng thay đổi."],
+      "sample_sql": "SELECT * FROM ((SELECT date, store_nbr, item_nbr, unit_sales, onpromotion FROM sales WHERE date >= '2017-07-01' AND date < '2017-08-01' AND store_nbr = 3 AND unit_sales < 0 ORDER BY date, item_nbr LIMIT 6) UNION ALL (SELECT date, store_nbr, item_nbr, unit_sales, onpromotion FROM sales WHERE date >= '2017-07-01' AND date < '2017-08-01' AND store_nbr = 3 AND unit_sales > 0 ORDER BY date, item_nbr LIMIT 34)) x ORDER BY date, item_nbr",
+      "expected_state_sql": "SELECT date, store_nbr, item_nbr, unit_sales, onpromotion FROM sample WHERE unit_sales >= 0",
+      "takeaway": "Xoá trên bản sao là một bước làm sạch có chủ đích. Trên dữ liệu gốc, người ta lọc bằng WHERE trong câu phân tích chứ không xoá: dữ liệu trả hàng vẫn có giá trị."
+    },
+    {
+      "id": "scm-m1-doanh-thu-nhom-hang",
+      "level": "medium",
+      "topic": "Basic Join",
+      "title": "Doanh thu theo nhóm hàng tháng 7/2017",
+      "tables": ["sales", "item_costs"],
+      "statement": "Bảng sales chỉ có số lượng bán, giá bán nằm ở item_costs (unit_price). Hãy tính doanh thu tháng 7/2017 của từng nhóm hàng và lấy 10 nhóm cao nhất.",
+      "output": "Hai cột: family, doanh_thu (làm tròn 2 chữ số). 10 dòng, sắp xếp theo doanh_thu giảm dần.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Doanh thu = sản lượng × đơn giá. Số lượng và giá thường nằm ở hai bảng khác nhau, nối qua mã mặt hàng.",
+        "formula": "SUM(unit_sales × unit_price), nối sales.item_nbr = item_costs.item_nbr.",
+        "why": "Xếp hạng doanh thu theo nhóm hàng là đầu vào của phân loại ABC: nhóm nào đáng được quản lý sát nhất.",
+        "lab": "Lab 03: ITR, GMROI và doanh thu."
+      },
+      "hints": ["unit_sales là kiểu real: cộng thẳng cho kết quả lệch nhẹ giữa các lần chạy. Ép kiểu trước: unit_sales::numeric * unit_price::numeric.", "Lọc ngày bằng chuỗi: date >= '2017-07-01' AND date < '2017-08-01' (cột date là text, so chuỗi giúp chỉ quét đúng phân vùng 2017).", "GROUP BY family, ORDER BY doanh_thu DESC, LIMIT 10."],
+      "reference_sql": "SELECT c.family, ROUND(SUM(s.unit_sales::numeric * c.unit_price::numeric), 2) AS doanh_thu FROM sales s JOIN item_costs c ON c.item_nbr = s.item_nbr WHERE s.date >= '2017-07-01' AND s.date < '2017-08-01' GROUP BY c.family ORDER BY doanh_thu DESC LIMIT 10",
+      "takeaway": "GROCERY I một mình gần bằng hai nhóm tiếp theo cộng lại. Giá trong bộ dữ liệu là giá sinh ra, nên thứ hạng có ý nghĩa còn con số tuyệt đối thì không."
+    },
+    {
+      "id": "scm-m2-lead-time-ncc",
+      "level": "medium",
+      "topic": "Join + CASE",
+      "title": "NCC giao có đúng cam kết không?",
+      "tables": ["purchase_orders", "suppliers"],
+      "statement": "Lead time thực tế của một PO là số ngày từ po_date tới received_date. Với các PO đặt từ 2017-01-01 và đã nhận hàng, hãy tính lead time thực tế trung bình của từng NCC, so với lead time cam kết của NCC đó, và đánh giá 'Đạt' nếu trung bình không vượt cam kết, ngược lại 'Trễ'.",
+      "output": "Năm cột: supplier_id, supplier_name, promised_lead_days, lead_time_tb (làm tròn 2 chữ số), danh_gia ('Đạt' hoặc 'Trễ'). Mỗi NCC một dòng.",
+      "lesson": {
+        "concept": "Lead time thực tế so với lead time cam kết cho biết NCC có giữ lời không.",
+        "formula": "lead time = received_date − po_date (đổi hai cột text sang date trước khi trừ). Đạt nếu AVG(lead time) ≤ promised_lead_days.",
+        "why": "Kế hoạch đặt hàng dùng lead time cam kết; nếu thực tế dài hơn thì tồn kho an toàn đang bị tính thiếu.",
+        "lab": "Lab 07: OTD của NCC."
+      },
+      "hints": ["po_date và received_date là text: received_date::date - po_date::date ra số ngày.", "Bỏ PO chưa nhận: WHERE received_date IS NOT NULL.", "CASE WHEN AVG(...) <= s.promised_lead_days THEN 'Đạt' ELSE 'Trễ' END, nhớ GROUP BY cả promised_lead_days."],
+      "reference_sql": "SELECT p.supplier_id, s.supplier_name, s.promised_lead_days, ROUND(AVG(p.received_date::date - p.po_date::date)::numeric, 2) AS lead_time_tb, CASE WHEN AVG(p.received_date::date - p.po_date::date) <= s.promised_lead_days THEN 'Đạt' ELSE 'Trễ' END AS danh_gia FROM purchase_orders p JOIN suppliers s ON s.supplier_id = p.supplier_id WHERE p.received_date IS NOT NULL AND p.po_date >= '2017-01-01' GROUP BY p.supplier_id, s.supplier_name, s.promised_lead_days",
+      "takeaway": "NCC hàng tươi cam kết 3 ngày nhưng có NCC giao trung bình hơn 6 ngày: với hàng tươi đó là mất hàng, không chỉ là trễ."
+    },
+    {
+      "id": "scm-m3-otif-cua-hang",
+      "level": "medium",
+      "topic": "Join + HAVING",
+      "title": "Cửa hàng có OTIF dưới 80%",
+      "tables": ["shipments", "stores"],
+      "statement": "OTIF (On-Time In-Full) = chuyến vừa đúng hạn vừa đủ số lượng; cột otif là 0/1. Trong năm 2017 (week bắt đầu từ '2017'), hãy tìm các cửa hàng có OTIF dưới 80%.",
+      "output": "Bốn cột: store_nbr, city, so_chuyen, otif_pct (phần trăm, làm tròn 2 chữ số). Sắp xếp theo otif_pct tăng dần, rồi store_nbr.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "OTIF gộp hai lỗi: tới trễ (on_time = 0) và thiếu hàng (in_full = 0). Một chuyến chỉ tính đạt khi cả hai cùng đạt.",
+        "formula": "OTIF = AVG(otif). Mục tiêu ngành bán lẻ: từ 95%.",
+        "why": "Lọc ra cửa hàng tệ nhất để điều tra là việc hằng tuần của một DA vận hành.",
+        "lab": "Lab 07: OTIF."
+      },
+      "hints": ["WHERE lọc dòng trước khi gom; HAVING lọc NHÓM sau khi gom.", "HAVING AVG(otif) < 0.8.", "Nối shipments.store_nbr = stores.store_nbr để lấy city."],
+      "reference_sql": "SELECT sh.store_nbr, st.city, COUNT(*) AS so_chuyen, ROUND(100.0 * AVG(sh.otif), 2) AS otif_pct FROM shipments sh JOIN stores st ON st.store_nbr = sh.store_nbr WHERE sh.week >= '2017' GROUP BY sh.store_nbr, st.city HAVING AVG(sh.otif) < 0.8 ORDER BY otif_pct, sh.store_nbr",
+      "takeaway": "Vài cửa hàng có OTIF dưới 80% kéo cả mạng lưới xuống. Câu hỏi tiếp theo cho DA là: các cửa hàng này có chung DC, hay chung khoảng cách xa?"
+    },
+    {
+      "id": "scm-m4-luot-khach-dinh-dang",
+      "level": "medium",
+      "topic": "Basic Join",
+      "title": "Lượt khách theo định dạng cửa hàng",
+      "tables": ["transactions", "stores"],
+      "statement": "transactions đếm số lượt khách của mỗi cửa hàng mỗi ngày. Trong năm 2016, hãy tính số lượt khách trung bình mỗi ngày của từng định dạng cửa hàng.",
+      "output": "Hai cột: type, khach_tb_ngay (làm tròn 1 chữ số). Sắp xếp theo khach_tb_ngay giảm dần.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Doanh thu một ngày = lượt khách (traffic) × giá trị giỏ hàng. transactions cho ta vế traffic.",
+        "formula": "AVG(transactions) theo nhóm type, sau khi nối với stores.",
+        "why": "Cửa hàng doanh thu thấp vì ít khách hay vì giỏ hàng nhỏ? Hai nguyên nhân cần hai giải pháp khác nhau.",
+        "lab": "Lab 03: tách doanh thu thành traffic × giỏ hàng."
+      },
+      "hints": ["transactions.date là kiểu date: WHERE t.date >= '2016-01-01' AND t.date < '2017-01-01'.", "ROUND(AVG(t.transactions), 1)."],
+      "reference_sql": "SELECT st.type, ROUND(AVG(t.transactions), 1) AS khach_tb_ngay FROM transactions t JOIN stores st ON st.store_nbr = t.store_nbr WHERE t.date >= '2016-01-01' AND t.date < '2017-01-01' GROUP BY st.type ORDER BY khach_tb_ngay DESC",
+      "takeaway": "Định dạng A đón gấp đôi lượt khách so với B: khoảng cách doanh thu giữa các định dạng phần lớn đến từ traffic, không phải giỏ hàng."
+    },
+    {
+      "id": "scm-m5-thieu-hang-nhom",
+      "level": "medium",
+      "topic": "Basic Join",
+      "title": "Nhóm hàng hay thiếu hàng nhất",
+      "tables": ["inventory_snapshots", "items"],
+      "statement": "inventory_snapshots có một dòng cho mỗi cửa hàng × mặt hàng × tháng; thieu_hut > 0 nghĩa là có nhu cầu không được đáp ứng. Trong tháng '2017-07', hãy tính tỉ lệ dòng bị thiếu hàng của từng nhóm hàng và lấy 5 nhóm cao nhất.",
+      "output": "Hai cột: family, ti_le_thieu_hang (phần trăm, làm tròn 2 chữ số). 5 dòng, sắp xếp theo ti_le_thieu_hang giảm dần, rồi family.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Stockout rate (tỉ lệ thiếu hàng): phần các cặp cửa hàng × mặt hàng không đủ hàng để bán.",
+        "formula": "AVG(CASE WHEN thieu_hut > 0 THEN 1 ELSE 0 END). Dưới 2% là tốt, trên 5% là có vấn đề.",
+        "why": "Thiếu hàng là doanh thu mất đi mà báo cáo bán hàng không bao giờ thấy, vì không có giao dịch nào được ghi.",
+        "lab": "Lab 06: dự báo, bias và tồn kho an toàn."
+      },
+      "hints": ["ym là text dạng 'YYYY-MM': WHERE v.ym = '2017-07'.", "Biến điều kiện thành 0/1 bằng CASE rồi lấy AVG.", "ORDER BY ti_le_thieu_hang DESC, family LIMIT 5."],
+      "reference_sql": "SELECT i.family, ROUND(100.0 * AVG(CASE WHEN v.thieu_hut > 0 THEN 1 ELSE 0 END), 2) AS ti_le_thieu_hang FROM inventory_snapshots v JOIN items i ON i.item_nbr = v.item_nbr WHERE v.ym = '2017-07' GROUP BY i.family ORDER BY ti_le_thieu_hang DESC, i.family LIMIT 5",
+      "takeaway": "BEAUTY thiếu hàng ở khoảng 1/5 số cặp cửa hàng × mặt hàng, gấp đôi nhóm thứ hai: đây là nhóm cần xem lại điểm đặt hàng lại trước tiên."
+    },
+    {
+      "id": "scm-d1-phan-loai-abc",
+      "level": "difficult",
+      "topic": "CTE + Window",
+      "title": "Phân loại ABC mặt hàng",
+      "tables": ["sales", "item_costs"],
+      "statement": "Phân loại ABC tháng 7/2017 theo doanh thu mặt hàng (chỉ xét mặt hàng có doanh thu > 0). Xếp mặt hàng theo doanh thu giảm dần (cùng doanh thu thì item_nbr nhỏ trước), tính tỉ lệ doanh thu tích luỹ. Mặt hàng có tỉ lệ tích luỹ ≤ 80% là hạng A, ≤ 95% là B, còn lại là C.",
+      "output": "Ba cột: hang ('A', 'B', 'C'), so_mat_hang, doanh_thu (tổng doanh thu của hạng, làm tròn 2 chữ số). Sắp xếp theo hang.",
+      "order_matters": true,
+      "float_tol": 0.05,
+      "lesson": {
+        "concept": "ABC là quy tắc Pareto áp vào hàng hoá: một phần nhỏ mặt hàng tạo ra phần lớn doanh thu.",
+        "formula": "tỉ lệ tích luỹ = SUM(doanh_thu) OVER (ORDER BY doanh_thu DESC, item_nbr) / SUM(doanh_thu) OVER (). A ≤ 80%, B ≤ 95%, C phần còn lại.",
+        "why": "Hạng A được kiểm kê thường xuyên và giữ tồn kho an toàn cao; hạng C có thể đặt hàng thưa hơn.",
+        "lab": "Lab 05: ABC × XYZ."
+      },
+      "hints": ["CTE 1: doanh thu từng mặt hàng (giống bài M1 nhưng GROUP BY item_nbr), HAVING > 0.", "CTE 2: hàm cửa sổ SUM(...) OVER (ORDER BY ...) cho tổng tích luỹ, chia cho SUM(...) OVER () là tổng toàn bộ.", "Bước cuối: CASE gán hạng, rồi GROUP BY hạng. Dùng ::numeric để ranh giới 80% không bị lệch do số thực."],
+      "reference_sql": "WITH dt AS (SELECT s.item_nbr, SUM(s.unit_sales::numeric * c.unit_price::numeric) AS doanh_thu FROM sales s JOIN item_costs c ON c.item_nbr = s.item_nbr WHERE s.date >= '2017-07-01' AND s.date < '2017-08-01' GROUP BY s.item_nbr HAVING SUM(s.unit_sales::numeric * c.unit_price::numeric) > 0), luy_ke AS (SELECT doanh_thu, SUM(doanh_thu) OVER (ORDER BY doanh_thu DESC, item_nbr) / SUM(doanh_thu) OVER () AS ty_le FROM dt) SELECT CASE WHEN ty_le <= 0.80 THEN 'A' WHEN ty_le <= 0.95 THEN 'B' ELSE 'C' END AS hang, COUNT(*) AS so_mat_hang, ROUND(SUM(doanh_thu), 2) AS doanh_thu FROM luy_ke GROUP BY 1 ORDER BY 1",
+      "takeaway": "Khoảng 40% mặt hàng (hạng A) tạo 80% doanh thu. Bộ dữ liệu này ít 'Pareto' hơn quy tắc 20/80 kinh điển, vì siêu thị bán rất nhiều mặt hàng thiết yếu cùng lúc."
+    },
+    {
+      "id": "scm-d2-bang-diem-ncc",
+      "level": "difficult",
+      "topic": "Multiple CTE",
+      "title": "Bảng điểm nhà cung cấp",
+      "tables": ["purchase_orders", "suppliers"],
+      "statement": "Chấm điểm NCC trên các PO đặt từ 2017-01-01 và đã nhận hàng. Hai chỉ số: tỉ lệ PO giao đúng hạn (received_date ≤ promised_date) và tỉ lệ lỗi gộp = tổng qty_defect / tổng qty_received. Điểm = 70 × tỉ lệ đúng hạn + 30 × (1 − MIN(tỉ lệ lỗi / 0.04, 1)). Hạng: Gold nếu điểm ≥ 75, Silver nếu ≥ 60, còn lại Bronze.",
+      "output": "Sáu cột: supplier_id, family, dung_han_pct, loi_pct (hai cột phần trăm, làm tròn 2 chữ số), diem (làm tròn 1 chữ số), hang. Mỗi NCC một dòng.",
+      "float_tol": 0.06,
+      "lesson": {
+        "concept": "Supplier scorecard: gộp nhiều chỉ số chất lượng thành một điểm duy nhất để so sánh và phân hạng NCC.",
+        "formula": "Bản rút gọn của bảng điểm trong khoá học (khoá học dùng 5 tiêu chí 35/20/20/15/10; ở đây 2 tiêu chí 70/30). Tỉ lệ lỗi chạm 4% là mất trọn 30 điểm chất lượng.",
+        "why": "Hạng Gold được ưu tiên đơn hàng; Bronze bị xem xét thay thế. Một con số dễ ra quyết định hơn năm con số.",
+        "lab": "Lab 07: điểm NCC."
+      },
+      "hints": ["CTE 1 gom theo supplier_id: AVG(CASE WHEN received_date <= promised_date THEN 1.0 ELSE 0 END) và SUM(qty_defect) / SUM(qty_received).", "Hai cột ngày là text 'YYYY-MM-DD' nên so sánh chuỗi vẫn đúng thứ tự thời gian.", "CTE 2 tính điểm bằng LEAST(ti_le_loi / 0.04, 1); bước cuối nối suppliers để lấy family và CASE xếp hạng."],
+      "reference_sql": "WITH po AS (SELECT supplier_id, AVG(CASE WHEN received_date <= promised_date THEN 1.0 ELSE 0 END) AS ti_le_dung_han, SUM(qty_defect)::numeric / NULLIF(SUM(qty_received), 0)::numeric AS ti_le_loi FROM purchase_orders WHERE po_date >= '2017-01-01' AND received_date IS NOT NULL GROUP BY supplier_id), diem AS (SELECT supplier_id, ti_le_dung_han, ti_le_loi, 70 * ti_le_dung_han + 30 * (1 - LEAST(ti_le_loi / 0.04, 1)) AS diem FROM po) SELECT d.supplier_id, s.family, ROUND(100 * d.ti_le_dung_han, 2) AS dung_han_pct, ROUND(100 * d.ti_le_loi, 2) AS loi_pct, ROUND(d.diem, 1) AS diem, CASE WHEN d.diem >= 75 THEN 'Gold' WHEN d.diem >= 60 THEN 'Silver' ELSE 'Bronze' END AS hang FROM diem d JOIN suppliers s ON s.supplier_id = d.supplier_id",
+      "takeaway": "Phần lớn NCC đạt Gold, nhưng 11 NCC Bronze có điểm rất thấp, có NCC gần 0: chúng vừa trễ vừa lỗi nhiều, là ứng viên thay thế đầu tiên."
+    },
+    {
+      "id": "scm-d3-cong-doan-cham-nhat",
+      "level": "difficult",
+      "topic": "UNION ALL + Window",
+      "title": "Công đoạn giao hàng chậm nhất ở mỗi hub",
+      "tables": ["orders"],
+      "statement": "Một đơn online đi qua 5 công đoạn, mỗi công đoạn một cột giờ: t1_tao_don_pick_h, t2_pick_xuat_h, t3a_di_chuyen_h, t3b_sorting_h, t4_kho_giao_h. Với các đơn không huỷ, đặt trong tháng 7/2017, hãy tìm ở mỗi hub xuất phát (origin_hub_id) công đoạn có số giờ trung bình lớn nhất.",
+      "output": "Ba cột: hub_id, cong_doan (tên cột bỏ hậu tố '_h', ví dụ 't3b_sorting'), gio_tb (làm tròn 2 chữ số). Mỗi hub một dòng, sắp xếp theo hub_id.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Lead time last-mile = tổng 5 công đoạn. Tìm điểm nghẽn (bottleneck) là tìm công đoạn chiếm nhiều thời gian nhất.",
+        "formula": "UNION ALL 'xoay' 5 cột thành 5 dòng (hub, công đoạn, giờ), rồi ROW_NUMBER() OVER (PARTITION BY hub ORDER BY giờ TB DESC) = 1.",
+        "why": "Mỗi hub nghẽn ở một chỗ khác nhau thì cần một giải pháp khác nhau: thêm người phân loại, hay gom chuyến xe nhanh hơn.",
+        "lab": "Lab 10: lead time last-mile và điểm nghẽn."
+      },
+      "hints": ["order_date là text: order_date >= '2017-07-01' AND order_date < '2017-08-01', và NOT is_cancelled.", "Mỗi nhánh UNION ALL chọn origin_hub_id, một hằng chuỗi tên công đoạn, và cột giờ tương ứng.", "Gom AVG theo (hub, công đoạn) trong một CTE, đánh số bằng ROW_NUMBER trong CTE kế tiếp, rồi lấy rn = 1."],
+      "reference_sql": "WITH cd AS (SELECT origin_hub_id AS hub_id, 't1_tao_don_pick' AS cong_doan, t1_tao_don_pick_h AS gio FROM orders WHERE order_date >= '2017-07-01' AND order_date < '2017-08-01' AND NOT is_cancelled UNION ALL SELECT origin_hub_id, 't2_pick_xuat', t2_pick_xuat_h FROM orders WHERE order_date >= '2017-07-01' AND order_date < '2017-08-01' AND NOT is_cancelled UNION ALL SELECT origin_hub_id, 't3a_di_chuyen', t3a_di_chuyen_h FROM orders WHERE order_date >= '2017-07-01' AND order_date < '2017-08-01' AND NOT is_cancelled UNION ALL SELECT origin_hub_id, 't3b_sorting', t3b_sorting_h FROM orders WHERE order_date >= '2017-07-01' AND order_date < '2017-08-01' AND NOT is_cancelled UNION ALL SELECT origin_hub_id, 't4_kho_giao', t4_kho_giao_h FROM orders WHERE order_date >= '2017-07-01' AND order_date < '2017-08-01' AND NOT is_cancelled), tb AS (SELECT hub_id, cong_doan, AVG(gio) AS gio_tb FROM cd GROUP BY hub_id, cong_doan), xep AS (SELECT hub_id, cong_doan, gio_tb, ROW_NUMBER() OVER (PARTITION BY hub_id ORDER BY gio_tb DESC) AS rn FROM tb) SELECT hub_id, cong_doan, ROUND(gio_tb::numeric, 2) AS gio_tb FROM xep WHERE rn = 1 ORDER BY hub_id",
+      "takeaway": "Đà Nẵng nghẽn ở khâu chờ xuất (gom đủ xe mới chạy), còn Hà Nội và TP.HCM nghẽn ở khâu phân loại tại hub: cùng một KPI lead time nhưng hai nguyên nhân khác nhau."
+    },
+    {
+      "id": "scm-d4-dang-thuc-ton-kho",
+      "level": "difficult",
+      "topic": "CTE + RANK",
+      "title": "Kiểm tra đẳng thức tồn kho",
+      "tables": ["inventory_snapshots"],
+      "statement": "Về nguyên tắc: on_hand_end = on_hand_begin + received − sold + thieu_hut. Trong tháng '2017-07', một dòng bị coi là lệch nếu hai vế chênh nhau hơn 0.01. Hãy tìm 5 cửa hàng có nhiều dòng lệch nhất (dùng RANK, các cửa hàng đồng hạng đều được lấy).",
+      "output": "Bốn cột: store_nbr, so_dong, so_dong_lech, ti_le_lech (phần trăm, làm tròn 2 chữ số). Sắp xếp theo so_dong_lech giảm dần, rồi store_nbr.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Đẳng thức tồn kho là phép kiểm tra chất lượng dữ liệu (data quality check): tồn cuối phải bằng tồn đầu cộng nhập trừ xuất.",
+        "formula": "lệch = ABS(on_hand_end − (on_hand_begin + received − sold + thieu_hut)) > 0.01. Đặt ngưỡng nhỏ vì các cột là số thực.",
+        "why": "Trước khi tính bất kỳ KPI tồn kho nào (ITR, GMROI), DA phải biết dữ liệu có tự mâu thuẫn không. Báo cáo trên dữ liệu lệch là báo cáo sai.",
+        "lab": "Lab 01–02: khảo sát và làm sạch dữ liệu."
+      },
+      "hints": ["CTE 1: GROUP BY store_nbr, đếm tổng dòng và SUM(CASE WHEN ABS(...) > 0.01 THEN 1 ELSE 0 END).", "CTE 2: RANK() OVER (ORDER BY so_dong_lech DESC), rồi lọc hạng ≤ 5.", "ti_le_lech = 100.0 * so_dong_lech / so_dong."],
+      "reference_sql": "WITH lech AS (SELECT store_nbr, COUNT(*) AS so_dong, SUM(CASE WHEN ABS(on_hand_end - (on_hand_begin + received - sold + thieu_hut)) > 0.01 THEN 1 ELSE 0 END) AS so_dong_lech FROM inventory_snapshots WHERE ym = '2017-07' GROUP BY store_nbr), xep AS (SELECT store_nbr, so_dong, so_dong_lech, RANK() OVER (ORDER BY so_dong_lech DESC) AS hang FROM lech) SELECT store_nbr, so_dong, so_dong_lech, ROUND(100.0 * so_dong_lech / so_dong, 2) AS ti_le_lech FROM xep WHERE hang <= 5 ORDER BY so_dong_lech DESC, store_nbr",
+      "takeaway": "Cửa hàng nào cũng có 10–14% dòng lệch, không tập trung ở một nơi: đó là dấu hiệu của một lỗi hệ thống trong cách sinh dữ liệu, không phải lỗi nhập liệu của một cửa hàng."
+    },
+    {
+      "id": "scm-a1-voucher-tu-dong",
+      "level": "advanced",
+      "topic": "Phân tích A/B",
+      "title": "Có nên bật voucher tự áp dụng cho mọi đơn?",
+      "tables": ["orders"],
+      "statement": "Bộ phận thương mại điện tử chạy thử nghiệm A/B: một nửa khách tự nhập voucher (checkout_group = 'manual'), nửa kia được hệ thống tự áp dụng ('auto_apply'). Giám đốc hỏi: 'Có nên bật tự áp dụng cho tất cả không?'. Hãy lập bảng số liệu để trả lời: với mỗi nhóm, số đơn, số đơn bị huỷ và tỉ lệ huỷ.",
+      "output": "Bốn cột: checkout_group, so_don, so_huy, ti_le_huy (phần trăm, làm tròn 2 chữ số). Sắp xếp theo checkout_group.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "Thử nghiệm A/B: chia ngẫu nhiên khách thành hai nhóm, chỉ khác nhau một yếu tố, rồi so một chỉ số kết quả.",
+        "formula": "tỉ lệ huỷ = đơn huỷ / tổng đơn mỗi nhóm. Luôn báo kèm cỡ mẫu (so_don): chênh 4 điểm trên 500 nghìn đơn khác hẳn chênh 4 điểm trên 50 đơn.",
+        "why": "Một DA không chỉ đưa con số mà phải đưa con số đủ để người khác ra quyết định: hiệu ứng, cỡ mẫu, và rủi ro.",
+        "lab": "Lab 09–10: khoảng tin cậy, p-value và A/B voucher."
+      },
+      "hints": ["is_cancelled là boolean: CASE WHEN is_cancelled THEN 1 ELSE 0 END để đếm và lấy tỉ lệ.", "GROUP BY checkout_group."],
+      "reference_sql": "SELECT checkout_group, COUNT(*) AS so_don, SUM(CASE WHEN is_cancelled THEN 1 ELSE 0 END) AS so_huy, ROUND(100.0 * AVG(CASE WHEN is_cancelled THEN 1 ELSE 0 END), 2) AS ti_le_huy FROM orders GROUP BY checkout_group ORDER BY checkout_group",
+      "takeaway": "Tự áp dụng giảm tỉ lệ huỷ từ khoảng 11,8% xuống 8,0% trên hơn 500 nghìn đơn mỗi nhóm: hiệu ứng lớn và chắc chắn. Khuyến nghị bật, kèm theo dõi chi phí voucher tăng thêm, vì nhiều khách hơn sẽ dùng voucher."
+    },
+    {
+      "id": "scm-a2-ngay-su-kien",
+      "level": "advanced",
+      "topic": "Phân tích vận hành",
+      "title": "Ngày sự kiện lớn làm tắc ở đâu?",
+      "tables": ["orders", "event_calendar"],
+      "statement": "Trưởng vận hành nghi rằng các ngày khuyến mãi lớn làm hàng giao trễ, nhưng không rõ trễ ở khâu nào. event_calendar ghi các ngày sự kiện với mức tier ('nho', 'vua', 'lon', 'le'); ngày không có trong lịch là ngày thường. Với các đơn không huỷ, hãy so sánh theo loại ngày: số đơn, giờ phân loại tại hub trung bình (t3b_sorting_h), lead time trung bình và tỉ lệ đúng hạn.",
+      "output": "Năm cột: loai_ngay (tier, hoặc 'thuong' cho ngày thường), so_don, sorting_tb_h, lead_time_tb_h (hai cột làm tròn 2 chữ số), dung_han_pct (phần trăm, làm tròn 2 chữ số). Sắp xếp theo sorting_tb_h giảm dần.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "So sánh có kiểm soát: cùng một chỉ số, đo trong điều kiện bình thường và điều kiện cao điểm, để thấy riêng tác động của cao điểm.",
+        "formula": "LEFT JOIN orders với event_calendar theo ngày (order_date là text, cần ép sang date), COALESCE(tier, 'thuong') cho ngày không có sự kiện.",
+        "why": "Biết khâu nghẽn trong ngày cao điểm giúp lên kế hoạch nhân sự: thuê thêm người phân loại đúng những ngày đó.",
+        "lab": "Lab 10: điểm nghẽn last-mile và quy tắc cảnh báo."
+      },
+      "hints": ["LEFT JOIN để giữ cả ngày thường: event_calendar e ON e.date = o.order_date::date.", "COALESCE(e.tier, 'thuong') AS loai_ngay, rồi GROUP BY 1.", "Tỉ lệ đúng hạn = 100.0 * AVG(on_time)."],
+      "reference_sql": "SELECT COALESCE(e.tier, 'thuong') AS loai_ngay, COUNT(*) AS so_don, ROUND(AVG(o.t3b_sorting_h)::numeric, 2) AS sorting_tb_h, ROUND(AVG(o.lead_time_total_h)::numeric, 2) AS lead_time_tb_h, ROUND(100.0 * AVG(o.on_time), 2) AS dung_han_pct FROM orders o LEFT JOIN event_calendar e ON e.date = o.order_date::date WHERE NOT o.is_cancelled GROUP BY 1 ORDER BY sorting_tb_h DESC",
+      "takeaway": "Ngày sự kiện lớn có giờ phân loại gấp khoảng 7 lần ngày thường, trong khi các khâu khác gần như không đổi; tỉ lệ đúng hạn rơi từ khoảng 97% xuống 68%. Khuyến nghị: tăng ca phân loại tại hub trong các ngày tier 'lon', không phải thêm xe."
+    },
+    {
+      "id": "scm-a3-gmroi-cua-hang",
+      "level": "advanced",
+      "topic": "Phân tích tài chính",
+      "title": "Cửa hàng nào sinh lời kém trên vốn tồn kho?",
+      "tables": ["sales", "item_costs", "inventory_snapshots", "transactions", "stores"],
+      "statement": "Giám đốc tài chính muốn biết cửa hàng nào 'giam vốn' trong tồn kho mà sinh lời ít nhất. Dùng GMROI tháng 7/2017 = lãi gộp tháng / giá trị tồn kho cuối tháng theo giá vốn, trong đó lãi gộp = SUM(unit_sales × (unit_price − unit_cost)) và giá trị tồn = SUM(inventory_value) của ym '2017-07'. Loại các cửa hàng mở muộn (giao dịch đầu tiên trong transactions từ 2016-01-01 trở đi), vì chúng chưa đủ lịch sử. Hãy tìm 5 cửa hàng có GMROI thấp nhất.",
+      "output": "Bốn cột: store_nbr, city, type, gmroi (làm tròn 2 chữ số). 5 dòng, sắp xếp theo gmroi tăng dần, rồi store_nbr.",
+      "order_matters": true,
+      "lesson": {
+        "concept": "GMROI (Gross Margin Return On Inventory): mỗi đồng vốn nằm trong tồn kho tạo ra bao nhiêu đồng lãi gộp.",
+        "formula": "GMROI = lãi gộp / giá trị tồn kho theo giá vốn. Tính theo năm thì ≥ 2 là tốt, ≥ 3 là rất tốt; ở đây là số của một tháng nên nhỏ hơn nhiều.",
+        "why": "Doanh thu cao chưa chắc tốt nếu phải ôm rất nhiều hàng; GMROI cho thấy hiệu quả dùng vốn, là câu hỏi của tài chính chứ không chỉ của bán hàng.",
+        "lab": "Lab 03: ITR, GMROI, DIO."
+      },
+      "hints": ["Ba CTE: cửa hàng mở sớm (HAVING MIN(date) < '2016-01-01'), lãi gộp theo cửa hàng (sales × item_costs), giá trị tồn theo cửa hàng (inventory_snapshots).", "Dùng ::numeric khi nhân unit_sales, như bài M1.", "Nối cả ba CTE với stores, ORDER BY gmroi, store_nbr LIMIT 5."],
+      "reference_sql": "WITH mo_som AS (SELECT store_nbr FROM transactions GROUP BY store_nbr HAVING MIN(date) < '2016-01-01'), lai_gop AS (SELECT s.store_nbr, SUM(s.unit_sales::numeric * (c.unit_price - c.unit_cost)::numeric) AS lai_gop FROM sales s JOIN item_costs c ON c.item_nbr = s.item_nbr WHERE s.date >= '2017-07-01' AND s.date < '2017-08-01' GROUP BY s.store_nbr), ton AS (SELECT store_nbr, SUM(inventory_value) AS gia_tri_ton FROM inventory_snapshots WHERE ym = '2017-07' GROUP BY store_nbr) SELECT l.store_nbr, st.city, st.type, ROUND(l.lai_gop / t.gia_tri_ton::numeric, 2) AS gmroi FROM lai_gop l JOIN ton t ON t.store_nbr = l.store_nbr JOIN mo_som m ON m.store_nbr = l.store_nbr JOIN stores st ON st.store_nbr = l.store_nbr ORDER BY gmroi, l.store_nbr LIMIT 5",
+      "takeaway": "Ba trong năm cửa hàng kém nhất thuộc định dạng D, và cả năm đều ở mức tồn rất cao so với lượng bán. Trước khi nghĩ tới đóng cửa hàng, hãy xem lại mức tồn chuẩn của định dạng D: giảm tồn là cách nâng GMROI nhanh và rẻ nhất."
+    }
+  ]
+}

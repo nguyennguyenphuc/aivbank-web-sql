@@ -275,7 +275,12 @@ def gami_store():
             for table in (
                 "app.practice_events", "app.practice_daily",
                 "app.user_achievements", "app.user_rewards",
+                # Luyen SQL (database/schema/20_challenges.sql). Co the chua
+                # duoc tao tren DB test cu: bo qua thay vi lam do ca fixture.
+                "app.challenge_attempts", "app.challenge_solved",
             ):
+                if con.execute("SELECT to_regclass(%s)", (table,)).fetchone()[0] is None:
+                    continue
                 con.execute(
                     f"DELETE FROM {table} WHERE username = ANY(%s)",
                     (list(GAMI_TEST_USERS),),

@@ -197,6 +197,56 @@ class InstructorAnalyticsResponse(BaseModel):
     recent: list[dict[str, Any]]
 
 
+class ChallengeListResponse(BaseModel):
+    ok: Literal[True] = True
+    domains: list[dict[str, Any]]
+    challenges: list[dict[str, Any]]
+    my_points: int
+    my_solved: int
+
+
+class ChallengeDetailResponse(BaseModel):
+    ok: Literal[True] = True
+    challenge: dict[str, Any]
+
+
+class ChallengeSampleResponse(BaseModel):
+    ok: Literal[True] = True
+    table: str
+    columns: list[str]
+    column_types: list[str]
+    rows: list[list[Any]]
+
+
+class ChallengeSubmitRequest(BaseModel):
+    """`sql` cho bai select; `state` (bang sau khi sua trong trinh duyet) cho bai dml."""
+
+    sql: str | None = Field(default=None, max_length=20000)
+    state: dict[str, Any] | None = None
+
+
+class ChallengeSubmitResponse(BaseModel):
+    ok: Literal[True] = True
+    passed: bool
+    reason: str
+    your_cols: int
+    expected_cols: int
+    your_rows: int
+    expected_rows: int
+    matched_rows: int
+    points_awarded: int
+    already_solved: bool
+    domain_points: int
+    domain_solved: int
+    takeaway: str | None = None
+
+
+class ChallengeLeaderboardResponse(BaseModel):
+    ok: Literal[True] = True
+    domain: str
+    entries: list[dict[str, Any]]
+
+
 class DatasetSummary(BaseModel):
     """Mot bo du lieu ma phien hien tai dung duoc."""
 
