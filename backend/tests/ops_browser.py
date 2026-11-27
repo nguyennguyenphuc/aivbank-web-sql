@@ -104,7 +104,8 @@ def main() -> int:
             else None,
         )
 
-        page.goto(BASE, wait_until="networkidle")
+        # Tu 2026-11-27 `/` la trang chu eDA (lo trinh); bang dieu khien o /app.html.
+        page.goto(BASE + "/app.html", wait_until="networkidle")
 
         # --- 1. man hinh dang nhap la thu duy nhat thay duoc khi chua co phien ---
         gate_visible = page.locator("#auth-gate").is_visible()
