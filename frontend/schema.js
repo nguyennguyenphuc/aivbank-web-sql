@@ -10,11 +10,18 @@
 import { api } from './api.js';
 import { errorHint } from './errors.js';
 
-export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onInsert, onError }) {
+/** Nhom bang theo mien nghiep vu (cung bo luat voi chip mien cua so do ERD).
+ *  `groups()` tra mang luat {label, test, show} hoac null (bo du lieu khong nhom).
+ *  Luat co label null (bang raw_) gom vao nhom "Dữ liệu thô" o cuoi. */
+const RAW_LABEL = 'Dữ liệu thô';
+
+export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onInsert, onPreview, onError, groups }) {
   /** @type {{tables: Array, byName: Map}|null} */
   let schema = null;
   const expanded = new Set();
   const rowCounts = new Map();
+  /** Nhom dang MO. Mac dinh dong het: 11 tieu de nhom la ban do cua 77 bang. */
+  const openGroups = new Set();
   /** "bang.cot" (chu thuong) -> "bang_dich.cot_dich", tu GET /schema/relationships.
    *  Chi de gan nhan FK; thieu no (may chu cu, loi mang) thi danh muc van du. */
   let fkRefs = new Map();
@@ -73,125 +80,57 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
     return { table: inName || cols.length > 0, cols: inName ? null : cols };
   }
 
+  function groupOf(rules, name) {
+    for (const r of rules) if (r.test.test(name)) return r.label || RAW_LABEL;
+    return RAW_LABEL;
+  }
+
   function render() {
     if (!schema) return;
     const q = filterEl.value.trim().toLowerCase();
     listEl.innerHTML = '';
     const frag = document.createDocumentFragment();
     let shown = 0;
+    const rules = groups ? groups() : null;
 
-    for (const table of schema.tables) {
-      const m = matches(table, q);
-      if (!m.table) continue;
-      shown++;
+    const visible = schema.tables.map((t) => [t, matches(t, q)]).filter(([, m]) => m.table);
+    shown = visible.length;
 
-      const item = document.createElement('div');
-      item.className = 'tbl';
-
-      const head = document.createElement('button');
-      head.className = 'tbl-head';
-      head.type = 'button';
-      head.setAttribute('aria-expanded', String(expanded.has(table.name)));
-      head.innerHTML =
-        '<span class="caret"></span>' +
-        `<span class="tbl-name"></span>` +
-        `<span class="tbl-cols"></span>`;
-      head.querySelector('.tbl-name').textContent = table.name;
-      // A long name is ellipsised in the sidebar, so the full one has to stay
-      // reachable. Still the API's name, still cleared by clear() with the rest
-      // of the list — this adds a tooltip, not a second source of names.
-      head.title = table.name;
-      const rc = rowCounts.get(table.name);
-      // Hai con so la hai o rieng, khong noi bang dau cham giua (redesign 2026-11).
-      const meta = head.querySelector('.tbl-cols');
-      meta.appendChild(document.createElement('span')).textContent = `${table.columns.length} cột`;
-      if (rc !== undefined) {
-        meta.appendChild(document.createElement('span')).textContent = `${rc.toLocaleString('en-US')} dòng`;
+    if (!rules) {
+      for (const [table, m] of visible) frag.appendChild(renderTable(table, m, q));
+    } else {
+      // Thu tu nhom theo `show` cua luat (giong chip ERD), "Dữ liệu thô" cuoi.
+      const order = new Map(rules.filter((r) => r.label).map((r) => [r.label, r.show ?? 99]));
+      const buckets = new Map();
+      for (const [table, m] of visible) {
+        const g = groupOf(rules, table.name);
+        if (!buckets.has(g)) buckets.set(g, []);
+        buckets.get(g).push([table, m]);
       }
-      head.addEventListener('click', () => toggle(table));
-      item.appendChild(head);
-
-      const use = document.createElement('button');
-      use.className = 'tbl-insert';
-      use.type = 'button';
-      use.title = 'Chèn tên bảng vào ô soạn thảo';
-      use.setAttribute('aria-label', `Chèn bảng ${table.name} vào trình soạn thảo`);
-      use.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 4v13m0 0-5-5m5 5 5-5M5 20h14" /></svg>';
-      use.addEventListener('click', (e) => {
-        e.stopPropagation();
-        onInsert(table.name);
-      });
-      item.appendChild(use);
-
-      if (expanded.has(table.name) || (q && m.cols && m.cols.length)) {
-        const cols = document.createElement('ul');
-        cols.className = 'col-list';
-        const source = expanded.has(table.name) ? table.columns : m.cols;
-        for (const c of source) {
-          const li = document.createElement('li');
-          li.className = 'col' + (c.primary_key ? ' is-pk' : '');
-          const nm = document.createElement('span');
-          nm.className = 'col-name';
-          nm.textContent = c.name;
-          const ty = document.createElement('span');
-          ty.className = 'col-type';
-          ty.textContent = c.type;
-          // Hai tang (redesign 2026-11): ten cot va kieu o tren, cac nhan o
-          // duoi. Mot hang thi PK/FK/NOT NULL an mat ten cot, ma ten cot moi la
-          // thu hoc vien can doc.
-          li.appendChild(nm);
-          li.appendChild(ty);
-          const tags = document.createElement('span');
-          tags.className = 'col-tags';
-          if (c.primary_key) {
-            const pk = document.createElement('span');
-            pk.className = 'tag tag-pk';
-            pk.textContent = 'PK';
-            tags.appendChild(pk);
-          }
-          // Cung ky hieu voi tab So do ERD: thay FK o day la biet cot nay JOIN
-          // duoc sang bang nao, khong phai mo so do moi biet.
-          const ref = fkRefs.get(`${table.name}.${c.name}`.toLowerCase());
-          if (ref) {
-            const fk = document.createElement('span');
-            fk.className = 'tag tag-fk';
-            fk.textContent = 'FK';
-            fk.title = `Khoá ngoại, trỏ tới ${ref}`;
-            tags.appendChild(fk);
-            const target = document.createElement('span');
-            target.className = 'col-ref';
-            target.textContent = ref.split('.')[0];
-            tags.appendChild(target);
-            li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo. Khoá ngoại, trỏ tới ${ref}`);
-          }
-          if (c.nullable === false && !c.primary_key) {
-            const nn = document.createElement('span');
-            nn.className = 'tag tag-nn';
-            nn.textContent = 'NOT NULL';
-            tags.appendChild(nn);
-          }
-          // Chỉ có PK (khoá chính không kèm FK): chip ngắn, đặt ngay cạnh tên
-          // trên cùng một hàng thay vì chiếm riêng một dòng bên dưới.
-          if (c.primary_key && !ref) {
-            tags.classList.add('is-inline');
-            li.insertBefore(tags, ty);
-          } else if (tags.childNodes.length) li.appendChild(tags);
-          li.title = 'Bấm để chèn tên cột';
-          li.addEventListener('click', () => onInsert(c.name));
-          li.setAttribute('role', 'button');
-          li.tabIndex = 0;
-          if (!li.hasAttribute('aria-label')) li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo`);
-          li.addEventListener('keydown', (event) => {
-            if (event.key !== 'Enter' && event.key !== ' ') return;
-            event.preventDefault();
-            onInsert(c.name);
-          });
-          cols.appendChild(li);
-        }
-        item.appendChild(cols);
+      const names = [...buckets.keys()].sort((a, b) => (order.get(a) ?? 1000) - (order.get(b) ?? 1000));
+      for (const g of names) {
+        const list = buckets.get(g);
+        // Dang tim thi mo het: khong bat hoc vien mo tung nhom de thay ket qua.
+        const open = Boolean(q) || openGroups.has(g);
+        const sec = document.createElement('section');
+        sec.className = 'tbl-group';
+        const head = document.createElement('button');
+        head.type = 'button';
+        head.className = 'tbl-group-head';
+        head.setAttribute('aria-expanded', String(open));
+        head.innerHTML = '<span class="caret"></span><span class="tbl-group-name"></span><span class="tbl-group-count"></span>';
+        head.querySelector('.tbl-group-name').textContent = g;
+        head.querySelector('.tbl-group-count').textContent = String(list.length);
+        head.addEventListener('click', () => {
+          if (q) return;
+          if (openGroups.has(g)) openGroups.delete(g);
+          else openGroups.add(g);
+          render();
+        });
+        sec.appendChild(head);
+        if (open) for (const [table, m] of list) sec.appendChild(renderTable(table, m, q));
+        frag.appendChild(sec);
       }
-
-      frag.appendChild(item);
     }
 
     if (!shown) {
@@ -201,6 +140,133 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
       frag.appendChild(p);
     }
     listEl.appendChild(frag);
+  }
+
+  function renderTable(table, m, q) {
+    const item = document.createElement('div');
+    item.className = 'tbl';
+
+    const head = document.createElement('button');
+    head.className = 'tbl-head';
+    head.type = 'button';
+    head.setAttribute('aria-expanded', String(expanded.has(table.name)));
+    head.innerHTML =
+      '<span class="caret"></span>' +
+      `<span class="tbl-name"></span>` +
+      `<span class="tbl-cols"></span>`;
+    head.querySelector('.tbl-name').textContent = table.name;
+    // A long name is ellipsised in the sidebar, so the full one has to stay
+    // reachable. Still the API's name, still cleared by clear() with the rest
+    // of the list — this adds a tooltip, not a second source of names.
+    head.title = table.name;
+    const rc = rowCounts.get(table.name);
+    // Hai con so la hai o rieng, khong noi bang dau cham giua (redesign 2026-11).
+    const meta = head.querySelector('.tbl-cols');
+    meta.appendChild(document.createElement('span')).textContent = `${table.columns.length} cột`;
+    if (rc !== undefined) {
+      meta.appendChild(document.createElement('span')).textContent = `${rc.toLocaleString('vi-VN')} dòng`;
+    }
+    head.addEventListener('click', () => toggle(table));
+    item.appendChild(head);
+
+    const use = document.createElement('button');
+    use.className = 'tbl-insert';
+    use.type = 'button';
+    use.title = 'Chèn tên bảng vào ô soạn thảo';
+    use.setAttribute('aria-label', `Chèn bảng ${table.name} vào trình soạn thảo`);
+    // Mui ten di VAO mot khung (chen vao o soan), khong phai mui ten xuong mot
+    // vach - hinh do ai cung doc la "tai file ve".
+    use.innerHTML = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h12m0 0-4-4m4 4-4 4M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4" /></svg>';
+    use.addEventListener('click', (e) => {
+      e.stopPropagation();
+      onInsert(table.name);
+    });
+    item.appendChild(use);
+
+    // Xem truoc du lieu (nhu Data Preview cua Snowsight): mot cau SELECT that
+    // hien trong o soan, khong chay ngam - doc duoc cung la hoc duoc.
+    if (expanded.has(table.name) && onPreview) {
+      const bar = document.createElement('div');
+      bar.className = 'tbl-actions';
+      const pv = document.createElement('button');
+      pv.type = 'button';
+      pv.className = 'btn btn-ghost btn-sm tbl-preview';
+      pv.textContent = 'Xem 20 dòng';
+      pv.title = `Thêm SELECT * FROM ${table.name} LIMIT 20 vào ô soạn thảo và chạy`;
+      pv.addEventListener('click', () => onPreview(table.name));
+      bar.appendChild(pv);
+      item.appendChild(bar);
+    }
+
+    if (expanded.has(table.name) || (q && m.cols && m.cols.length)) {
+      const cols = document.createElement('ul');
+      cols.className = 'col-list';
+      const source = expanded.has(table.name) ? table.columns : m.cols;
+      for (const c of source) {
+        const li = document.createElement('li');
+        li.className = 'col' + (c.primary_key ? ' is-pk' : '');
+        const nm = document.createElement('span');
+        nm.className = 'col-name';
+        nm.textContent = c.name;
+        const ty = document.createElement('span');
+        ty.className = 'col-type';
+        ty.textContent = c.type;
+        // Hai tang (redesign 2026-11): ten cot va kieu o tren, cac nhan o
+        // duoi. Mot hang thi PK/FK/NOT NULL an mat ten cot, ma ten cot moi la
+        // thu hoc vien can doc.
+        li.appendChild(nm);
+        li.appendChild(ty);
+        const tags = document.createElement('span');
+        tags.className = 'col-tags';
+        if (c.primary_key) {
+          const pk = document.createElement('span');
+          pk.className = 'tag tag-pk';
+          pk.textContent = 'PK';
+          tags.appendChild(pk);
+        }
+        // Cung ky hieu voi tab So do ERD: thay FK o day la biet cot nay JOIN
+        // duoc sang bang nao, khong phai mo so do moi biet.
+        const ref = fkRefs.get(`${table.name}.${c.name}`.toLowerCase());
+        if (ref) {
+          const fk = document.createElement('span');
+          fk.className = 'tag tag-fk';
+          fk.textContent = 'FK';
+          fk.title = `Khoá ngoại, trỏ tới ${ref}`;
+          tags.appendChild(fk);
+          const target = document.createElement('span');
+          target.className = 'col-ref';
+          target.textContent = ref.split('.')[0];
+          tags.appendChild(target);
+          li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo. Khoá ngoại, trỏ tới ${ref}`);
+        }
+        if (c.nullable === false && !c.primary_key) {
+          const nn = document.createElement('span');
+          nn.className = 'tag tag-nn';
+          nn.textContent = 'NOT NULL';
+          tags.appendChild(nn);
+        }
+        // Chỉ có PK (khoá chính không kèm FK): chip ngắn, đặt ngay cạnh tên
+        // trên cùng một hàng thay vì chiếm riêng một dòng bên dưới.
+        if (c.primary_key && !ref) {
+          tags.classList.add('is-inline');
+          li.insertBefore(tags, ty);
+        } else if (tags.childNodes.length) li.appendChild(tags);
+        li.title = 'Bấm để chèn tên cột';
+        li.addEventListener('click', () => onInsert(c.name));
+        li.setAttribute('role', 'button');
+        li.tabIndex = 0;
+        if (!li.hasAttribute('aria-label')) li.setAttribute('aria-label', `Chèn cột ${c.name} vào trình soạn thảo`);
+        li.addEventListener('keydown', (event) => {
+          if (event.key !== 'Enter' && event.key !== ' ') return;
+          event.preventDefault();
+          onInsert(c.name);
+        });
+        cols.appendChild(li);
+      }
+      item.appendChild(cols);
+    }
+
+    return item;
   }
 
   async function toggle(table) {
@@ -232,6 +298,7 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
   function clear() {
     schema = null;
     expanded.clear();
+    openGroups.clear();
     rowCounts.clear();
     fkRefs = new Map();
     filterEl.value = '';

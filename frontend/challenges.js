@@ -24,6 +24,14 @@ import { initChallengePanes } from './panes.js';
 
 const LEVEL_LABEL = { easy: 'Dễ', medium: 'Trung bình', difficult: 'Khó', advanced: 'Nâng cao' };
 const LEVELS = Object.keys(LEVEL_LABEL);
+const RUN_KBD = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? '⌘+Enter' : 'Ctrl+Enter';
+/** Nho lua chon thu gon danh sach bai ('1' thu, '0' ghim). Chi la tien loi cua
+ *  mot trinh duyet: loi doc/ghi (che do rieng tu) thi coi nhu mac dinh (thu). */
+const LIST_PREF_KEY = 'aivb-ch-list';
+const readListPref = () => { try { return localStorage.getItem(LIST_PREF_KEY); } catch (_) { return null; } };
+const writeListPref = (v) => { try { localStorage.setItem(LIST_PREF_KEY, v); } catch (_) { /* bo qua */ } };
+const ICON_LIST = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 6h11M9 12h11M9 18h11M4.5 6h.01M4.5 12h.01M4.5 18h.01" /></svg>';
+const ICON_COLLAPSE = '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="4.5" width="17" height="15" rx="2" /><path d="M9 4.5v15M15.5 10l-2 2 2 2" /></svg>';
 
 /* Mot dong co dinh duoi "Dieu rut ra", thay cho cau "day la du lieu sinh" ma
  * vong review 2 bat bo khoi tung takeaway. */
@@ -69,25 +77,35 @@ function hc(tag, className, text) {
 
 export function createChallengesUi(root) {
   root.innerHTML = `
-    <aside class="ch-list-col" aria-label="Danh sách bài">
+    <div class="ch-rail">
+      <button type="button" class="icon-btn ch-rail-btn" aria-expanded="false" aria-controls="ch-list-col"
+              aria-label="Mở danh sách bài" title="Danh sách bài">${ICON_LIST}</button>
+    </div>
+    <aside class="ch-list-col" id="ch-list-col" aria-label="Danh sách bài">
       <div class="ch-list-head">
-        <h2 class="ch-heading">Luyện SQL</h2>
-        <dl class="ch-score">
-          <div><dt>Điểm của bạn</dt><dd class="ch-my-points">0</dd></div>
-          <div><dt>Đã giải</dt><dd class="ch-my-solved">0</dd></div>
-        </dl>
+        <div class="ch-heading-row">
+          <h2 class="ch-heading">Luyện SQL</h2>
+          <button type="button" class="icon-btn ch-collapse" hidden
+                  aria-label="Thu gọn danh sách bài" title="Thu gọn danh sách để khung làm bài rộng hơn">${ICON_COLLAPSE}</button>
+        </div>
+        <p class="ch-score"><strong class="ch-my-points">0</strong> điểm · đã giải <strong class="ch-my-solved">0</strong></p>
       </div>
-      <div class="ch-filters">
-        <label class="ch-field">Lĩnh vực<select class="filter ch-domain"></select></label>
-        <div class="ch-levels" role="group" aria-label="Độ khó"></div>
-        <label class="ch-field">Trạng thái
-          <select class="filter ch-status">
-            <option value="">Tất cả</option>
-            <option value="todo">Chưa giải</option>
-            <option value="done">Đã giải</option>
-          </select>
-        </label>
-      </div>
+      <details class="ch-filters-fold" open>
+        <summary>Bộ lọc</summary>
+        <div class="ch-filters">
+          <div class="ch-field-row">
+            <label class="ch-field">Lĩnh vực<select class="filter ch-domain"></select></label>
+            <label class="ch-field">Trạng thái
+              <select class="filter ch-status">
+                <option value="">Tất cả</option>
+                <option value="todo">Chưa giải</option>
+                <option value="done">Đã giải</option>
+              </select>
+            </label>
+          </div>
+          <div class="ch-levels" role="group" aria-label="Độ khó"></div>
+        </div>
+      </details>
       <ul class="ch-list" aria-label="Các bài"></ul>
     </aside>
     <div class="pane-sep pane-sep-v ch-sep-list" data-ch-resize="list" role="separator"
@@ -98,9 +116,24 @@ export function createChallengesUi(root) {
          aria-label="Kéo để đổi bề rộng khung đề bài, mũi tên trái/phải, nhấn đúp để về mặc định"></div>
 
     <section class="ch-problem" aria-label="Đề bài">
-      <p class="empty ch-placeholder">Chọn một bài ở cột bên trái để bắt đầu.</p>
+      <div class="ch-placeholder">
+        <h2 class="ch-placeholder-title">Bắt đầu luyện SQL</h2>
+        <ol class="ch-steps">
+          <li><strong>Chọn một bài</strong> trong danh sách. Lọc theo lĩnh vực, độ khó hoặc bài chưa giải.</li>
+          <li><strong>Chạy thử</strong> câu SQL của bạn để xem kết quả trên dữ liệu thật.</li>
+          <li><strong>Nộp bài</strong> khi kết quả khớp đề. Máy chủ chấm và cộng điểm ngay.</li>
+        </ol>
+        <button type="button" class="btn btn-primary ch-start">Làm bài dễ nhất chưa giải</button>
+        <p class="muted ch-start-note" hidden></p>
+      </div>
       <div class="ch-problem-body" hidden>
-        <nav class="ch-crumb" aria-label="Vị trí"></nav>
+        <div class="ch-problem-top">
+          <nav class="ch-crumb" aria-label="Vị trí"></nav>
+          <div class="ch-nav">
+            <button type="button" class="btn btn-ghost btn-sm ch-prev">‹ Bài trước</button>
+            <button type="button" class="btn btn-ghost btn-sm ch-next">Bài tiếp ›</button>
+          </div>
+        </div>
         <h2 class="ch-title"></h2>
         <div class="ch-meta"></div>
         <div class="subtabs ch-tabs" role="tablist" aria-label="Nội dung bài">
@@ -119,7 +152,8 @@ export function createChallengesUi(root) {
     <section class="ch-work" aria-label="Viết và nộp bài">
       <div class="editor-panel panel ch-editor-panel">
         <div class="toolbar">
-          <button type="button" class="btn btn-ghost ch-run" disabled>Chạy thử</button>
+          <h2 class="panel-context">Bài làm</h2>
+          <button type="button" class="btn btn-ghost ch-run" disabled>Chạy thử <kbd>${RUN_KBD}</kbd></button>
           <button type="button" class="btn btn-primary ch-submit" disabled>Nộp bài</button>
           <button type="button" class="btn btn-ghost btn-sm ch-reload" hidden>Nạp lại bảng mẫu</button>
           <span class="spacer"></span>
@@ -159,6 +193,15 @@ export function createChallengesUi(root) {
   const statusEl = q(".ch-runstatus");
   const verdictEl = q('.ch-verdict');
   const errEl = q('.ch-error');
+  const railBtn = q('.ch-rail-btn');
+  const collapseBtn = q('.ch-collapse');
+  const filtersFold = q('.ch-filters-fold');
+  const prevBtn = q('.ch-prev');
+  const nextBtn = q('.ch-next');
+  const startBtn = q('.ch-start');
+  const startNote = q('.ch-start-note');
+  /** Id cac bai dang hien trong danh sach (sau loc), theo thu tu: cho Bai truoc/tiep. */
+  let visibleIds = [];
 
   let domain = null;
   let level = '';
@@ -223,6 +266,97 @@ export function createChallengesUi(root) {
   statusFilterEl.addEventListener('change', renderList);
   wireTabs();
 
+  /* --- danh sach bai: thu gon khi dang lam bai ------------------------------
+   * Giong LeetCode/HackerRank: dang lam bai thi hai cot (de | bai lam), danh
+   * sach lui vao mot dai hep, bam de mo de len. Chua chon bai thi danh sach la
+   * noi dung chinh nen luon mo. Dien thoai (<=900px) mot cot, CSS bo qua lop nay. */
+  function setListCollapsed(on) {
+    root.classList.toggle('is-list-collapsed', on);
+    setListOverlay(false);
+    requestAnimationFrame(() => { cm.refresh(); window.dispatchEvent(new Event('resize')); });
+  }
+  function setListOverlay(open) {
+    root.classList.toggle('is-list-open', open);
+    railBtn.setAttribute('aria-expanded', String(open));
+    const collapsed = root.classList.contains('is-list-collapsed');
+    // Nut o dau danh sach: dang ghim -> "Thu gọn"; dang mo de len -> "Ghim".
+    collapseBtn.hidden = !current || (collapsed && !open);
+    const pin = collapsed && open;
+    collapseBtn.setAttribute('aria-label', pin ? 'Ghim danh sách bài' : 'Thu gọn danh sách bài');
+    collapseBtn.title = pin ? 'Ghim danh sách, không thu gọn khi làm bài' : 'Thu gọn danh sách để khung làm bài rộng hơn';
+    collapseBtn.classList.toggle('is-pin', pin);
+    if (open) {
+      const active = listEl.querySelector('.ch-item.is-active') || listEl.querySelector('.ch-item');
+      if (active) active.focus();
+    }
+  }
+  railBtn.addEventListener('click', () => setListOverlay(!root.classList.contains('is-list-open')));
+  collapseBtn.addEventListener('click', () => {
+    if (root.classList.contains('is-list-open')) {
+      writeListPref('0');
+      setListCollapsed(false);
+    } else {
+      writeListPref('1');
+      setListCollapsed(true);
+      railBtn.focus();
+    }
+  });
+  document.addEventListener('pointerdown', (event) => {
+    if (root.classList.contains('is-list-open') && !event.target.closest('.ch-list-col, .ch-rail')) setListOverlay(false);
+  });
+  root.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && root.classList.contains('is-list-open')) {
+      event.stopPropagation();
+      setListOverlay(false);
+      railBtn.focus();
+    }
+  });
+
+  // Bo loc: dien thoai thu vao "Bộ lọc" de danh sach bai co cho; may tinh luon mo.
+  const narrow = window.matchMedia('(max-width: 900px)');
+  const syncFold = () => { filtersFold.open = !narrow.matches; };
+  narrow.addEventListener('change', syncFold);
+  syncFold();
+
+  prevBtn.addEventListener('click', () => step(-1));
+  nextBtn.addEventListener('click', () => step(1));
+  startBtn.addEventListener('click', () => {
+    const id = easiestUnsolved();
+    if (id) open(id);
+  });
+
+  /** Bai ke ben trong danh sach dang loc; bai dang mo bi loc mat thi theo ca mien. */
+  function neighbours() {
+    let ids = visibleIds;
+    if (!current || !ids.includes(current.id)) {
+      ids = (catalogue.challenges || []).filter((c) => c.domain === (current ? current.domain : domain)).map((c) => c.id);
+    }
+    const i = current ? ids.indexOf(current.id) : -1;
+    return { prev: i > 0 ? ids[i - 1] : null, next: i >= 0 && i < ids.length - 1 ? ids[i + 1] : null };
+  }
+  function step(dir) {
+    const n = neighbours();
+    const id = dir < 0 ? n.prev : n.next;
+    if (id) open(id);
+  }
+  function syncNav() {
+    const n = neighbours();
+    prevBtn.disabled = !n.prev;
+    nextBtn.disabled = !n.next;
+  }
+  function easiestUnsolved() {
+    const pool = (catalogue.challenges || []).filter((c) => c.domain === domain && !c.solved &&
+      (!level || c.level === level));
+    pool.sort((a, b) => LEVELS.indexOf(a.level) - LEVELS.indexOf(b.level));
+    return pool.length ? pool[0].id : null;
+  }
+  function syncStart() {
+    const id = easiestUnsolved();
+    startBtn.disabled = !id;
+    startNote.hidden = Boolean(id) || !(catalogue.challenges || []).length;
+    startNote.textContent = id ? '' : 'Bạn đã giải hết các bài đang lọc. Đổi lĩnh vực hoặc độ khó để làm tiếp.';
+  }
+
   /* ------------------------------------------------------------- data -- */
 
   const datasetOf = (ch) => {
@@ -257,6 +391,9 @@ export function createChallengesUi(root) {
       renderLevels();
       renderScore();
       renderList();
+      // Dong phu cua tab "Luyện SQL" o thanh tren: so bai that, khong viet san.
+      const sub = document.getElementById('section-sub-challenges');
+      if (sub) sub.textContent = `${(res.challenges || []).length} bài · chấm điểm`;
     } catch (err) {
       if (my !== epoch) return;
       listEl.replaceChildren(h('li', 'empty empty-error', `${err.message || 'Không tải được danh sách bài.'} ${errorHint(err.error_code)}`));
@@ -290,6 +427,9 @@ export function createChallengesUi(root) {
         (!st || (st === 'done' ? c.solved : !c.solved))
     );
     listEl.replaceChildren();
+    visibleIds = items.map((c) => c.id);
+    syncStart();
+    if (current) syncNav();
     if (!items.length) {
       listEl.appendChild(h('li', 'empty', 'Không có bài nào khớp bộ lọc.'));
       return;
@@ -307,6 +447,7 @@ export function createChallengesUi(root) {
       if (c.solved) meta.appendChild(h('span', 'tag tag-solved', 'Đã giải'));
       b.appendChild(meta);
       b.addEventListener('click', () => open(c.id));
+      b.title = c.title;
       li.appendChild(b);
       listEl.appendChild(li);
     }
@@ -344,6 +485,11 @@ export function createChallengesUi(root) {
     setStatus('');
     renderProblem();
     renderList();
+    syncNav();
+    // Dang lam bai: hai cot, tru khi hoc vien da ghim danh sach.
+    setListCollapsed(readListPref() !== '0');
+    // Dien thoai mot cot: de bai nam duoi danh sach, dua no vao tam nhin.
+    if (narrow.matches) q('.ch-problem').scrollIntoView({ block: 'start', behavior: 'smooth' });
     selectTab('statement');
     erd.clear();
     if (!schema) loadSchema().then(() => current && renderTables());
@@ -608,6 +754,14 @@ export function createChallengesUi(root) {
         renderScore();
         renderList();
         renderProblem();
+        // Dung o day thi lam gi tiep? Nut "Bài tiếp" ngay trong phan dinh.
+        const n = neighbours();
+        if (n.next) {
+          const go = h('button', 'btn btn-primary btn-sm ch-verdict-next', 'Bài tiếp ›');
+          go.type = 'button';
+          go.addEventListener('click', () => open(n.next));
+          verdictEl.appendChild(go);
+        }
       }
       setStatus('');
     } catch (err) {
@@ -706,6 +860,8 @@ export function createChallengesUi(root) {
     schema = null;
     sampleInfo = null;
     listEl.replaceChildren();
+    visibleIds = [];
+    setListCollapsed(false);
     body.hidden = true;
     placeholder.hidden = false;
     verdictEl.hidden = true;

@@ -195,6 +195,7 @@
   <button class="section-tab" type="button" role="tab" data-section="sandbox"
           id="section-tab-sandbox" aria-controls="sandbox-workspace" aria-selected="false" tabindex="-1">
     <span class="section-tab-name">Thực hành SQL</span>
+    <span class="section-tab-sub">CSV · Parquet</span>
   </button>
   <!-- Luyen SQL: bai tap kieu HackerRank, cham tren may chu (frontend/challenges.js,
        backend/challenges.py). Khong co data-dataset-slot: moi bai tu mang dataset
@@ -202,6 +203,7 @@
   <button class="section-tab" type="button" role="tab" data-section="challenges"
           id="section-tab-challenges" aria-controls="challenges-workspace" aria-selected="false" tabindex="-1">
     <span class="section-tab-name">Luyện SQL</span>
+    <span class="section-tab-sub" id="section-sub-challenges">Bài có chấm điểm</span>
   </button>
   <!-- Tro choi: an cho toi khi GET /game-sso/status noi may chu da bat game.
        `disabled` di kem `hidden` de phim mui ten cung bo qua no. -->
@@ -209,6 +211,7 @@
           id="section-tab-game" aria-controls="game-workspace" aria-selected="false" tabindex="-1"
           hidden disabled aria-disabled="true">
     <span class="section-tab-name">Trò chơi</span>
+    <span class="section-tab-sub">Kẹo Ngọt</span>
   </button>
   <!-- Bang xep hang la khu vuc RIENG, khong phai mot tab trong vung ket qua: no
        khong thuoc ve bo du lieu nao ca. De no trong vung ket qua thi doi bo du
@@ -216,7 +219,8 @@
        Dat CUOI hang: la noi xem lai, khong phai noi lam bai. -->
   <button class="section-tab" type="button" role="tab" data-section="leaderboard"
           id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
-    <span class="section-tab-name">Bảng xếp hạng</span>
+    <span class="section-tab-name">Tiến độ</span>
+    <span class="section-tab-sub">Sao, xếp hạng</span>
   </button>
 </nav>
 </div>
@@ -224,15 +228,26 @@
   <div id="health" class="health" aria-live="polite">
     <span class="pill pill-muted">Đang kết nối…</span>
   </div>
+  <!-- Menu tai khoan: doi mat khau, trang chu va dang xuat it dung, nen nam sau
+       mot nut thay vi chiem ba cho tren thanh. Huy hieu vai tro van nam NGAY
+       tren nut: phien giang vien phai nhin thay ma khong can mo gi ca. -->
   <div id="session-box" class="session-box" hidden>
-    <span id="session-role" class="role-badge"></span>
-    <span id="session-user" class="session-user"></span>
-    <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
-    <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
+    <button id="account-btn" class="account-btn" type="button" aria-haspopup="menu"
+            aria-expanded="false" aria-controls="account-menu" aria-label="Tài khoản">
+      <span id="session-role" class="role-badge"></span>
+      <span id="session-user" class="session-user"></span>
+      <svg class="account-caret" viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5" /></svg>
+    </button>
+    <div id="account-menu" class="account-menu" role="menu" aria-labelledby="account-btn" hidden>
+      <p id="account-who" class="account-who"></p>
+      <button id="btn-change-password" class="account-item" type="button" role="menuitem" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="11" width="14" height="9" rx="2" /><path d="M8 11V8a4 4 0 0 1 8 0v3" /></svg>Đổi mật khẩu</button>
+      <a class="account-item" href="./" role="menuitem" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v9h11v-9" /></svg>Trang chủ eDA</a>
+      <button id="btn-logout" class="account-item" type="button" role="menuitem" tabindex="-1">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 4h4a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-4M10 16l-4-4 4-4M6 12h10" /></svg>Đăng xuất</button>
+    </div>
   </div>
-  <a class="icon-btn home-link" href="./" aria-label="Về trang chủ eDA" title="Trang chủ eDA">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v9h11v-9" /></svg>
-  </a>
   <button id="theme-toggle" class="icon-btn theme-toggle" type="button" aria-pressed="false"
           aria-label="Bật giao diện tối" title="Đổi giao diện sáng hoặc tối">
     <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></svg>
@@ -289,9 +304,7 @@
         spellcheck="false"
       />
     </div>
-    <p class="sidebar-note">
-      Danh sách này lấy trực tiếp từ máy chủ mỗi lần mở trang. Bấm tên bảng để xem cột.
-    </p>
+    <p class="sidebar-note">Bấm tên bảng để xem cột và xem trước 20 dòng.</p>
     <div id="table-list" class="table-list"></div>
   </aside>
 
@@ -312,8 +325,8 @@
         </button>
         <button id="stop" class="btn btn-ghost" type="button" hidden>Dừng</button>
         <label class="field">
-          Số dòng tối đa
-          <input id="max-rows" class="num" type="number" min="1" step="50" />
+          Số dòng
+          <input id="max-rows" class="num" type="number" min="1" step="50" title="Số dòng tối đa máy chủ trả về cho mỗi lần chạy" />
         </label>
         <span id="limits" class="limits"></span>
         <span class="spacer"></span>
@@ -343,7 +356,7 @@
             <button id="tab-button-mart" class="tab" data-tab="mart" role="tab" aria-controls="tab-mart" aria-selected="false" tabindex="-1" hidden>Data mart</button>
           <button id="tab-button-erd" class="tab" data-tab="erd" role="tab" aria-controls="tab-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
           <button id="tab-button-history" class="tab" data-tab="history" role="tab" aria-controls="tab-history" aria-selected="false" tabindex="-1">Lịch sử</button>
-          <button id="tab-button-detail" class="tab" data-tab="detail" role="tab" aria-controls="tab-detail" aria-selected="false" tabindex="-1">Chi tiết</button>
+          <button id="tab-button-detail" class="tab" data-tab="detail" role="tab" aria-controls="tab-detail" aria-selected="false" tabindex="-1">Thông tin lần chạy</button>
         </div>
         <button id="expand-results" class="icon-btn expand-btn" type="button" aria-pressed="false" aria-label="Phóng to vùng kết quả" title="Phóng to vùng kết quả (Esc để thoát)">
           <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
@@ -425,10 +438,17 @@
 
 <section id="challenges-workspace" class="challenges-workspace" aria-label="Luyện SQL" hidden></section>
 
-<section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
+<section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Tiến độ" hidden>
   <div class="progress-panel">
     <div class="progress-head">
-      <div><h2 class="progress-title">Luyện tập hôm nay</h2></div>
+      <div>
+        <h2 class="progress-title">Tiến độ luyện tập</h2>
+        <!-- Luat lay tu backend/gamification.py (DAILY_STAR_CAP = 20, moi 100 sao
+             mot kim cuong). Doi luat o do thi sua cau nay. -->
+        <p class="progress-lead">Mỗi câu truy vấn <strong>mới</strong> chạy thành công ở Finance Banking hoặc
+          Supply Chain được 2 sao (câu mới đầu tiên trong ngày: 1 sao), tối đa 20 sao mỗi ngày. Chạy lại câu cũ
+          không cộng sao. Cứ đủ 100 sao được 1 kim cương. Điểm Luyện SQL tính riêng, theo bài đã giải.</p>
+      </div>
       <button id="progress-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button>
     </div>
     <!-- Bon con so cua chinh nguoi xem, mot hang, ngan bang vach mo: con so lon
@@ -438,10 +458,14 @@
       <div class="reward-card"><dt>Điểm sao</dt><dd><strong id="reward-stars">0</strong></dd></div>
       <div class="reward-card"><dt>Kim cương</dt><dd><strong id="reward-diamonds">0</strong></dd></div>
       <div class="reward-card"><dt>Ngày liên tiếp</dt><dd><strong id="reward-streak">0</strong></dd></div>
-      <div class="reward-card"><dt>Query hôm nay</dt><dd><strong id="reward-today">0</strong></dd></div>
+      <div class="reward-card"><dt>Truy vấn hôm nay</dt><dd><strong id="reward-today">0</strong></dd></div>
+      <div class="reward-card"><dt>Điểm Luyện SQL</dt><dd><strong id="reward-ch-points">0</strong></dd></div>
     </dl>
     <section class="leaderboard-block">
-      <div class="leaderboard-head"><h3>Bảng xếp hạng</h3><span id="leaderboard-status" class="muted" role="status" aria-live="polite"></span></div>
+      <div class="leaderboard-head"><h3>Bảng xếp hạng cả lớp</h3><span id="leaderboard-status" class="muted" role="status" aria-live="polite"></span></div>
+      <div class="leaderboard-row leaderboard-colhead" aria-hidden="true">
+        <span>Hạng</span><span>Học viên</span><span class="lb-num">Sao</span><span class="lb-num">Truy vấn</span><span class="lb-num">Chuỗi ngày</span>
+      </div>
       <div id="leaderboard-list" class="leaderboard-list"><p class="empty">Đang tải…</p></div>
     </section>
   </div>
@@ -484,7 +508,8 @@
   <section class="sandbox-main" aria-label="Soạn và chạy truy vấn">
     <div class="editor-panel panel">
       <div class="toolbar">
-        <button id="sandbox-run" class="btn btn-primary" type="button" disabled>Chạy</button>
+        <h2 class="panel-context">Viết truy vấn SQL</h2>
+        <button id="sandbox-run" class="btn btn-primary" type="button" disabled title="Nạp một file trước để chạy">Chạy</button>
         <span id="sandbox-status" class="run-status" aria-live="polite"></span>
         <!-- The <progress> goc, khong phai mot <div> tu ve: no da co san ngu nghia cho
              trinh doc man hinh, va BO thuoc tinh `value` la tu thanh dang chay vo dinh -
@@ -554,10 +579,11 @@
      Day la lop thu hai. Lop thu nhat la `require_instructor` tren
      /admin/analytics/queries - du lieu chua bao gio roi may chu. -->
 <template id="tpl-instructor">
-  <button id="tab-button-instructor" class="tab" data-tab="instructor" role="tab" aria-controls="tab-instructor" aria-selected="false" tabindex="-1">Giảng viên</button>
-  <div id="tab-instructor" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-instructor" hidden>
-    <section class="instructor-dashboard"><div class="leaderboard-head"><h3>Bảng điều khiển giảng viên</h3><button id="analytics-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button></div><div id="analytics-summary" class="analytics-grid" aria-live="polite"></div><div id="analytics-tables" class="analytics-list"></div></section>
-  </div>
+  <section id="tab-instructor" class="instructor-dashboard" aria-label="Thống kê lớp">
+    <div class="leaderboard-head"><h3>Thống kê lớp <span class="muted">(chỉ giảng viên thấy)</span></h3><button id="analytics-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button></div>
+    <div id="analytics-summary" class="analytics-grid" aria-live="polite"></div>
+    <div id="analytics-tables" class="analytics-list"></div>
+  </section>
 </template>
 </body>
 </html>
