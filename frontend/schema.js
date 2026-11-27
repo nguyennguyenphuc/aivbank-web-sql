@@ -170,7 +170,12 @@ export function createSchemaPanel({ listEl, countEl, filterEl, refreshBtn, onIns
             nn.textContent = 'NOT NULL';
             tags.appendChild(nn);
           }
-          if (tags.childNodes.length) li.appendChild(tags);
+          // Chỉ có PK (khoá chính không kèm FK): chip ngắn, đặt ngay cạnh tên
+          // trên cùng một hàng thay vì chiếm riêng một dòng bên dưới.
+          if (c.primary_key && !ref) {
+            tags.classList.add('is-inline');
+            li.insertBefore(tags, ty);
+          } else if (tags.childNodes.length) li.appendChild(tags);
           li.title = 'Bấm để chèn tên cột';
           li.addEventListener('click', () => onInsert(c.name));
           li.setAttribute('role', 'button');

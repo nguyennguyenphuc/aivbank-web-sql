@@ -32,10 +32,17 @@ const GAP_X = 112;
 const GAP_Y = 22;
 const LANE_HEAD = 34;
 const COL_MAX_H = 1500;
+/** Các mức chiều cao cột thử khi dàn sơ đồ cho vừa khung (xem show()). */
+const COL_MAX_TRY = [560, 760, 1000, 1300, 1700, 2200, 2900];
 /** Số cột khoá hiện trong một bảng ở chế độ toàn cảnh, trước dòng "+n cột". */
 const OVERVIEW_ROWS = 7;
 /** Bề rộng ước lượng một ký tự mono 12px - đủ để cắt tên mà không đo DOM. */
 const CH = 7.3;
+
+/** Tỉ lệ "vừa khung" của một bản dàn trong khung box (chừa lề 24/16 px). */
+function fitScale(d, box) {
+  return Math.min(1.1, (box.width - 48) / d.width, (box.height - 32) / d.height);
+}
 
 function el(tag, attrs = {}, parent) {
   const node = document.createElementNS(SVG, tag);
@@ -362,13 +369,22 @@ export function createErdPanel({
       return;
     }
     const names = focus ? [...neighbours(model, focus)] : model.tables.map((t) => t.name);
-    // Cột cao tối đa theo tỉ lệ khung: khung kết quả thường thấp và rộng, nên
-    // sơ đồ dàn ngang thì "vừa khung" không phải thu chữ xuống quá nhỏ.
+    // Chiều cao cột chọn theo khung: thử vài mức, giữ mức cho "vừa khung" lớn
+    // nhất. Một mức cố định làm sơ đồ hoặc dài ngoằng (khung thấp, rộng) hoặc
+    // cao vút (khung hẹp), và chữ bị thu nhỏ còn một góc, quanh là khoảng trống.
     const box = canvas.getBoundingClientRect();
-    const colMax = box.width && box.height
-      ? Math.min(COL_MAX_H, Math.max(560, (box.height / box.width) * 2600))
-      : COL_MAX_H;
-    drawn = layout(model, names, { full: Boolean(focus), center: focus, colMax });
+    const opts = { full: Boolean(focus), center: focus };
+    if (box.width && box.height) {
+      let best = null;
+      for (const colMax of COL_MAX_TRY) {
+        const cand = layout(model, names, { ...opts, colMax });
+        const k = fitScale(cand, box);
+        if (!best || k > best.k + 1e-6) best = { k, cand };
+      }
+      drawn = best.cand;
+    } else {
+      drawn = layout(model, names, { ...opts, colMax: COL_MAX_H });
+    }
     draw();
     renderDetail();
     renderEdgeList();
@@ -696,14 +712,12 @@ export function createErdPanel({
     if (!drawn) return;
     const box = canvas.getBoundingClientRect();
     if (!box.width || !box.height) return;
-    const k = Math.min(1.1, Math.max(0.2, Math.min(
-      (box.width - 48) / drawn.width,
-      (box.height - 32) / drawn.height,
-    )));
+    const k = Math.max(0.2, fitScale(drawn, box));
+    // Căn giữa cả hai chiều: sơ đồ thấp hơn khung thì không dồn lên mép trên.
     view = {
       k,
       x: Math.max(24, (box.width - drawn.width * k) / 2),
-      y: 16,
+      y: Math.max(16, (box.height - drawn.height * k) / 2),
     };
     applyView();
   }
