@@ -195,6 +195,8 @@
   --workspace-pad: var(--space-7);
   --workspace-gap: var(--space-7);
   --toolbar-h: 64px;
+  /* Secondary strips under a bar: area chips, the ERD edge-list summary. */
+  --subbar-h: 40px;
   --tab-h: var(--touch-target);
   --meta-pad-y: var(--space-4);
   --banner-pad-y: var(--space-5);
@@ -358,6 +360,32 @@
    grid ~10 visible rows on the viewport heights a 13" laptop actually
    produces (~560-620 CSS px after browser chrome and taskbar).
    ===================================================================== */
+
+/* Tier 0 — a mouse or trackpad, at any height. Comes first so every tier
+   below can still tighten it.
+
+   Measured 2026-11-27, Finance › Sơ đồ ERD: the height tiers alone made a
+   BIGGER screen worse. 1536x864 kept every 44px touch size and left the
+   diagram 26% of the viewport; 1366x768 (tier 1) left it 37%. 44px is the
+   touch guideline; a pointer needs 24px (WCAG 2.5.8), and tier 1 already
+   argued 36/32/38 for laptops. Phones and tablets report pointer: coarse
+   and keep the 44px sizes from :root. */
+@media (pointer: fine) {
+  :root {
+    --topbar-h: 56px;
+    --toolbar-h: 52px;
+    --tab-h: 40px;
+    --control-h: 36px;
+    --control-h-sm: 32px;
+    --touch-target: 36px;
+    /* The editor used to jump from ~120px (tier 1) to its 220px floor the
+       moment the viewport passed 800px tall, so 1536x864 drew a smaller
+       result area than 1366x768. A lower floor and a 34% share grow it
+       smoothly instead: 864 -> ~180px of SQL, 1080 -> the 300px ceiling. */
+    --editor-min-h: 180px;
+    --editor-row-h: 34%;
+  }
+}
 
 @media (max-width: 900px) {
   :root {
