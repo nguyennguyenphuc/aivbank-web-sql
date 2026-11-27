@@ -5,15 +5,20 @@
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>E2E Data Analytics: Bảng điều khiển SQL học viên</title>
 <meta name="description" content="Nơi học viên eDA viết SQL trên dữ liệu ngân hàng và chuỗi cung ứng, xem sơ đồ quan hệ giữa các bảng và theo dõi tiến độ luyện tập." />
-<meta name="color-scheme" content="light" />
+<meta name="color-scheme" content="light dark" />
 <!-- Favicon is the real brand mark, served from web/assets. No CDN, no data-URI
      placeholder: the tab icon should be the same logo as the one on screen. -->
 <link rel="icon" type="image/png" sizes="256x249" href="assets/logo-mark.png" />
 <link rel="apple-touch-icon" href="assets/logo-mark.png" />
+<!-- Same theme switch as the landing page (localStorage "eda-theme"); runs
+     before first paint so a dark-theme reader never sees a white flash. -->
+<script src="home/js/theme-boot.js"></script>
+<script src="theme.js" defer></script>
 <link rel="stylesheet" href="vendor/codemirror/lib/codemirror.css" />
 <link rel="stylesheet" href="vendor/codemirror/addon/hint/show-hint.css" />
 <!-- tokens.css must load BEFORE styles.css: styles.css contains no literal
      colour, spacing, radius or font stack of its own, only var() lookups. -->
+<link rel="stylesheet" href="vendor/fonts/eda-fonts.css" />
 <link rel="stylesheet" href="tokens.css" />
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -26,11 +31,20 @@
      login form — never the console. Fail closed.
      ===================================================================== -->
 <div id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-label="Xác thực E2E Data Analytics">
+  <div class="auth-hero">
+    <a class="auth-home" href="./"><span aria-hidden="true">←</span> Trang chủ eDA</a>
+    <p class="auth-eyebrow"><i aria-hidden="true"></i>Bảng điều khiển SQL học viên</p>
+    <p class="auth-display">Thực hành SQL trên dữ liệu thật. <em>From Data to Business Impact.</em></p>
+    <p class="auth-hero-p">Hai bộ dữ liệu Finance Banking và Supply Chain, sơ đồ quan hệ giữa các bảng, Luyện SQL có chấm điểm và tab Trò chơi.</p>
+  </div>
   <div class="auth-card">
 
     <div class="auth-brand">
-      <img class="auth-logo" src="assets/logo.png" alt="eDA — E2E Data Analytics, AI Vietnam" width="880" height="275" />
-      <p class="auth-brand-text">Bảng điều khiển SQL học viên</p>
+      <div class="auth-logo-row">
+        <span class="logo-chip"><img class="auth-logo" src="home/img/mark-144.png" alt="eDA" width="144" height="56" /></span>
+        <span class="logo-caption">End-to-end<br />Data Analytics</span>
+      </div>
+      <p class="auth-brand-text">Bảng điều khiển SQL học viên · AI VIET NAM</p>
     </div>
 
     <!-- step 1: asking the server whether we already have a session -->
@@ -148,7 +162,7 @@
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
   </button>
   <div class="brand">
-    <img class="brand-mark" src="assets/logo-mark.png" alt="" width="256" height="249" aria-hidden="true" />
+    <span class="logo-chip"><img class="brand-mark" src="home/img/mark-144.png" alt="" width="144" height="56" aria-hidden="true" /></span>
     <span class="brand-word">E2E Data Analytics</span>
     <span class="brand-text"><strong>SQL Workspace</strong><small>Thực hành dữ liệu ngân hàng</small></span>
   </div>
@@ -216,6 +230,14 @@
     <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
     <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
   </div>
+  <a class="icon-btn home-link" href="./" aria-label="Về trang chủ eDA" title="Trang chủ eDA">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11.5 12 5l8 6.5M6.5 10v9h11v-9" /></svg>
+  </a>
+  <button id="theme-toggle" class="icon-btn theme-toggle" type="button" aria-pressed="false"
+          aria-label="Bật giao diện tối" title="Đổi giao diện sáng hoặc tối">
+    <svg class="theme-icon-moon" viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z" /></svg>
+    <svg class="theme-icon-sun" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="4" /><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4" /></svg>
+  </button>
   <button id="focus-toggle" class="icon-btn focus-toggle" type="button" aria-pressed="false"
           aria-label="Phóng to khu vực đang mở" title="Phóng to khu vực đang mở (Esc để thoát)">
     <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
