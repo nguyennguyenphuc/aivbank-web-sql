@@ -97,7 +97,7 @@ export function createHistoryPanel({ listEl, clearBtn, limit = 50, onPick }) {
       const badge = document.createElement('span');
       badge.className = it.ok ? 'pill pill-ok' : 'pill pill-err';
       badge.textContent = it.ok
-        ? `${Number(it.row_count).toLocaleString('en-US')} dòng · ${it.elapsed_ms} ms`
+        ? `${Number(it.row_count).toLocaleString('vi-VN')} dòng · ${it.elapsed_ms} ms`
         : it.error_code || 'lỗi';
       meta.appendChild(badge);
       const t = document.createElement('span');

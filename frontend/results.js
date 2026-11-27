@@ -56,7 +56,7 @@ export function createResultsPanel({
       return s;
     };
 
-    metaEl.appendChild(stat('dòng', res.row_count.toLocaleString('en-US')));
+    metaEl.appendChild(stat('dòng', res.row_count.toLocaleString('vi-VN')));
     metaEl.appendChild(stat('cột', String(res.columns.length)));
     metaEl.appendChild(stat(`ms (${byWhom})`, formatMs(res.elapsed_ms)));
 
@@ -104,8 +104,8 @@ export function createResultsPanel({
     const rowsForFile = res._allRows || res.rows;
     if (rowsForFile.length > res.rows.length) {
       dlBtn.title =
-        `Tệp tải về chứa đủ ${rowsForFile.length.toLocaleString('en-US')} dòng, ` +
-        `nhiều hơn ${res.rows.length.toLocaleString('en-US')} dòng đang hiển thị.`;
+        `Tệp tải về chứa đủ ${rowsForFile.length.toLocaleString('vi-VN')} dòng, ` +
+        `nhiều hơn ${res.rows.length.toLocaleString('vi-VN')} dòng đang hiển thị.`;
     }
     dlBtn.addEventListener('click', () => {
       const csv = toCsv(res.columns, rowsForFile, res.column_types);
@@ -142,8 +142,8 @@ export function createResultsPanel({
       truncatedEl.hidden = false;
       truncatedEl.className = 'banner banner-info banner-cut';
       truncatedEl.textContent =
-        `Kết quả đã bị cắt bớt ở ${res.row_count.toLocaleString('en-US')} dòng ` +
-        `(giới hạn ${Number(res.row_limit).toLocaleString('en-US')} dòng, hoặc do phản hồi quá lớn). ` +
+        `Kết quả đã bị cắt bớt ở ${res.row_count.toLocaleString('vi-VN')} dòng ` +
+        `(giới hạn ${Number(res.row_limit).toLocaleString('vi-VN')} dòng, hoặc do phản hồi quá lớn). ` +
         'Đây KHÔNG phải toàn bộ dữ liệu — hãy thêm WHERE, GROUP BY hoặc dùng COUNT(*) để xem con số đầy đủ.';
     } else {
       truncatedEl.hidden = true;
@@ -152,9 +152,9 @@ export function createResultsPanel({
 
       const full = document.createElement('span');
       full.className = 'tag tag-full';
-      full.textContent = `Đầy đủ ${res.row_count.toLocaleString('en-US')} dòng`;
+      full.textContent = `Đầy đủ ${res.row_count.toLocaleString('vi-VN')} dòng`;
       full.title =
-        `${local ? 'Truy vấn' : 'Máy chủ'} trả về đủ ${res.row_count.toLocaleString('en-US')} dòng, ` +
+        `${local ? 'Truy vấn' : 'Máy chủ'} trả về đủ ${res.row_count.toLocaleString('vi-VN')} dòng, ` +
         'không dòng nào bị cắt. Cuộn trong bảng để xem hết.';
       metaEl.insertBefore(full, spacer);
     }
@@ -249,7 +249,7 @@ export function createResultsPanel({
 
     const text = (s) => document.createTextNode(s);
 
-    add('Số dòng trả về', text(`${res.row_count.toLocaleString('en-US')} (giới hạn ${Number(res.row_limit).toLocaleString('en-US')})`));
+    add('Số dòng trả về', text(`${res.row_count.toLocaleString('vi-VN')} (giới hạn ${Number(res.row_limit).toLocaleString('vi-VN')})`));
     add('Bị cắt bớt', text(res.truncated ? 'Có' : 'Không'));
     add('Thời gian chạy', text(`${formatMs(res.elapsed_ms)} ms (đo phía ${byWhom})`));
 

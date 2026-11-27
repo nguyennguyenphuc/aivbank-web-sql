@@ -117,14 +117,15 @@ chạy ngang trang. Bỏ sót cả ba là điều khó xảy ra.
 | Chỉ chạy một đoạn | Bôi đen đoạn đó rồi `Ctrl/Cmd + Enter` |
 | Gợi ý tên bảng/cột | `Ctrl + Space`, hoặc tự hiện khi gõ từ 2 ký tự trở lên |
 | Gợi ý cột theo alias | Gõ `p.` sau khi đã viết `FROM <bảng> p` |
-| Xem cột của một bảng | Bấm tên bảng ở thanh bên trái |
-| Chèn tên bảng/cột vào ô soạn thảo | Bấm tên cột, hoặc biểu tượng `⤵` bên phải tên bảng |
+| Xem cột của một bảng | Bấm tên nhóm (Finance Banking nhóm bảng theo nghiệp vụ), rồi bấm tên bảng ở thanh bên trái |
+| Xem trước dữ liệu một bảng | Mở bảng rồi bấm **Xem 20 dòng**: câu `SELECT … LIMIT 20` được thêm vào cuối ô soạn thảo và chạy |
+| Chèn tên bảng/cột vào ô soạn thảo | Bấm tên cột, hoặc biểu tượng mũi tên vào khung bên phải tên bảng (rê chuột vào hàng để hiện) |
 | Tìm bảng theo tên cột | Gõ tên cột vào ô lọc ở thanh bên trái |
 | Dừng câu đang chạy | Nút **Dừng** |
-| Xem `tables_used` / SQL máy chủ đã chạy | Tab **Chi tiết lần chạy** |
+| Xem `tables_used` / SQL máy chủ đã chạy | Tab **Thông tin lần chạy** |
 | Lấy kết quả ra Excel | **Sao chép CSV** rồi dán |
-| Đổi mật khẩu | Nút **Đổi mật khẩu** ở thanh trên cùng (`Esc` hoặc **Huỷ** để đóng) |
-| Kết thúc buổi học | Nút **Đăng xuất** — bắt buộc trên máy dùng chung: nó xoá lịch sử SQL và kết quả khỏi máy |
+| Đổi mật khẩu | Bấm tên tài khoản ở góc phải thanh trên cùng, chọn **Đổi mật khẩu** (`Esc` hoặc **Huỷ** để đóng) |
+| Kết thúc buổi học | Menu tài khoản → **Đăng xuất** — bắt buộc trên máy dùng chung: nó xoá lịch sử SQL và kết quả khỏi máy |
 
 ### Đọc kết quả cho đúng
 

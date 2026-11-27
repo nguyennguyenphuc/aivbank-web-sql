@@ -67,8 +67,28 @@ const schemaPanel = createSchemaPanel({
   filterEl: $('table-filter'),
   refreshBtn: $('refresh-schema'),
   onInsert: (name) => insertAtCursor(cm, name),
+  onPreview: (name) => previewTable(name),
   onError: (err) => showServiceBanner(err),
+  // Cung bo luat mien voi chip cua so do ERD; Supply Chain (20 bang) de phang.
+  groups: () => (getDataset() === 'aivb' ? AIVB_DOMAINS : null),
 });
+
+/** "Xem 20 dòng": them mot cau SELECT xuong cuoi o soan, boi den no va chay dung
+ *  doan do (co che chay doan boi den san co). Khong ghi de cau hoc vien dang viet. */
+function previewTable(name) {
+  if (inflight) return;
+  const ident = /^[a-z_][a-z0-9_]*$/.test(name) ? name : `"${name.replace(/"/g, '""')}"`;
+  const sql = `SELECT * FROM ${ident} LIMIT 20;`;
+  const last = cm.lastLine();
+  const lastText = cm.getLine(last);
+  const prefix = cm.getValue().trim() ? (lastText.trim() ? '\n\n' : '\n') : '';
+  cm.replaceRange(prefix + sql, { line: last, ch: lastText.length });
+  const end = cm.lastLine();
+  cm.setSelection({ line: end, ch: 0 }, { line: end, ch: cm.getLine(end).length });
+  cm.scrollIntoView({ line: end, ch: 0 });
+  setSchemaDrawer(false);
+  run();
+}
 
 const cm = createEditor($('sql'), { schemaRef: schemaPanel.ref, onRun: run });
 
@@ -186,13 +206,20 @@ async function loadPractice() {
   try {
     // 'all' chu khong phai 'week': bang tinh tu thu Hai nen sang thu Hai la gan
     // nhu trong, va cong suc tich luy ca ky khong hien ra o dau.
-    const [me, board] = await Promise.all([api.gamificationMe(), api.leaderboard('all')]);
+    // Diem Luyen SQL la mot he diem RIENG (theo bai da giai); hien canh sao de
+    // hoc vien thay ca hai o mot cho. Loi o day khong lam hong phan con lai.
+    const [me, board, ch] = await Promise.all([
+      api.gamificationMe(),
+      api.leaderboard('all'),
+      api.challenges().catch(() => null),
+    ]);
     if (epoch !== sessionEpoch) return;
     const summary = me.summary || {};
-    $('reward-stars').textContent = Number(summary.stars || 0).toLocaleString('en-US');
-    $('reward-diamonds').textContent = Number(summary.diamonds || 0).toLocaleString('en-US');
-    $('reward-streak').textContent = Number(summary.current_streak || 0).toLocaleString('en-US');
-    $('reward-today').textContent = Number(summary.today_queries || 0).toLocaleString('en-US');
+    $('reward-stars').textContent = Number(summary.stars || 0).toLocaleString('vi-VN');
+    $('reward-diamonds').textContent = Number(summary.diamonds || 0).toLocaleString('vi-VN');
+    $('reward-streak').textContent = Number(summary.current_streak || 0).toLocaleString('vi-VN');
+    $('reward-today').textContent = Number(summary.today_queries || 0).toLocaleString('vi-VN');
+    $('reward-ch-points').textContent = ch ? Number(ch.my_points || 0).toLocaleString('vi-VN') : '—';
     const list = $('leaderboard-list');
     list.innerHTML = '';
     if (!(board.entries || []).length) appendEmpty(list, 'Chưa có dữ liệu xếp hạng.');
@@ -210,10 +237,10 @@ async function loadPractice() {
       const metric = document.createElement('span');
       metric.className = 'leaderboard-metric';
       metric.innerHTML = '<svg class="inline-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 2.7 5.5 6.1.9-4.4 4.3 1 6.1-5.4-2.9-5.4 2.9 1-6.1-4.4-4.3 6.1-.9L12 3Z" /></svg>';
-      metric.appendChild(document.createTextNode(` ${Number(item.stars || 0).toLocaleString('en-US')}`));
+      metric.appendChild(document.createTextNode(` ${Number(item.stars || 0).toLocaleString('vi-VN')}`));
       const queries = document.createElement('span');
       queries.className = 'leaderboard-queries';
-      queries.textContent = `${Number(item.queries || 0).toLocaleString('en-US')} query`;
+      queries.textContent = `${Number(item.queries || 0).toLocaleString('vi-VN')} truy vấn`;
       const streak = document.createElement('span');
       streak.className = 'leaderboard-streak';
       // Ky theo lich tra `streak = null` (practice_daily khong biet chuoi ngay).
@@ -243,7 +270,7 @@ async function loadInstructorAnalytics() {
     if (epoch !== sessionEpoch || !document.getElementById('tab-instructor')) return;
     const s = data.summary || {};
     summaryEl.replaceChildren();
-    [['Truy vấn', s.query_count], ['Thành công', s.successful_count], ['Bị chặn', s.blocked_count], ['Người dùng', s.active_users], ['TB ms', s.average_elapsed_ms]].forEach(([label, value]) => {
+    [['Truy vấn', s.query_count], ['Thành công', s.successful_count], ['Bị chặn', s.blocked_count], ['Người dùng', s.active_users], ['Thời gian TB (ms)', s.average_elapsed_ms]].forEach(([label, value]) => {
       const card = document.createElement('div');
       card.className = 'analytics-card';
       const metric = document.createElement('strong');
@@ -285,27 +312,18 @@ function mountInstructorTab() {
   if (document.getElementById('tab-instructor')) return;
   const tpl = document.getElementById('tpl-instructor');
   if (!tpl) return;
-  const parts = tpl.content.cloneNode(true);
-  const button = parts.querySelector('#tab-button-instructor');
-  const panel = parts.querySelector('#tab-instructor');
-  document.querySelector('.tabs').appendChild(button);
-  // Canh cac tabpanel anh em, khong phai cuoi <body>: aria-controls chi dung khi
-  // panel that su nam trong vung ket qua.
-  // Canh cac tabpanel anh em. Moc vao #tab-result chu khong #tab-progress:
-  // tab Tien bo da chuyen thanh khu vuc rieng, con #tab-result thi luon co.
-  document.getElementById('tab-result').parentNode.appendChild(panel);
+  const panel = tpl.content.cloneNode(true).querySelector('#tab-instructor');
+  // Tu 2026-11-27 khoi nay nam CUOI trang Tien do, khong con la mot tab trong
+  // vung ket qua cua mot bo du lieu: so lieu la cua ca lop, khong cua Finance
+  // hay Supply Chain, va doi bo du lieu khong duoc lam no bien mat.
+  document.querySelector('#leaderboard-workspace .progress-panel').appendChild(panel);
   // Gan o day chu khong o cap module: luc trang tai xong nut nay chua ton tai.
   panel.querySelector('#analytics-refresh')
     .addEventListener('click', () => loadInstructorAnalytics());
 }
 
 function unmountInstructorTab() {
-  const button = document.getElementById('tab-button-instructor');
   const panel = document.getElementById('tab-instructor');
-  // Neu dang dung o tab nay thi phai roi di TRUOC khi go, khong thi con lai mot
-  // thanh tab khong nut nao duoc chon.
-  if (button && button.classList.contains('is-active')) selectTab('result');
-  if (button) button.remove();
   if (panel) panel.remove();
 }
 
@@ -347,9 +365,21 @@ function selectTab(name) {
     p.classList.toggle('is-active', selected);
     p.hidden = !selected;
   });
+  // So do ERD can cho rieng (nhu trang ER cua DBeaver/Mode): mo tab nay thi tu
+  // thu o soan lai bang che do phong to vung ket qua san co, roi tab thi tra ve.
+  // Hoc vien tu bam phong to truoc do thi giu nguyen y ho (erdAutoMax = false).
+  if (name === 'erd' && !document.body.classList.contains('results-max')) {
+    erdAutoMax = true;
+    setResultsMax(true);
+  } else if (name !== 'erd' && erdAutoMax) {
+    erdAutoMax = false;
+    setResultsMax(false);
+  }
   // Sau khi panel hien: so do can kich thuoc that de "vua khung".
   if (name === 'erd') requestAnimationFrame(() => erdPanel.show());
 }
+/** true khi CHINH selectTab('erd') bat phong to (khong phai hoc vien bam). */
+let erdAutoMax = false;
 /* Uy quyen o `.tabs`, va hoi lai DOM moi lan bam - KHONG chup san mot mang nut.
  *
  * Hai ly do, ca hai deu tung la loi that:
@@ -410,6 +440,7 @@ function setResultsMax(on) {
 }
 
 expandButton.addEventListener('click', () => {
+  erdAutoMax = false;
   setResultsMax(!document.body.classList.contains('results-max'));
 });
 
@@ -503,7 +534,7 @@ compactWorkspace.addEventListener('change', () => {
 document.addEventListener('keydown', (event) => {
   if (event.key !== 'Escape') return;
   if (document.body.classList.contains('is-schema-open')) setSchemaDrawer(false);
-  else if (document.body.classList.contains('results-max')) setResultsMax(false);
+  else if (document.body.classList.contains('results-max')) { erdAutoMax = false; setResultsMax(false); }
   else if (document.body.classList.contains('is-focus')) setFocus(false);
 });
 compactWorkspace.addEventListener('change', syncSchemaDrawer);
@@ -546,8 +577,10 @@ async function loadHealth() {
     // du cho cho ca nam su kien o moi be ngang. Cung chu, cung so.
     const limits = $('limits');
     limits.replaceChildren(
-      pill(`tối đa ${Number(h.max_rows).toLocaleString('en-US')} dòng`, 'pill-muted'),
-      pill(`giới hạn ${h.query_timeout_s}s / truy vấn`, 'pill-muted'),
+      // Nhan o nhap da la "Số dòng", nen o day chi con gioi han tren - khong
+      // nhac lai chu "dòng" lan thu hai ngay ben canh.
+      pill(`tối đa ${Number(h.max_rows).toLocaleString('vi-VN')}`, 'pill-muted'),
+      pill(`mỗi truy vấn tối đa ${h.query_timeout_s} giây`, 'pill-muted'),
     );
     box.appendChild(pill(`v${h.version}`, 'pill-muted'));
 
@@ -761,12 +794,15 @@ function wipeSessionState() {
   $('health').innerHTML = '';
   $('limits').replaceChildren();
   $('session-box').hidden = true;
+  setAccountMenu(false);
   $('session-user').textContent = '';
   $('session-role').textContent = '';
+  $('account-who').replaceChildren();
   $('reward-stars').textContent = '0';
   $('reward-diamonds').textContent = '0';
   $('reward-streak').textContent = '0';
   $('reward-today').textContent = '0';
+  $('reward-ch-points').textContent = '0';
   $('leaderboard-list').replaceChildren();
   appendEmpty($('leaderboard-list'), 'Đăng nhập để xem xếp hạng.');
   $('leaderboard-status').textContent = '';
@@ -797,6 +833,12 @@ function renderSessionBar(session) {
   $('session-user').textContent = currentUsername || '—';
   badge.textContent = roleLabel(session);
   badge.classList.toggle('is-instructor', instructor);
+  // Ten dang nhap an khoi nut o man hep, nen dau menu luon ghi lai day du.
+  const who = $('account-who');
+  const name = document.createElement('strong');
+  name.textContent = currentUsername || '—';
+  who.replaceChildren(name, document.createTextNode(roleLabel(session)));
+  accountBtn.setAttribute('aria-label', `Tài khoản ${currentUsername} (${roleLabel(session)})`);
   badge.title = instructor
     ? 'Phiên giảng viên: quyền truy cập do máy chủ quyết định và có thể khác phiên học viên.'
     : 'Phiên học viên.';
@@ -809,6 +851,64 @@ function renderSessionBar(session) {
 
   box.hidden = false;
 }
+
+/* Menu tai khoan (WAI-ARIA menu button). Ba muc it dung - doi mat khau, trang
+ * chu, dang xuat - nam sau mot nut de thanh tren khong phai tra ~230px cho chung.
+ * Mo: bam, Enter/Space, mui ten xuong. Trong menu: mui ten, Home/End, Esc, Tab. */
+const accountBtn = $('account-btn');
+const accountMenu = $('account-menu');
+const accountItems = () => [...accountMenu.querySelectorAll('[role="menuitem"]')];
+
+function setAccountMenu(open, { focus = null } = {}) {
+  accountMenu.hidden = !open;
+  accountBtn.setAttribute('aria-expanded', String(open));
+  if (open) {
+    const items = accountItems();
+    const target = focus === 'last' ? items[items.length - 1] : focus === 'first' ? items[0] : null;
+    if (target) target.focus();
+  }
+}
+
+accountBtn.addEventListener('click', () => {
+  const open = accountMenu.hidden;
+  // Bam chuot thi khong nhay focus vao muc dau; mo bang phim (detail = 0) thi co.
+  setAccountMenu(open, { focus: open ? 'first' : null });
+});
+accountBtn.addEventListener('keydown', (event) => {
+  if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
+    event.preventDefault();
+    setAccountMenu(true, { focus: event.key === 'ArrowUp' ? 'last' : 'first' });
+  }
+});
+accountMenu.addEventListener('keydown', (event) => {
+  const items = accountItems();
+  const i = items.indexOf(document.activeElement);
+  let next = null;
+  if (event.key === 'ArrowDown') next = (i + 1) % items.length;
+  else if (event.key === 'ArrowUp') next = (i - 1 + items.length) % items.length;
+  else if (event.key === 'Home') next = 0;
+  else if (event.key === 'End') next = items.length - 1;
+  else if (event.key === 'Escape') {
+    // Dung lai o day: Esc cua menu khong duoc thoat luon che do phong to.
+    event.preventDefault();
+    event.stopPropagation();
+    setAccountMenu(false);
+    accountBtn.focus();
+    return;
+  } else if (event.key === 'Tab') {
+    setAccountMenu(false);
+    return;
+  } else return;
+  event.preventDefault();
+  items[next].focus();
+});
+// Chon mot muc hoac bam ra ngoai: dong menu.
+accountMenu.addEventListener('click', (event) => {
+  if (event.target.closest('[role="menuitem"]')) setAccountMenu(false);
+});
+document.addEventListener('pointerdown', (event) => {
+  if (!accountMenu.hidden && !event.target.closest('.session-box')) setAccountMenu(false);
+});
 
 $('btn-logout').addEventListener('click', () => gate.signOut());
 $('btn-change-password').addEventListener('click', () => gate.openChangePassword());
@@ -1083,6 +1183,7 @@ function selectSection(name) {
     // Nap lai moi lan vao: diem doi sau moi query, va nguoi xem vao day chinh la
     // de xem con so MOI. Mot bang cu dung im thi te hon la khong co bang.
     loadPractice();
+    loadInstructorAnalytics();
   } else {
     requestAnimationFrame(() => cm.refresh());
   }
@@ -1090,6 +1191,18 @@ function selectSection(name) {
 
 for (const b of sectionTabs) {
   b.addEventListener('click', () => selectSection(b.dataset.section));
+}
+
+// Mep nao cua hang khu vuc con tab bi khuat thi mo dan (xem .sections.can-*).
+{
+  const row = $('sections');
+  const syncFade = () => {
+    const max = row.scrollWidth - row.clientWidth;
+    row.classList.toggle('can-left', max > 1 && row.scrollLeft > 1);
+    row.classList.toggle('can-right', max > 1 && row.scrollLeft < max - 1);
+  };
+  row.addEventListener('scroll', syncFade, { passive: true });
+  new ResizeObserver(syncFade).observe(row);
 }
 $('sections').addEventListener('keydown', (e) => {
   const keys = { ArrowRight: 1, ArrowLeft: -1 };
@@ -1263,6 +1376,7 @@ function ensureSandbox() {
     countEl.textContent = tables.length ? `(${tables.length})` : '';
     resetBtn.hidden = !tables.length;
     runBtn.disabled = !tables.length;
+    runBtn.title = tables.length ? '' : 'Nạp một file trước để chạy';
     listEl.replaceChildren();
     // Bo file doi thi so do cu sai: xoa, va ve lai ngay neu dang xem the so do.
     sbErd.clear();
@@ -1287,7 +1401,7 @@ function ensureSandbox() {
       name.textContent = t.table;
       const rows = document.createElement('span');
       rows.className = 'sbtable-rows';
-      rows.textContent = `${t.rows.toLocaleString('en-US')} dòng`;
+      rows.textContent = `${t.rows.toLocaleString('vi-VN')} dòng`;
       head.append(name, rows);
 
       const file = document.createElement('div');
@@ -1349,7 +1463,7 @@ function ensureSandbox() {
       sbResults.show(res);
       if (res._downloadTruncated) {
         showErr(
-          `Truy vấn trả về ${res._totalRows.toLocaleString('en-US')} dòng; ` +
+          `Truy vấn trả về ${res._totalRows.toLocaleString('vi-VN')} dòng; ` +
             'chỉ giữ được 1.000.000 dòng đầu để hiển thị và tải về. ' +
             'Thêm WHERE hoặc LIMIT để lấy đúng phần bạn cần.'
         );
