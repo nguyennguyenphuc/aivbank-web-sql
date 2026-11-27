@@ -857,6 +857,23 @@ body.results-max .pane-sep { display: none; }
               box-shadow var(--duration-fast) var(--ease);
 }
 .filter::placeholder { color: var(--ink-muted); }
+/* Selects drop the OS chrome and draw the same 1px field as the inputs, with
+ * a chevron made of two gradients so it follows the theme ink. */
+select.filter {
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  padding-right: calc(var(--space-5) + 18px) !important;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--ink-muted) 50%),
+    linear-gradient(135deg, var(--ink-muted) 50%, transparent 50%);
+  background-position: calc(100% - 19px) 52%, calc(100% - 14px) 52%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  text-overflow: ellipsis;
+}
+select.filter:disabled { cursor: not-allowed; opacity: .6; }
+select.filter option { background: var(--surface); color: var(--ink); }
 .filter:hover { border-color: var(--ink-muted); }
 .filter:focus {
   outline: var(--focus-ring);
@@ -982,6 +999,9 @@ body.results-max .pane-sep { display: none; }
   cursor: pointer;
   font-size: var(--text-sm);
 }
+/* A lone PK chip sits on the name's row (schema.js moves it before the type). */
+.col:has(> .col-tags.is-inline) { grid-template-columns: minmax(0, 1fr) auto auto; }
+.col-tags.is-inline { grid-column: auto; align-self: center; }
 .col-tags {
   grid-column: 1 / -1;
   display: flex;
@@ -1529,6 +1549,9 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 }
 
 .grid td { font-family: var(--font-mono); }
+/* Free text (names, addresses, descriptions in Vietnamese) reads in the sans
+ * face; numbers, dates, NULL and JSON keep mono so digits line up. */
+.grid td.v-str { font-family: var(--font-sans); }
 .grid tbody tr:nth-child(even) { background: var(--surface-zebra); }
 .grid tbody tr:hover { background: var(--surface-hover); }
 
