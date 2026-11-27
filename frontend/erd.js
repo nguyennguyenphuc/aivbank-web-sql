@@ -34,6 +34,12 @@ const LANE_HEAD = 34;
 const COL_MAX_H = 1500;
 /** Các mức chiều cao cột thử khi dàn sơ đồ cho vừa khung (xem show()). */
 const COL_MAX_TRY = [560, 760, 1000, 1300, 1700, 2200, 2900];
+/** Ô chỉ có tên bảng: toàn cảnh khi sơ đồ quá đông, và khay bảng rời. */
+const COMPACT_W = 200;
+const COMPACT_H = 34;
+const COMPACT_TRY = [240, 320, 420, 560, 760, 1000, 1300];
+/** Dưới mức thu này, chữ của ô có cột không còn đọc được: toàn cảnh chuyển sang ô chỉ tên. */
+const COMPACT_BELOW = 0.5;
 /** Số cột khoá hiện trong một bảng ở chế độ toàn cảnh, trước dòng "+n cột". */
 const OVERVIEW_ROWS = 7;
 /** Bề rộng ước lượng một ký tự mono 12px - đủ để cắt tên mà không đo DOM. */
@@ -41,7 +47,7 @@ const CH = 7.3;
 
 /** Tỉ lệ "vừa khung" của một bản dàn trong khung box (chừa lề 24/16 px). */
 function fitScale(d, box) {
-  return Math.min(1.1, (box.width - 48) / d.width, (box.height - 32) / d.height);
+  return Math.min(1.1, (box.width - 48) / (d.fitW || d.width), (box.height - 32) / (d.fitH || d.height));
 }
 
 function el(tag, attrs = {}, parent) {
@@ -111,10 +117,13 @@ function neighbours(model, name) {
 
 /**
  * Bậc của một bảng = số bước khoá ngoại dài nhất tới một bảng không tham chiếu
- * bảng nào. Bảng gốc bậc 0 ở bên trái. Vòng (hiếm) bị cắt bằng tập "đang thăm".
- * Bảng không có cạnh nào gom về một làn riêng ở cuối.
+ * bảng nào, rồi bảng được tham chiếu được kéo về ngay trước bảng con gần nhất.
+ * Vòng (hiếm) bị cắt bằng tập "đang thăm". Bảng không có cạnh nào xuống khay
+ * bên dưới sơ đồ (trayY), ngoài phần "vừa khung" (fitW/fitH).
+ *
+ * compact: ô chỉ có tên bảng, cho toàn cảnh khi sơ đồ quá đông để đọc cột.
  */
-function layout(model, names, { full, center = null, colMax = COL_MAX_H }) {
+function layout(model, names, { full, center = null, colMax = COL_MAX_H, compact = false }) {
   const pick = new Set(names);
   const tables = model.tables.filter((t) => pick.has(t.name));
   const edges = model.edges.filter((e) => pick.has(e.from) && pick.has(e.to) && e.from !== e.to);
@@ -140,6 +149,7 @@ function layout(model, names, { full, center = null, colMax = COL_MAX_H }) {
   tables.forEach((t) => rankOf(t.name));
 
   const lanes = [];
+  let loose = [];
   if (center) {
     // Chế độ tập trung: ba cột đọc như một câu JOIN - bảng nó tham chiếu, chính
     // nó, bảng tham chiếu tới nó. Bảng vừa là cha vừa là con xếp bên trái.
@@ -151,14 +161,24 @@ function layout(model, names, { full, center = null, colMax = COL_MAX_H }) {
     lanes.push({ label: 'Bảng đang xem', members: mid });
     if (down.length) lanes.push({ label: 'Bảng tham chiếu tới nó', members: down });
   } else {
-    const isolated = tables.filter((t) => !parents.get(t.name).length && !children.get(t.name).length);
-    const linked = tables.filter((t) => !isolated.includes(t));
-    const maxRank = Math.max(0, ...linked.map((t) => rank.get(t.name)));
-    for (let r = 0; r <= maxRank; r++) {
-      const members = linked.filter((t) => rank.get(t.name) === r);
-      if (members.length) lanes.push({ label: r === 0 ? 'Bảng gốc' : `Bậc ${r}`, members });
+    // Bảng không nối với bảng nào không có chỗ trong dòng chảy trái -> phải:
+    // chúng xuống khay bên dưới, để phần sơ đồ thật được vừa khung lớn hơn.
+    loose = tables.filter((t) => !parents.get(t.name).length && !children.get(t.name).length);
+    const looseSet = new Set(loose);
+    const linked = tables.filter((t) => !looseSet.has(t));
+    // Kéo bảng được tham chiếu về sát bảng con gần nhất: "đường dài nhất" dồn
+    // mọi bảng gốc về cột trái, và đường nối tới bảng con bậc 5 vắt ngang cả
+    // sơ đồ. Duyệt từ bậc cao xuống, vì bậc của con phải chốt trước cha.
+    for (const t of [...linked].sort((x, y) => rank.get(y.name) - rank.get(x.name))) {
+      const kids = children.get(t.name);
+      if (!kids.length) continue;
+      const r = Math.min(...kids.map((k) => rank.get(k))) - 1;
+      if (r > rank.get(t.name)) rank.set(t.name, r);
     }
-    if (isolated.length) lanes.push({ label: 'Không có quan hệ', members: isolated, fixed: true });
+    const ranks = [...new Set(linked.map((t) => rank.get(t.name)))].sort((x, y) => x - y);
+    ranks.forEach((r, i) => {
+      lanes.push({ label: i === 0 ? 'Bảng gốc' : `Bậc ${i}`, members: linked.filter((t) => rank.get(t.name) === r) });
+    });
   }
 
   // Thứ tự trong làn: theo tên trước (gom tiền tố core_/ref_ cạnh nhau), rồi vài
@@ -173,26 +193,30 @@ function layout(model, names, { full, center = null, colMax = COL_MAX_H }) {
     if (!ns.length) return order.get(n);
     return ns.reduce((s, x) => s + order.get(x), 0) / ns.length;
   };
-  for (let pass = 0; pass < 4; pass++) {
+  for (let pass = 0; pass < 8; pass++) {
     const seq = pass % 2 === 0 ? lanes : [...lanes].reverse();
     const side = pass % 2 === 0 ? parents : children;
     for (const lane of seq) {
-      if (lane.fixed) continue;
       lane.members.sort((a, b) => bary(a.name, side) - bary(b.name, side));
       lane.members.forEach((t, i) => order.set(t.name, i));
     }
   }
 
   const rowsOf = (t) => {
+    if (compact) return [];
     if (full) return t.columns;
     const keys = t.columns.filter((c) => c.pk || t.fkCols.has(c.name.toLowerCase()));
     return keys.slice(0, OVERVIEW_ROWS);
   };
   const heightOf = (t) => {
+    if (compact) return COMPACT_H;
     const rows = rowsOf(t).length;
     const more = t.columns.length - rows > 0 ? 1 : 0;
     return HEAD_H + PAD_Y * 2 + (rows + more) * ROW_H;
   };
+  const nodeW = compact ? COMPACT_W : NODE_W;
+  const gapX = compact ? 80 : GAP_X;
+  const gapY = compact ? 12 : GAP_Y;
 
   // Làn quá dài thì gập thành nhiều cột con, để sơ đồ 77 bảng không thành một
   // dải dọc 6000px.
@@ -202,23 +226,63 @@ function layout(model, names, { full, center = null, colMax = COL_MAX_H }) {
   for (const lane of lanes) {
     let y = LANE_HEAD;
     let colX = x;
-    let laneW = NODE_W;
+    let laneW = nodeW;
     for (const t of lane.members) {
       const hgt = heightOf(t);
       if (y > LANE_HEAD && y + hgt > colMax) {
-        colX += NODE_W + GAP_X / 2;
-        laneW += NODE_W + GAP_X / 2;
+        colX += nodeW + gapX / 2;
+        laneW += nodeW + gapX / 2;
         y = LANE_HEAD;
       }
-      pos.set(t.name, { x: colX, y, w: NODE_W, h: hgt, rows: rowsOf(t), table: t });
-      y += hgt + GAP_Y;
+      pos.set(t.name, { x: colX, y, w: nodeW, h: hgt, rows: rowsOf(t), table: t, compact });
+      y += hgt + gapY;
     }
-    laneBoxes.push({ label: lane.label, x, w: laneW });
-    x += laneW + GAP_X;
+    laneBoxes.push({ label: lane.label, x, y: 18, w: laneW });
+    x += laneW + gapX;
   }
-  const width = Math.max(NODE_W, x - GAP_X);
-  const height = Math.max(LANE_HEAD + 40, ...[...pos.values()].map((p) => p.y + p.h));
-  return { pos, edges, lanes: laneBoxes, width, height };
+  const mainW = lanes.length ? Math.max(nodeW, x - gapX) : 0;
+  const mainH = lanes.length ? Math.max(LANE_HEAD + 40, ...[...pos.values()].map((p) => p.y + p.h)) : 0;
+
+  // Khay bảng rời: ô chỉ có tên, nhóm theo tiền tố (raw_, ref_, core_...), xếp
+  // hàng ngang rộng bằng sơ đồ. Không tính vào "vừa khung" (fitW/fitH).
+  let trayY = null;
+  let trayInfo = null;
+  let height = mainH;
+  let width = mainW;
+  if (loose.length) {
+    trayY = mainH ? mainH + 56 : 0;
+    // Sáu ô một hàng: khay đọc được ở mức thu ~0.8 trong khung kết quả.
+    const perRow = 6;
+    let trayW = 0;
+    laneBoxes.push({ label: `${loose.length} bảng chưa khai báo quan hệ`, x: 0, y: trayY + 18, w: mainW, tray: true });
+    const groups = new Map();
+    for (const t of [...loose].sort((a, b) => a.name.localeCompare(b.name))) {
+      const pre = t.name.includes('_') ? t.name.split('_')[0] + '_' : 'khác';
+      if (!groups.has(pre)) groups.set(pre, []);
+      groups.get(pre).push(t);
+    }
+    let y = trayY + LANE_HEAD;
+    for (const [pre, members] of groups) {
+      laneBoxes.push({ label: `${pre} (${members.length})`, x: 0, y: y + 14, w: mainW, sub: true });
+      y += 24;
+      members.forEach((t, i) => {
+        const col = i % perRow;
+        if (i && col === 0) y += COMPACT_H + 10;
+        pos.set(t.name, {
+          x: col * (COMPACT_W + 12), y, w: COMPACT_W, h: COMPACT_H, rows: [], table: t, compact: true,
+        });
+      });
+      y += COMPACT_H + 18;
+      trayW = Math.max(trayW, Math.min(members.length, perRow) * (COMPACT_W + 12) - 12);
+    }
+    height = y - 18;
+    width = Math.max(width, trayW);
+    trayInfo = { w: trayW };
+  }
+  return {
+    pos, edges, lanes: laneBoxes, width, height, trayY, trayW: trayInfo ? trayInfo.w : 0, looseCount: loose.length,
+    fitW: mainW || width, fitH: mainH || height,
+  };
 }
 
 /** Chỉ để kiểm thử bố cục ngoài trình duyệt; giao diện không dùng. */
@@ -249,6 +313,7 @@ export function createErdPanel({
   onUse = () => {},
   emptyText = 'Chưa có bảng nào để vẽ.',
   errorText = null,
+  groups = null,
 }) {
   const uid = `erd${++instances}`;
   root.classList.add('erd-panel');
@@ -260,6 +325,7 @@ export function createErdPanel({
       <input id="${uid}-filter" class="filter erd-filter" type="search" placeholder="Tìm bảng…" autocomplete="off" spellcheck="false" />
       <span class="erd-status muted" role="status" aria-live="polite"></span>
       <span class="spacer"></span>
+      <button type="button" class="btn btn-ghost btn-sm erd-tray-btn" hidden></button>
       <div class="erd-zoom" role="group" aria-label="Thu phóng sơ đồ">
         <button type="button" class="icon-btn" data-erd-zoom="out" aria-label="Thu nhỏ" title="Thu nhỏ (-)">
           <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14" /></svg>
@@ -270,6 +336,7 @@ export function createErdPanel({
         </button>
       </div>
     </div>
+    <div class="erd-groups" role="group" aria-label="Lọc sơ đồ theo miền nghiệp vụ" hidden></div>
     <p class="erd-note banner banner-info" hidden></p>
     <div class="erd-body">
       <div class="erd-canvas" tabindex="0" aria-label="Sơ đồ quan hệ giữa các bảng. Kéo để di chuyển, cuộn chuột hoặc phím + và - để thu phóng, phím mũi tên để dịch, 0 để vừa khung.">
@@ -291,11 +358,14 @@ export function createErdPanel({
   const filterEl = q('.erd-filter');
   const titleEl = q('.erd-title');
   const listEl = q('.erd-edge-list');
+  const groupsEl = q('.erd-groups');
+  const trayBtn = q('.erd-tray-btn');
 
   /** Kết quả đã tải. Bị xoá khi nguồn đổi (đổi bộ dữ liệu, nạp file) hoặc đăng xuất. */
   let loaded = null;
   let model = null;
   let focus = null; // tên bảng đang ở chế độ tập trung
+  let domain = null; // nhãn miền nghiệp vụ đang lọc (chỉ khi có `groups`)
   let selected = null;
   let view = { x: 24, y: 16, k: 1 };
   let drawn = null;
@@ -304,6 +374,7 @@ export function createErdPanel({
   q('[data-erd-zoom="in"]').addEventListener('click', () => zoomBy(1.2));
   q('[data-erd-zoom="out"]').addEventListener('click', () => zoomBy(1 / 1.2));
   q('[data-erd-zoom="fit"]').addEventListener('click', fit);
+  trayBtn.addEventListener('click', showTray);
   filterEl.addEventListener('input', applyFilter);
   filterEl.addEventListener('keydown', (e) => {
     if (e.key !== 'Enter') return;
@@ -368,31 +439,116 @@ export function createErdPanel({
       listEl.replaceChildren();
       return;
     }
-    const names = focus ? [...neighbours(model, focus)] : model.tables.map((t) => t.name);
+    const rules = groups ? groups() || null : null;
+    if (!rules) domain = null;
+    let names;
+    let inside = null; // chế độ miền: các bảng thuộc miền (bảng liền kề vẽ nhạt)
+    if (focus) {
+      names = [...neighbours(model, focus)];
+    } else if (domain) {
+      inside = new Set(domainTables(rules, domain));
+      const all = new Set(inside);
+      for (const n of inside) for (const x of neighbours(model, n)) all.add(x);
+      names = [...all];
+    } else {
+      names = model.tables.map((t) => t.name);
+    }
     // Chiều cao cột chọn theo khung: thử vài mức, giữ mức cho "vừa khung" lớn
     // nhất. Một mức cố định làm sơ đồ hoặc dài ngoằng (khung thấp, rộng) hoặc
     // cao vút (khung hẹp), và chữ bị thu nhỏ còn một góc, quanh là khoảng trống.
     const box = canvas.getBoundingClientRect();
     const opts = { full: Boolean(focus), center: focus };
-    if (box.width && box.height) {
+    const sized = box.width && box.height;
+    const pickBest = (tries, extra) => {
       let best = null;
-      for (const colMax of COL_MAX_TRY) {
-        const cand = layout(model, names, { ...opts, colMax });
+      for (const colMax of tries) {
+        const cand = layout(model, names, { ...opts, ...extra, colMax });
         const k = fitScale(cand, box);
         if (!best || k > best.k + 1e-6) best = { k, cand };
+      }
+      return best;
+    };
+    let compact = false;
+    if (sized) {
+      let best = pickBest(COL_MAX_TRY, {});
+      // Toàn cảnh quá đông (chữ thu dưới một nửa): ô chỉ có tên bảng. Chế độ
+      // tập trung và chế độ miền luôn giữ cột, vì đó là chỗ đọc cột.
+      if (!focus && !domain && best.k < COMPACT_BELOW) {
+        best = pickBest(COMPACT_TRY, { compact: true });
+        compact = true;
       }
       drawn = best.cand;
     } else {
       drawn = layout(model, names, { ...opts, colMax: COL_MAX_H });
     }
+    drawn.compact = compact;
+    drawn.inside = inside;
+    renderGroups(rules);
     draw();
     renderDetail();
     renderEdgeList();
-    statusEl.textContent = focus
-      ? `${names.length} bảng quanh ${focus}`
-      : `${model.tables.length} bảng, ${model.edges.length} quan hệ`;
+    if (focus) statusEl.textContent = `${names.length} bảng quanh ${focus}`;
+    else if (domain) statusEl.textContent = `${inside.size} bảng ${domain} + ${names.length - inside.size} bảng liên kết`;
+    else statusEl.textContent = `${model.tables.length} bảng, ${model.edges.length} quan hệ` + (drawn.compact ? ' · chỉ hiện tên bảng' : '');
+    trayBtn.hidden = !drawn.looseCount;
+    trayBtn.textContent = `${drawn.looseCount} bảng rời ↓`;
+    trayBtn.title = 'Tới khay các bảng chưa khai báo quan hệ, bên dưới sơ đồ';
     fit();
     applyFilter();
+  }
+
+  /** Tên miền của một bảng: quy tắc đầu tiên khớp; nhãn null nghĩa là không thuộc miền nào. */
+  function domainOf(rules, name) {
+    for (const r of rules) if (r.test.test(name)) return r.label;
+    return null;
+  }
+
+  /** Các bảng CÓ quan hệ thuộc một miền. Bảng rời không làm được sơ đồ miền. */
+  function domainTables(rules, label) {
+    const linked = new Set(model.edges.flatMap((e) => [e.from, e.to]));
+    return model.tables.map((t) => t.name).filter((n) => linked.has(n) && domainOf(rules, n) === label);
+  }
+
+  function renderGroups(rules) {
+    groupsEl.replaceChildren();
+    // Thứ tự chip: `show` (luồng nghiệp vụ), không phải thứ tự khớp quy tắc.
+    const labels = rules
+      ? rules.filter((r) => r.label).sort((a, b) => (a.show ?? 99) - (b.show ?? 99)).map((r) => r.label)
+        .filter((l, i, arr) => arr.indexOf(l) === i && domainTables(rules, l).length)
+      : [];
+    groupsEl.hidden = labels.length < 2;
+    if (groupsEl.hidden) return;
+    const chip = (label, text, count) => {
+      const b = h('button', 'ch-level-btn erd-group-btn', text);
+      b.type = 'button';
+      const on = (domain || null) === label;
+      b.classList.toggle('is-active', on);
+      b.setAttribute('aria-pressed', on ? 'true' : 'false');
+      if (count !== undefined) {
+        b.appendChild(h('span', 'erd-group-count', String(count)));
+        b.setAttribute('aria-label', `${text}, ${count} bảng`);
+      }
+      b.addEventListener('click', () => {
+        if (domain === label) return;
+        domain = label;
+        focus = null;
+        selected = null;
+        render();
+      });
+      groupsEl.appendChild(b);
+    };
+    chip(null, 'Toàn bộ');
+    for (const l of labels) chip(l, l, domainTables(rules, l).length);
+  }
+
+  /** Đưa khay bảng rời (bên dưới sơ đồ) vào khung, giữ mức thu đủ đọc tên. */
+  function showTray() {
+    if (!drawn || drawn.trayY === null) return;
+    const box = canvas.getBoundingClientRect();
+    if (!box.width) return;
+    const k = Math.min(1, (box.width - 48) / drawn.trayW);
+    view = { k, x: 24, y: 16 - drawn.trayY * k };
+    applyView();
   }
 
   /* ---------------------------------------------------------------- draw -- */
@@ -414,8 +570,13 @@ export function createErdPanel({
 
     const vp = el('g', { class: 'erd-viewport' }, svg);
     for (const lane of drawn.lanes) {
-      const t = el('text', { x: lane.x, y: 18, class: 'erd-lane' }, vp);
+      const cls = 'erd-lane' + (lane.tray ? ' is-tray' : '') + (lane.sub ? ' is-sub' : '');
+      const t = el('text', { x: lane.x, y: lane.y ?? 18, class: cls }, vp);
       t.textContent = lane.label;
+    }
+    if (drawn.trayY) {
+      // Vạch ngăn sơ đồ với khay bảng rời.
+      el('line', { class: 'erd-tray-rule', x1: 0, x2: Math.max(drawn.width, drawn.fitW), y1: drawn.trayY, y2: drawn.trayY }, vp);
     }
     const edgeLayer = el('g', { class: 'erd-edges' }, vp);
     const nodeLayer = el('g', { class: 'erd-nodes' }, vp);
@@ -452,6 +613,7 @@ export function createErdPanel({
   }
 
   function rowY(p, col) {
+    if (p.compact) return p.y + p.h / 2;
     const i = p.rows.findIndex((c) => c.name.toLowerCase() === String(col || '').toLowerCase());
     if (i < 0) return p.y + HEAD_H / 2;
     return p.y + HEAD_H + PAD_Y + i * ROW_H + ROW_H / 2;
@@ -459,14 +621,27 @@ export function createErdPanel({
 
   function drawNode(layer, p) {
     const t = p.table;
+    const outside = drawn.inside && !drawn.inside.has(t.name);
     const g = el('g', {
-      class: 'erd-node' + (t.kind === 'view' ? ' is-view' : '') + (t.name === selected ? ' is-selected' : ''),
+      class: 'erd-node' + (t.kind === 'view' ? ' is-view' : '') + (t.name === selected ? ' is-selected' : '')
+        + (p.compact ? ' is-compact' : '') + (outside ? ' is-outside' : ''),
       transform: `translate(${p.x} ${p.y})`,
       tabindex: '0',
       role: 'button',
       'data-table': t.name,
-      'aria-label': `Bảng ${t.name}, ${t.columns.length} cột. Bấm để xem cột và cách JOIN.`,
+      'aria-label': `Bảng ${t.name}, ${t.columns.length} cột${outside ? ', ngoài miền đang xem' : ''}. Bấm để xem cột và cách JOIN.`,
     }, layer);
+    if (p.compact) {
+      // Ô chỉ tên: một khối đầu bảng, số cột ở bên phải.
+      el('rect', { class: 'erd-box erd-head', width: p.w, height: p.h, rx: 8 }, g);
+      const count = String(t.columns.length);
+      const name = el('text', { class: 'erd-name', x: 12, y: p.h / 2 + 4 }, g);
+      name.textContent = clip(t.name, Math.floor((p.w - 24 - (count.length + 1) * 6.2) / CH));
+      const c = el('text', { class: 'erd-type', x: p.w - 10, y: p.h / 2 + 4, 'text-anchor': 'end' }, g);
+      c.textContent = count;
+      bindNode(g, t);
+      return;
+    }
     el('rect', { class: 'erd-box', width: p.w, height: p.h, rx: 8 }, g);
     el('rect', { class: 'erd-head', width: p.w, height: HEAD_H, rx: 8 }, g);
     el('rect', { class: 'erd-head', y: HEAD_H - 8, width: p.w, height: 8 }, g);
@@ -501,7 +676,10 @@ export function createErdPanel({
       const m = el('text', { class: 'erd-more', x: 38, y }, g);
       m.textContent = `và ${more} cột khác`;
     }
+    bindNode(g, t);
+  }
 
+  function bindNode(g, t) {
     g.addEventListener('pointerenter', () => light(t.name));
     g.addEventListener('pointerleave', () => light(null));
     g.addEventListener('focus', () => light(t.name));
@@ -585,6 +763,15 @@ export function createErdPanel({
       li('erd-swatch is-edge', 'Nét liền: quan hệ database khai báo');
       if (model.edges.some((e) => e.inferred)) li('erd-swatch is-inferred', 'Nét đứt: quan hệ suy luận, không có khoá ngoại khai báo');
       intro.appendChild(ul);
+      if (drawn && drawn.compact) {
+        intro.appendChild(h('p', 'erd-hint',
+          `Sơ đồ có ${model.tables.length} bảng nên toàn cảnh chỉ hiện tên bảng (số bên phải là số cột). ` +
+          (groupsEl.hidden ? 'Bấm một bảng để xem cột.' : 'Chọn một miền ở trên hoặc bấm một bảng để xem cột.')));
+      }
+      if (drawn && drawn.looseCount) {
+        intro.appendChild(h('p', 'muted',
+          `${drawn.looseCount} bảng chưa khai báo khoá ngoại nằm ở khay bên dưới sơ đồ.`));
+      }
       intro.appendChild(h('p', 'muted', 'Bấm một bảng để xem đủ cột và câu JOIN tới các bảng nối với nó.'));
       if (!model.edges.length) {
         intro.appendChild(h('p', 'erd-warn', 'Bộ dữ liệu này không khai báo khoá ngoại nào, nên sơ đồ chỉ có các bảng rời.'));
@@ -714,10 +901,11 @@ export function createErdPanel({
     if (!box.width || !box.height) return;
     const k = Math.max(0.2, fitScale(drawn, box));
     // Căn giữa cả hai chiều: sơ đồ thấp hơn khung thì không dồn lên mép trên.
+    // Khay bảng rời nằm ngoài phần này (fitW/fitH): kéo xuống hoặc bấm "bảng rời" để xem.
     view = {
       k,
-      x: Math.max(24, (box.width - drawn.width * k) / 2),
-      y: Math.max(16, (box.height - drawn.height * k) / 2),
+      x: Math.max(24, (box.width - drawn.fitW * k) / 2),
+      y: Math.max(16, (box.height - drawn.fitH * k) / 2),
     };
     applyView();
   }
@@ -814,8 +1002,12 @@ export function createErdPanel({
     model = null;
     drawn = null;
     focus = null;
+    domain = null;
     selected = null;
     svg.replaceChildren();
+    groupsEl.replaceChildren();
+    groupsEl.hidden = true;
+    trayBtn.hidden = true;
     detailEl.replaceChildren();
     listEl.replaceChildren();
     statusEl.textContent = '';

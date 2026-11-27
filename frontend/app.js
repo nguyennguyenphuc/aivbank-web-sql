@@ -7,7 +7,7 @@
  * tables exist (API_CONTRACT.md §9.1 and §9.3).
  */
 
-import { api, apiBase, apiOrigin, isCrossOrigin, setDataset, setUnauthorizedHandler } from './api.js';
+import { api, apiBase, apiOrigin, getDataset, isCrossOrigin, setDataset, setUnauthorizedHandler } from './api.js';
 import { errorHint, isRetryable, isClientCode } from './errors.js';
 import { createEditor, insertAtCursor } from './editor.js';
 import { createSchemaPanel } from './schema.js';
@@ -76,6 +76,24 @@ const cm = createEditor($('sql'), { schemaRef: schemaPanel.ref, onRun: run });
  * chinh no (game va Thuc hanh SQL co panel rieng ben duoi). Dung CHUNG schema
  * voi thanh ben (khong goi /schema lan hai), nen no khong the hien mot ten ma
  * danh muc bang khong co. */
+/** Miền nghiệp vụ của Finance Banking, đoán theo tên bảng. Quy tắc đầu tiên
+ *  khớp thì dùng; nhãn null: không có chip (bảng raw_ không có quan hệ nào).
+ *  Thứ tự quan trọng: "payroll_agreement" là Chi lương chứ không phải Hợp đồng,
+ *  "deposit_contract" là Tiền gửi, "account_posting" là Kế toán. */
+const AIVB_DOMAINS = [
+  { label: 'Danh mục', test: /^ref_/, show: 10 },
+  { label: null, test: /^raw_/ },
+  { label: 'Chi lương', test: /payroll|salary/, show: 8 },
+  { label: 'Tiền gửi', test: /deposit|interest_accrual/, show: 4 },
+  { label: 'Tín dụng', test: /loan|credit|collateral|guarantor|financial_snapshot/, show: 5 },
+  { label: 'Thanh toán', test: /payment|settlement|counterparty/, show: 6 },
+  { label: 'Kế toán', test: /gl_|journal|posting|fee_|tax_|reversal/, show: 7 },
+  { label: 'Vận hành', test: /batch_run|business_date|eod/, show: 9 },
+  { label: 'Tài khoản', test: /account/, show: 2 },
+  { label: 'Hợp đồng', test: /contract/, show: 3 },
+  { label: 'Khách hàng', test: /./, show: 1 },
+];
+
 const erdPanel = createErdPanel({
   root: $('tab-erd'),
   load: async () => {
@@ -94,6 +112,8 @@ const erdPanel = createErdPanel({
     return 'Đã chèn';
   },
   emptyText: 'Bộ dữ liệu này chưa có bảng nào bạn xem được.',
+  // Chip lọc theo miền nghiệp vụ: chỉ Finance Banking (77 bảng) cần.
+  groups: () => (getDataset() === 'aivb' ? AIVB_DOMAINS : null),
 });
 
 /** Hang the con (Tro choi, Thuc hanh SQL). Khong dung class `tab`: selectTab()
