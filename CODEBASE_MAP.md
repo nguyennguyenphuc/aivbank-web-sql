@@ -294,7 +294,7 @@ nó chuyển tiếp nguyên văn method, path, body, header lên trên và statu
 xuống dưới. Nếu bạn thấy mình đang thêm một câu `if` về *ai được xem gì* vào `serve.py` thì
 đó chính là lỗi.
 
-### Thứ tự bootstrap (`index.html:308-318`)
+### Thứ tự bootstrap (`app.html`; từ 2026-11-27 `index.html` là trang chủ eDA)
 
 1. 7 thẻ `<script>` CodeMirror vendor (classic) → định nghĩa global `CodeMirror`
 2. `<script src="config.js">` (classic) → đặt `window.AIVB_CONFIG`
@@ -302,7 +302,7 @@ xuống dưới. Nếu bạn thấy mình đang thêm một câu `if` về *ai �
 
 **Thiết kế fail-closed:** `<body class="is-gated">` và lớp che `#auth-gate` nằm **sẵn trong
 HTML thô**; `#app` mang thuộc tính `hidden`. Nếu `app.js` không tải được, thứ người dùng
-thấy là form đăng nhập — **không bao giờ** là console (`index.html:19-27,134`).
+thấy là form đăng nhập — **không bao giờ** là console (`app.html`).
 
 ### Các module
 
@@ -397,7 +397,7 @@ Cộng thêm: **không làm tròn số tiền** — tiền là số nguyên VND,
 
 ### CSS
 
-Bốn stylesheet, **thứ tự nạp có ý nghĩa** (`index.html:12-17`): `codemirror.css` →
+Bốn stylesheet, **thứ tự nạp có ý nghĩa** (`app.html`): `codemirror.css` →
 `show-hint.css` → `tokens.css` → `styles.css`.
 
 - **`tokens.css` (286 dòng)** — tầng design token, **file DUY NHẤT** được phép chứa giá trị

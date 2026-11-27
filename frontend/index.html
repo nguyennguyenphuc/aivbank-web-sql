@@ -1,541 +1,509 @@
 <!doctype html>
 <html lang="vi">
 <head>
-<meta charset="utf-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>E2E Data Analytics: Bảng điều khiển SQL học viên</title>
-<meta name="description" content="Nơi học viên eDA viết SQL trên dữ liệu ngân hàng và chuỗi cung ứng, xem sơ đồ quan hệ giữa các bảng và theo dõi tiến độ luyện tập." />
-<meta name="color-scheme" content="light" />
-<!-- Favicon is the real brand mark, served from web/assets. No CDN, no data-URI
-     placeholder: the tab icon should be the same logo as the one on screen. -->
-<link rel="icon" type="image/png" sizes="256x249" href="assets/logo-mark.png" />
-<link rel="apple-touch-icon" href="assets/logo-mark.png" />
-<link rel="stylesheet" href="vendor/codemirror/lib/codemirror.css" />
-<link rel="stylesheet" href="vendor/codemirror/addon/hint/show-hint.css" />
-<!-- tokens.css must load BEFORE styles.css: styles.css contains no literal
-     colour, spacing, radius or font stack of its own, only var() lookups. -->
-<link rel="stylesheet" href="tokens.css" />
-<link rel="stylesheet" href="styles.css" />
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Lộ trình đào tạo eDA | End-to-end Data Analytics</title>
+<meta name="description" content="Lộ trình đào tạo eDA (End-to-end Data Analytics) của AI VIET NAM gồm 7 module bắt buộc và 1 module tự chọn trong 8 tháng, từ Excel, Power BI, SQL đến Agentic AI, data pipeline và học máy, gắn với dự án thực hành theo từng lĩnh vực.">
+<meta name="theme-color" content="#11501b">
+<meta property="og:title" content="Lộ trình đào tạo eDA | From Data to Business Impact">
+<meta property="og:description" content="7 module bắt buộc trong 8 tháng, 9 dự án thực hành và dự án mentorship tự chọn theo lĩnh vực.">
+<link rel="icon" type="image/png" sizes="32x32" href="home/img/favicon-32.png">
+<link rel="apple-touch-icon" href="home/img/favicon-180.png">
+<script src="home/js/theme-boot.js"></script>
+<link rel="stylesheet" href="vendor/fonts/eda-fonts.css">
+<link rel="stylesheet" href="home/css/site.css">
+<link rel="stylesheet" href="home/css/aivb-home.css">
+<script src="home/js/data.js" defer></script>
+<script src="home/js/content.js" defer></script>
+<script src="home/js/site.js" defer></script>
 </head>
-<body class="is-gated">
+<body>
+<a class="skip" href="#noi-dung">Bỏ qua điều hướng</a>
 
-<!-- =====================================================================
-     LOGIN GATE
-     Visible in the markup by default and removed only after GET /auth/me
-     confirms a session. If app.js fails to load, what stays on screen is the
-     login form — never the console. Fail closed.
-     ===================================================================== -->
-<div id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-label="Xác thực E2E Data Analytics">
-  <div class="auth-card">
-
-    <div class="auth-brand">
-      <img class="auth-logo" src="assets/logo.png" alt="eDA — E2E Data Analytics, AI Vietnam" width="880" height="275" />
-      <p class="auth-brand-text">Bảng điều khiển SQL học viên</p>
-    </div>
-
-    <!-- step 1: asking the server whether we already have a session -->
-    <div id="auth-checking" class="auth-step">
-      <div class="auth-checking-row">
-        <div class="auth-spinner" aria-hidden="true"></div>
-        <p class="auth-lead auth-lead-flush" role="status">Đang kiểm tra phiên đăng nhập…</p>
-      </div>
-    </div>
-
-    <!-- step 2: login -->
-    <form id="auth-login" class="auth-step" hidden novalidate>
-      <h1 id="auth-title" class="auth-title">Đăng nhập</h1>
-      <p class="auth-lead">Bảng điều khiển chỉ mở sau khi máy chủ xác nhận phiên.</p>
-
-      <p id="auth-notice" class="auth-notice" hidden role="status"></p>
-
-      <div class="auth-field-group">
-        <label class="auth-field" for="login-username">Tên đăng nhập</label>
-        <input
-          id="login-username"
-          class="auth-input"
-          type="text"
-          name="username"
-          aria-describedby="login-error"
-          autocomplete="username"
-          autocapitalize="none"
-          autocorrect="off"
-          spellcheck="false"
-        />
-      </div>
-
-      <div class="auth-field-group">
-        <label class="auth-field" for="login-password">Mật khẩu</label>
-        <input
-          id="login-password"
-          class="auth-input"
-          type="password"
-          name="password"
-          aria-describedby="login-error"
-          autocomplete="current-password"
-        />
-      </div>
-
-      <!-- Reserved height: the error appears and disappears without moving the
-           button under the student's cursor. Two lines is the common worst
-           case (the generic sentence is one, the lockout notice is two). -->
-      <div class="auth-slot">
-        <p id="login-error" class="auth-error" hidden role="alert"></p>
-      </div>
-
-      <button id="login-submit" class="btn btn-primary auth-submit" type="submit">Đăng nhập</button>
-
-      <p class="auth-foot">
-        Dùng tài khoản do giảng viên cấp. Quên mật khẩu thì liên hệ giảng viên:
-        giao diện này không tự đặt lại được.
-      </p>
-    </form>
-
-    <!-- step 3: change password (forced on first login, or on demand) -->
-    <form id="auth-change" class="auth-step" hidden novalidate>
-      <h1 class="auth-title">Đổi mật khẩu</h1>
-      <p id="change-lead" class="auth-lead"></p>
-
-      <div class="auth-field-group">
-        <label class="auth-field" for="change-old">Mật khẩu hiện tại</label>
-        <input id="change-old" class="auth-input" type="password" autocomplete="current-password" aria-describedby="change-error" />
-      </div>
-
-      <div class="auth-field-group">
-        <label class="auth-field" for="change-new">Mật khẩu mới</label>
-        <input id="change-new" class="auth-input" type="password" autocomplete="new-password" aria-describedby="change-error" />
-      </div>
-
-      <div class="auth-field-group">
-        <label class="auth-field" for="change-new2">Nhập lại mật khẩu mới</label>
-        <input id="change-new2" class="auth-input" type="password" autocomplete="new-password" aria-describedby="change-error" />
-      </div>
-
-      <ul id="change-rules" class="auth-rules"></ul>
-      <p class="auth-foot auth-foot-tight">
-        Máy chủ mới là nơi quyết định mật khẩu có được chấp nhận hay không; danh
-        sách trên chỉ là gợi ý để bạn đỡ phải thử lại nhiều lần.
-      </p>
-
-      <div class="auth-slot">
-        <p id="change-error" class="auth-error" hidden role="alert"></p>
-        <p id="change-ok" class="auth-ok" hidden role="status"></p>
-      </div>
-
-      <div class="auth-actions">
-        <button id="change-submit" class="btn btn-primary auth-submit" type="submit">Đổi mật khẩu</button>
-        <button id="change-cancel" class="btn btn-ghost" type="button" hidden>Huỷ</button>
-        <button id="change-signout" class="btn btn-ghost" type="button" hidden>Đăng xuất</button>
-      </div>
-    </form>
-
+<header class="nav" id="nav">
+  <div class="nav__tab">
+    <a class="nav__logo" href="#top" aria-label="eDA, về đầu trang"><span class="logo-chip"><img src="home/img/mark-144.png" width="144" height="56" alt="eDA"></span><span>End-to-end<br>Data Analytics</span></a>
+    <nav class="nav__links" aria-label="Mục lục">
+      <a href="#lo-trinh"><small>01</small>Lộ trình</a>
+      <a href="#so-do"><small>02</small>Tiến trình</a>
+      <a href="#chuan-dau-ra"><small>03</small>Chuẩn đầu ra</a>
+      <a href="#module"><small>04</small>Module</a>
+      <a href="#lich-hoc"><small>05</small>Lịch học</a>
+      <a href="#du-an"><small>06</small>Dự án</a>
+      <a href="#doi-ngu"><small>07</small>Giảng viên</a>
+      <a href="#bat-dau"><small>08</small>Tuyển sinh</a>
+    </nav>
+    <button class="nav__theme" type="button" id="themeBtn" aria-label="Đổi giao diện sáng hoặc tối" title="Đổi giao diện sáng hoặc tối">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5Z"/></svg>
+    </button>
+    <a class="nav__login" href="app.html">Đăng nhập</a>
+    <button class="nav__burger" type="button" id="burger" aria-label="Mở menu" aria-haspopup="dialog" aria-expanded="false" aria-controls="menu"><i></i><i></i></button>
   </div>
-</div>
-
-<!-- =====================================================================
-     APPLICATION SHELL — hidden until the server confirms a session.
-     ===================================================================== -->
-<div id="app" hidden>
-
-<a class="skip-link" href="#main-workspace">Bỏ qua điều hướng, đến vùng làm việc</a>
-
-<!-- ===================== ONE BAR =====================
-     Redesign 2026-11: the brand, the areas, the server status and the session
-     share one 56px bar instead of two stacked ones (64px + ~70px), and the
-     rows they gave back go to the result grid. Every id, role and data-*
-     hook below is the one app.js already reads; only their parent changed. -->
-<header class="topbar">
-  <button id="open-schema" class="icon-btn schema-toggle" type="button" aria-label="Mở danh sách bảng" aria-controls="schema-sidebar" aria-expanded="false">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
-  </button>
-  <div class="brand">
-    <img class="brand-mark" src="assets/logo-mark.png" alt="" width="256" height="249" aria-hidden="true" />
-    <span class="brand-word">E2E Data Analytics</span>
-    <span class="brand-text"><strong>SQL Workspace</strong><small>Thực hành dữ liệu ngân hàng</small></span>
-  </div>
-
-<!-- ===================== SECTIONS =====================
-     Three top-level areas, not a dataset dropdown. The first two are the same
-     console pointed at different teaching databases; the third runs entirely
-     in this browser and never contacts the server.
-
-     Finance Banking and Supply Chain share one editor and one schema panel, so
-     switching between THEM must wipe schema, results and history -- otherwise
-     autocomplete would offer one dataset's table names inside the other's
-     query. The sandbox needs no such wipe: it owns a separate editor whose
-     only name source is the student's own files. -->
-<!-- Nut phong to nam CHUNG hang voi tablist nhung NGOAI no: role="tablist" chi
-     duoc chua tab (cung ly do voi .results-head). -->
-<div class="sections-bar">
-<nav id="sections" class="sections" role="tablist" aria-label="Khu vực làm việc">
-  <button class="section-tab is-active" type="button" data-dataset-slot role="tab" data-section="finance"
-          id="section-tab-finance" aria-controls="main-workspace" aria-selected="true">
-    <span class="section-tab-name">Finance Banking</span>
-    <span class="section-tab-sub">Đang kết nối…</span>
-  </button>
-  <button class="section-tab" type="button" data-dataset-slot role="tab" data-section="scm"
-          id="section-tab-scm" aria-controls="main-workspace" aria-selected="false" tabindex="-1"
-          disabled aria-disabled="true">
-    <span class="section-tab-name">Supply Chain</span>
-    <span class="section-tab-sub">Đang kết nối…</span>
-  </button>
-  <button class="section-tab" type="button" role="tab" data-section="sandbox"
-          id="section-tab-sandbox" aria-controls="sandbox-workspace" aria-selected="false" tabindex="-1">
-    <span class="section-tab-name">Thực hành SQL</span>
-  </button>
-  <!-- Luyen SQL: bai tap kieu HackerRank, cham tren may chu (frontend/challenges.js,
-       backend/challenges.py). Khong co data-dataset-slot: moi bai tu mang dataset
-       cua no, khu vuc nay khong doi bo du lieu cua console. -->
-  <button class="section-tab" type="button" role="tab" data-section="challenges"
-          id="section-tab-challenges" aria-controls="challenges-workspace" aria-selected="false" tabindex="-1">
-    <span class="section-tab-name">Luyện SQL</span>
-  </button>
-  <!-- Tro choi: an cho toi khi GET /game-sso/status noi may chu da bat game.
-       `disabled` di kem `hidden` de phim mui ten cung bo qua no. -->
-  <button class="section-tab" type="button" role="tab" data-section="game"
-          id="section-tab-game" aria-controls="game-workspace" aria-selected="false" tabindex="-1"
-          hidden disabled aria-disabled="true">
-    <span class="section-tab-name">Trò chơi</span>
-  </button>
-  <!-- Bang xep hang la khu vuc RIENG, khong phai mot tab trong vung ket qua: no
-       khong thuoc ve bo du lieu nao ca. De no trong vung ket qua thi doi bo du
-       lieu se xoa no di cung schema va lich su, dù diem thi khong doi.
-       Dat CUOI hang: la noi xem lai, khong phai noi lam bai. -->
-  <button class="section-tab" type="button" role="tab" data-section="leaderboard"
-          id="section-tab-leaderboard" aria-controls="leaderboard-workspace" aria-selected="false" tabindex="-1">
-    <span class="section-tab-name">Bảng xếp hạng</span>
-  </button>
-</nav>
-</div>
-
-  <div id="health" class="health" aria-live="polite">
-    <span class="pill pill-muted">Đang kết nối…</span>
-  </div>
-  <div id="session-box" class="session-box" hidden>
-    <span id="session-role" class="role-badge"></span>
-    <span id="session-user" class="session-user"></span>
-    <button id="btn-change-password" class="btn btn-ghost btn-sm" type="button">Đổi mật khẩu</button>
-    <button id="btn-logout" class="btn btn-ghost btn-sm" type="button">Đăng xuất</button>
-  </div>
-  <button id="focus-toggle" class="icon-btn focus-toggle" type="button" aria-pressed="false"
-          aria-label="Phóng to khu vực đang mở" title="Phóng to khu vực đang mở (Esc để thoát)">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
-  </button>
 </header>
-
-<!-- Che do phong to an ca thanh tieu de lan thanh tab, nen loi ra phai nam o
-     day, noi khong bao gio bi an cung. #focus-schema thay cho nut mo danh sach
-     bang (o thanh tieu de) khi man hep. -->
-<div id="focus-float" class="focus-float" hidden>
-  <button id="focus-schema" class="icon-btn" type="button" aria-label="Mở danh sách bảng"
-          aria-controls="schema-sidebar" title="Danh sách bảng" hidden>
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" /></svg>
-  </button>
-  <button id="focus-exit" class="icon-btn" type="button" aria-label="Thu nhỏ, hiện lại thanh điều hướng"
-          title="Thu nhỏ (Esc)">
-    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /></svg>
-  </button>
+<div class="menu" id="menu" role="dialog" aria-modal="true" aria-label="Menu" hidden>
+  <div class="menu__card">
+    <div class="menu__top">
+      <span class="logo-chip"><img src="home/img/mark-144.png" width="72" height="28" alt="eDA" style="height:28px;width:auto"></span>
+      <button class="menu__close" type="button" id="menuClose" aria-label="Đóng menu"><i></i><i></i></button>
+    </div>
+    <a class="menu__login" href="app.html">Đăng nhập vào bảng điều khiển SQL</a>
+    <ol class="menu__links">
+      <li><a href="#lo-trinh"><small>01</small>Lộ trình đào tạo</a></li>
+      <li><a href="#so-do"><small>02</small>Sơ đồ tiến trình</a></li>
+      <li><a href="#chuan-dau-ra"><small>03</small>Chuẩn đầu ra</a></li>
+      <li><a href="#module"><small>04</small>Nội dung các module</a></li>
+      <li><a href="#lich-hoc"><small>05</small>Hình thức và lịch học</a></li>
+      <li><a href="#du-an"><small>06</small>Dự án thực hành</a></li>
+      <li><a href="#doi-ngu"><small>07</small>Đội ngũ giảng viên</a></li>
+      <li><a href="#bat-dau"><small>08</small>Thông tin tuyển sinh</a></li>
+    </ol>
+  </div>
 </div>
 
-<div id="service-banner" class="banner banner-warn" hidden></div>
-
-<main id="main-workspace" class="layout" tabindex="-1">
-  <h1 class="sr-only">Không gian thực hành SQL, E2E Data Analytics</h1>
-
-  <!-- ===================== SIDEBAR: schema explorer ===================== -->
-  <div id="schema-backdrop" class="schema-backdrop" hidden></div>
-  <aside id="schema-sidebar" class="sidebar" aria-label="Danh sách bảng">
-    <div class="sidebar-head">
-      <div>
-        <h2 class="sidebar-title">Danh mục bảng <span id="table-count" class="count"></span></h2>
+<main id="noi-dung">
+  <!-- ===== HERO ===== -->
+  <section class="hero" id="top" aria-labelledby="hero-title">
+    <div class="hero__panel">
+      <div class="hero__top">
+        <div>
+          <span class="hero__badge"><i></i>Khai giảng 06/09/2026</span>
+          <h1 id="hero-title">End-to-end Data Analytics. <em>From Data to Business&nbsp;Impact.</em></h1>
+        </div>
+        <div class="hero__side">
+          <p class="hero__p">Chương trình đào tạo trong 8 tháng, gồm 7 module bắt buộc và 1 module tự chọn luyện thi chứng chỉ. Người học đi từ Excel, Power BI, SQL đến Agentic AI, data pipeline và học máy. Mỗi module gắn với một lĩnh vực kinh doanh và kết thúc bằng dự án, bài thi. Người học có thể chọn thêm dự án mentorship để đi sâu vào một lĩnh vực.</p>
+          <div class="hero__acts">
+            <a class="act act--login" href="app.html">Đăng nhập học SQL<span class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>
+            <a class="act act--down" href="#lo-trinh">Xem lộ trình<span class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>
+            <a class="act" href="#module">Xem nội dung các module<span class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>
+          </div>
+        </div>
       </div>
-      <button id="refresh-schema" class="btn btn-ghost btn-sm" type="button" title="Tải lại danh sách từ máy chủ">
-        Làm mới
-      </button>
-      <button id="close-schema" class="icon-btn sidebar-close" type="button" aria-label="Đóng danh sách bảng">
-        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M18 6 6 18" /></svg>
-      </button>
+      <div class="hero__art" id="heroArt">
+        <div class="scenes" aria-hidden="true">
+          <!-- Cảnh 1: tác động kinh doanh tăng qua từng module -->
+          <div class="scene is-on" data-hold="11000" data-name="Giá trị kinh doanh tăng dần qua từng module">
+            <svg viewBox="0 0 1200 260" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <defs><linearGradient id="hg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#b9f5cb" stop-opacity=".24"/><stop offset="1" stop-color="#b9f5cb" stop-opacity="0"/></linearGradient></defs>
+              <g stroke="rgba(255,255,255,.22)"><path d="M40 210H1170"/><path d="M40 20V210"/><path d="M200 205v10M360 205v10M520 205v10M680 205v10M840 205v10M1000 205v10M1160 205v10"/></g>
+              <g font-family="IBM Plex Mono,monospace" font-size="11" fill="rgba(255,255,255,.6)" letter-spacing=".06em">
+                <text x="200" y="234" text-anchor="middle">M01 EXCEL</text><text x="360" y="234" text-anchor="middle">M02 POWER BI</text><text x="520" y="234" text-anchor="middle">M03 SQL</text><text x="680" y="234" text-anchor="middle">M04 AGENTIC AI</text><text x="840" y="234" text-anchor="middle">M05 MODERN STACK</text><text x="1000" y="234" text-anchor="middle">M06 PIPELINE</text><text x="1160" y="234" text-anchor="end">M07 ML</text>
+                <text x="48" y="30">BUSINESS IMPACT</text>
+              </g>
+              <path class="sa-area" d="M40 196 C120 192 160 184 200 176 S300 160 360 150 S470 140 520 126 S630 110 680 92 S790 82 840 70 S950 58 1000 46 S1110 34 1160 26 V210 H40Z" fill="url(#hg)"/>
+              <path class="sa-curve" pathLength="1" d="M40 196 C120 192 160 184 200 176 S300 160 360 150 S470 140 520 126 S630 110 680 92 S790 82 840 70 S950 58 1000 46 S1110 34 1160 26" stroke="#b9f5cb" stroke-width="2.5"/>
+              <g fill="#0b3a13" stroke="#b9f5cb" stroke-width="2">
+                <circle class="sa-step" style="--d:1.3s" cx="200" cy="176" r="5"/><circle class="sa-step" style="--d:2.7s" cx="360" cy="150" r="5"/><circle class="sa-step" style="--d:4.1s" cx="520" cy="126" r="5"/><circle class="sa-step" style="--d:5.6s" cx="680" cy="92" r="5"/><circle class="sa-step" style="--d:7s" cx="840" cy="70" r="5"/><circle class="sa-step" style="--d:8.4s" cx="1000" cy="46" r="5"/><circle class="sa-step" style="--d:9.8s" cx="1160" cy="26" r="6" fill="#b9f5cb"/>
+              </g>
+              <circle class="sa-ring" cx="1160" cy="26" r="16" stroke="#b9f5cb" stroke-width="1.5"/>
+              <g font-family="Plus Jakarta Sans,sans-serif" font-size="13" fill="#fff">
+                <text class="sa-lab" style="--d:1.4s" x="212" y="199">Làm sạch dữ liệu thô</text>
+                <text class="sa-lab" style="--d:4.2s" x="532" y="150">SQL và mô hình dữ liệu</text>
+                <text class="sa-lab" style="--d:5.7s" x="692" y="116">Agentic AI hỗ trợ phân tích</text>
+                <text class="sa-lab" style="--d:8.5s" x="1012" y="70">Tự động hoá data pipeline</text>
+                <text class="sa-lab" style="--d:9.9s" x="1128" y="8" text-anchor="end" font-weight="600">Hỗ trợ ra quyết định</text>
+              </g>
+              <circle r="7" fill="#fff" stroke="#b9f5cb" stroke-width="3"><animateMotion dur="10s" fill="freeze" calcMode="spline" keyTimes="0;1" keySplines=".3 .1 .3 1" path="M40 196 C120 192 160 184 200 176 S300 160 360 150 S470 140 520 126 S630 110 680 92 S790 82 840 70 S950 58 1000 46 S1110 34 1160 26"/></circle>
+            </svg>
+          </div>
+
+          <!-- Cảnh 2: dashboard tự dựng -->
+          <div class="scene" data-hold="10000" data-name="Dashboard xây dựng từ dữ liệu sạch">
+            <svg viewBox="0 0 1200 260" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <g font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11" letter-spacing=".04em" fill="rgba(255,255,255,.66)">
+                <g class="sb-card" style="--d:.1s"><rect x="40" y="10" width="180" height="80" rx="10" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.22)"/><text x="58" y="34">DOANH THU</text><text x="58" y="72" font-family="Plus Jakarta Sans,sans-serif" font-size="28" font-weight="600" fill="#fff" letter-spacing="-.5" data-to="12.4" data-dec="1" data-suf=" tỷ">0</text></g>
+                <g class="sb-card" style="--d:.3s"><rect x="236" y="10" width="180" height="80" rx="10" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.22)"/><text x="254" y="34">BIÊN LỢI NHUẬN</text><text x="254" y="72" font-family="Plus Jakarta Sans,sans-serif" font-size="28" font-weight="600" fill="#fff" letter-spacing="-.5" data-to="18.6" data-dec="1" data-suf="%">0</text></g>
+                <g class="sb-card" style="--d:.5s"><rect x="432" y="10" width="180" height="80" rx="10" fill="rgba(255,255,255,.08)" stroke="rgba(255,255,255,.22)"/><text x="450" y="34">RETENTION D30</text><text x="450" y="72" font-family="Plus Jakarta Sans,sans-serif" font-size="28" font-weight="600" fill="#b9f5cb" letter-spacing="-.5" data-to="41" data-dec="0" data-suf="%">0</text></g>
+                <text x="40" y="122">DOANH THU THEO THÁNG</text>
+                <text x="680" y="18">SẢN LƯỢNG THEO CỬA HÀNG</text>
+              </g>
+              <g stroke="rgba(255,255,255,.18)"><path d="M40 240H612M40 200H612M40 160H612"/><path d="M680 240H1160"/></g>
+              <path class="sb-line" pathLength="1" d="M40 226 L92 214 L144 220 L196 196 L248 200 L300 178 L352 184 L404 160 L456 166 L508 146 L560 150 L612 134" stroke="#b9f5cb" stroke-width="2.5"/>
+              <g fill="#b9f5cb">
+                <rect class="sb-bar" style="--d:.2s" x="690" y="120" width="26" height="120" rx="3"/><rect class="sb-bar" style="--d:.3s" x="730" y="90" width="26" height="150" rx="3"/><rect class="sb-bar" style="--d:.4s" x="770" y="140" width="26" height="100" rx="3"/><rect class="sb-bar" style="--d:.5s" x="810" y="60" width="26" height="180" rx="3"/><rect class="sb-bar" style="--d:.6s" x="850" y="104" width="26" height="136" rx="3"/><rect class="sb-bar" style="--d:.7s" x="890" y="150" width="26" height="90" rx="3"/><rect class="sb-bar" style="--d:.8s" x="930" y="80" width="26" height="160" rx="3"/><rect class="sb-bar" style="--d:.9s" x="970" y="170" width="26" height="70" rx="3" fill="#fca5a5"/><rect class="sb-bar" style="--d:1s" x="1010" y="112" width="26" height="128" rx="3"/><rect class="sb-bar" style="--d:1.1s" x="1050" y="44" width="26" height="196" rx="3"/><rect class="sb-bar" style="--d:1.2s" x="1090" y="96" width="26" height="144" rx="3"/><rect class="sb-bar" style="--d:1.3s" x="1130" y="130" width="26" height="110" rx="3"/>
+              </g>
+              <g class="sb-note" font-family="Plus Jakarta Sans,sans-serif" font-size="12.5" fill="#fff"><path d="M983 164V40H966" stroke="#fca5a5" fill="none" stroke-dasharray="3 3"/><text x="962" y="44" text-anchor="end" fill="#fecaca">Doanh số cửa hàng số 8 thấp bất thường</text></g>
+            </svg>
+          </div>
+
+          <!-- Cảnh 3: data pipeline -->
+          <div class="scene" data-hold="10000" data-name="Data pipeline Bronze, Silver, Gold">
+            <svg viewBox="0 0 1200 260" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <g stroke="rgba(255,255,255,.5)" stroke-width="1.5" stroke-dasharray="6 7" class="sc-flow"><path d="M200 122H280"/><path d="M440 122H520"/><path d="M680 122H760"/><path d="M920 122H1000"/></g>
+              <g class="sc-pk">
+                <rect class="pk" style="--d:0s" x="196" y="117" width="10" height="10" rx="2" fill="#b9f5cb"/>
+                <rect class="pk pk--bad" style="--d:.8s" x="196" y="117" width="10" height="10" rx="2" fill="#fca5a5"/>
+                <rect class="pk" style="--d:1.6s" x="196" y="117" width="10" height="10" rx="2" fill="#b9f5cb"/>
+                <rect class="pk" style="--d:2.4s" x="196" y="117" width="10" height="10" rx="2" fill="#b9f5cb"/>
+                <rect class="pk pk--bad" style="--d:3.2s" x="196" y="117" width="10" height="10" rx="2" fill="#fca5a5"/>
+                <rect class="pk" style="--d:4s" x="196" y="117" width="10" height="10" rx="2" fill="#b9f5cb"/>
+                <rect class="pk" style="--d:4.8s" x="196" y="117" width="10" height="10" rx="2" fill="#b9f5cb"/>
+              </g>
+              <g fill="#17552b" stroke="rgba(255,255,255,.4)">
+                <rect x="40" y="90" width="160" height="64" rx="12"/><rect x="280" y="90" width="160" height="64" rx="12" stroke="#d6a76a"/><rect x="520" y="90" width="160" height="64" rx="12" stroke="#e5e7eb"/><rect x="760" y="90" width="160" height="64" rx="12" stroke="#facc15"/><rect x="1000" y="90" width="160" height="64" rx="12" stroke="#b9f5cb" fill="#226b3a"/>
+              </g>
+              <g font-family="Plus Jakarta Sans,sans-serif" font-size="14" font-weight="600" fill="#fff" text-anchor="middle">
+                <text x="120" y="127">Nguồn dữ liệu</text><text x="360" y="127">Bronze</text><text x="600" y="127">Silver</text><text x="840" y="127">Gold</text><text x="1080" y="127">Dashboard</text>
+              </g>
+              <g font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11" letter-spacing=".04em" fill="rgba(255,255,255,.66)" text-anchor="middle">
+                <text x="120" y="180">CSV, API, SHEET</text><text x="360" y="180">DỮ LIỆU THÔ</text><text x="600" y="180">KIỂM TRA BẰNG PYDANTIC</text><text x="840" y="180">MÔ HÌNH SQL VỚI DBT</text><text x="1080" y="180">POWER BI, TABLEAU</text>
+                <text x="40" y="40" text-anchor="start">KIẾN TRÚC MEDALLION, MODULE 3 ĐẾN 6</text>
+              </g>
+              <g class="sc-reject" font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11.5" fill="#fecaca"><path d="M592 64l16 16M608 64 592 80" stroke="#fca5a5" stroke-width="2"/><text x="616" y="77">LOẠI DÒNG SAI KIỂU</text></g>
+              <g class="sc-ok" font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11.5" fill="#b9f5cb"><path d="m1068 66 8 8 16-16" stroke="#b9f5cb" stroke-width="2.4"/><text x="1098" y="72">REFRESH</text></g>
+            </svg>
+          </div>
+
+          <!-- Cảnh 4: Agentic AI trả lời câu hỏi kinh doanh -->
+          <div class="scene" data-hold="11000" data-name="Agentic AI hỗ trợ phân tích">
+            <svg viewBox="0 0 1200 260" fill="none" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="40" y="6" width="520" height="248" rx="14" fill="rgba(255,255,255,.06)" stroke="rgba(255,255,255,.22)"/>
+              <g class="sd-q"><rect x="150" y="24" width="390" height="40" rx="12" fill="#fff"/><text x="166" y="49" font-family="Plus Jakarta Sans,sans-serif" font-size="13.5" font-weight="500" fill="#0f1a14">Vì sao retention Android giảm sau v2.1.0?</text></g>
+              <g class="sd-think" font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11.5" fill="rgba(255,255,255,.7)"><text x="60" y="94">AGENT ĐANG TRUY VẤN 3 BẢNG</text><circle class="sd-dot" style="--d:0s" cx="294" cy="90" r="2.5" fill="#b9f5cb"/><circle class="sd-dot" style="--d:.2s" cx="304" cy="90" r="2.5" fill="#b9f5cb"/><circle class="sd-dot" style="--d:.4s" cx="314" cy="90" r="2.5" fill="#b9f5cb"/></g>
+              <g class="sd-a"><rect x="60" y="112" width="440" height="88" rx="12" fill="rgba(185,245,203,.16)" stroke="#b9f5cb"/><text font-family="Plus Jakarta Sans,sans-serif" font-size="13.5" fill="#fff"><tspan x="76" y="138">Retention D7 của nhóm cài từ kênh trả phí</tspan><tspan x="76" y="160">giảm 9 điểm, nhóm organic gần như không đổi.</tspan><tspan x="76" y="184" fill="#b9f5cb" font-weight="600">Đề xuất tạm dừng 2 kênh CPI có chất lượng thấp.</tspan></text></g>
+              <rect x="600" y="6" width="250" height="248" rx="14" fill="rgba(0,0,0,.22)" stroke="rgba(255,255,255,.18)"/>
+              <g font-family="IBM Plex Mono,monospace" font-size="11.5">
+                <text class="sd-code" style="--d:1.6s" x="618" y="36" fill="#b9f5cb">SELECT</text><text class="sd-code" style="--d:1.6s" x="672" y="36" fill="#fff">channel,</text>
+                <text class="sd-code" style="--d:2s" x="632" y="58" fill="#fff">AVG(d7_ret) AS ret</text>
+                <text class="sd-code" style="--d:2.4s" x="618" y="80" fill="#b9f5cb">FROM</text><text class="sd-code" style="--d:2.4s" x="656" y="80" fill="#fff">cohorts</text>
+                <text class="sd-code" style="--d:2.8s" x="618" y="102" fill="#b9f5cb">WHERE</text><text class="sd-code" style="--d:2.8s" x="664" y="102" fill="#fff">os = 'android'</text>
+                <text class="sd-code" style="--d:3.2s" x="632" y="124" fill="#fff">AND ver &gt;= '2.1.0'</text>
+                <text class="sd-code" style="--d:3.6s" x="618" y="146" fill="#b9f5cb">GROUP BY</text><text class="sd-code" style="--d:3.6s" x="684" y="146" fill="#fff">channel;</text>
+                <text class="sd-code" style="--d:4.2s" x="618" y="236" fill="rgba(255,255,255,.55)">4 rows trong 0.8s</text>
+              </g>
+              <g stroke="rgba(255,255,255,.2)"><path d="M890 230H1160"/></g>
+              <g font-family="IBM Plex Mono,monospace" font-size="10.5" fill="rgba(255,255,255,.6)" text-anchor="middle"><text x="926" y="248">ORGANIC</text><text x="992" y="248">SEARCH</text><text x="1058" y="248">CPI-A</text><text x="1124" y="248">CPI-B</text><text x="890" y="22" text-anchor="start" font-family="Plus Jakarta Sans,sans-serif" font-weight="600" font-size="11">D7 RETENTION THEO KÊNH</text></g>
+              <g><rect class="sd-bar" style="--d:4.4s" x="906" y="70" width="40" height="160" rx="4" fill="#b9f5cb"/><rect class="sd-bar" style="--d:4.55s" x="972" y="84" width="40" height="146" rx="4" fill="#b9f5cb"/><rect class="sd-bar" style="--d:4.7s" x="1038" y="150" width="40" height="80" rx="4" fill="#fca5a5"/><rect class="sd-bar" style="--d:4.85s" x="1104" y="162" width="40" height="68" rx="4" fill="#fca5a5"/></g>
+            </svg>
+          </div>
+        </div>
+        <div class="hero__ctrl">
+          <p class="hero__cap" id="heroCap" aria-live="polite">Cảnh 1/4: Giá trị kinh doanh tăng dần qua từng module</p>
+          <div class="hero__dots" id="heroDots" role="group" aria-label="Chọn cảnh minh hoạ"></div>
+          <button type="button" class="hero__pause" id="heroPause" aria-pressed="false" aria-label="Tạm dừng hoạt cảnh"><svg viewBox="0 0 16 16" aria-hidden="true"><path class="i-pause" d="M5 3v10M11 3v10"/><path class="i-play" d="M5 3l8 5-8 5Z"/></svg></button>
+        </div>
+      </div>
+      <dl class="hero__stats">
+        <div><dt>7 + 1</dt><dd>module bắt buộc và module tự chọn</dd></div>
+        <div><dt id="statSessions">91</dt><dd>buổi học, mỗi buổi 2,5 giờ</dd></div>
+        <div><dt>9</dt><dd>dự án thực hành cuối module</dd></div>
+        <div><dt>8 tháng</dt><dd>3 buổi tối mỗi tuần</dd></div>
+      </dl>
     </div>
-    <label class="filter-label" for="table-filter">Tìm bảng hoặc cột</label>
-    <div class="filter-wrap">
-      <span class="filter-icon" aria-hidden="true"></span>
-      <input
-        id="table-filter"
-        class="filter"
-        type="search"
-        placeholder="Nhập từ khoá…"
-        autocomplete="off"
-        spellcheck="false"
-      />
+  </section>
+
+  <!-- ===== NỘI DUNG TIÊU BIỂU ===== -->
+  <section class="strip" aria-labelledby="strip-title">
+    <div class="strip__label"><h2 class="eyebrow" id="strip-title">Nội dung tiêu biểu</h2><a class="act" href="#module">Xem theo từng module<span class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a></div>
+    <div class="strip__view" id="stripView"><ul class="strip__track" id="skillTrack"></ul></div>
+    <div class="bar" aria-hidden="true"><i id="stripBar"></i></div>
+  </section>
+
+  <!-- ===== ĐỐI TƯỢNG TUYỂN SINH ===== -->
+  <section class="who" id="doi-tuong" aria-labelledby="who-title">
+    <div class="wrap who__grid rv">
+      <div class="who__l">
+        <p class="eyebrow">Đối tượng tuyển sinh</p>
+        <h2 class="h2" id="who-title">Người học phù hợp với chương&nbsp;trình</h2>
+        <ul class="who__list">
+          <li><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6" y="8" width="28" height="24" rx="3"/><path d="M6 15h28M15 15v17M6 22h28"/></svg><div><h3>Người mới bắt đầu</h3><p>Chưa học SQL hay Power BI vẫn theo được chương trình, vì module đầu tiên bắt đầu từ Excel và thống kê cơ bản.</p></div></li>
+          <li><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><rect x="6" y="13" width="28" height="19" rx="3"/><path d="M15 13V9a2 2 0 0 1 2-2h6a2 2 0 0 1 2 2v4M6 21h28"/></svg><div><h3>Người đang đi làm</h3><p>Nhân viên kế toán, marketing, vận hành, nhân sự muốn tự phân tích số liệu trong công việc hoặc chuyển sang vị trí Data Analyst.</p></div></li>
+          <li><svg viewBox="0 0 40 40" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 15 20 8l16 7-16 7-16-7Z"/><path d="M10 18v8c0 2 4.5 4 10 4s10-2 10-4v-8"/></svg><div><h3>Sinh viên</h3><p>Sinh viên các ngành kinh tế, tài chính, công nghệ thông tin, thống kê muốn có 9 dự án thực hành trong hồ sơ trước khi đi thực tập hoặc đi làm.</p></div></li>
+        </ul>
+      </div>
+      <div class="who__r">
+        <p class="sub">Lĩnh vực ứng dụng</p>
+        <ul class="who__pics" id="domainTiles"></ul>
+      </div>
     </div>
-    <p class="sidebar-note">
-      Danh sách này lấy trực tiếp từ máy chủ mỗi lần mở trang. Bấm tên bảng để xem cột.
-    </p>
-    <div id="table-list" class="table-list"></div>
-  </aside>
+  </section>
 
-  <!-- ===================== MAIN: editor + results ===================== -->
-  <!-- Kich thuoc 0, vung bat 12px do `::before` tao ra. Dat CHONG len mep khung
-       ben canh chu khong chiem mot lan grid rieng: them lan la phai sua ca 5 cho
-       ghi de grid (body.results-max va cac diem gay <=900px). -->
-  <div class="pane-sep pane-sep-v" data-resize="sidebar" role="separator"
-       aria-orientation="vertical" tabindex="0"
-       aria-label="Kéo để đổi bề rộng danh sách bảng — mũi tên trái/phải, nhấn đúp để về mặc định"></div>
-  <section class="workspace">
-
-    <div class="editor-panel panel">
-      <div class="toolbar">
-        <h2 class="panel-context">Viết truy vấn SQL</h2>
-        <button id="run" class="btn btn-primary" type="button">
-          Chạy <kbd id="run-kbd">Ctrl+Enter</kbd>
-        </button>
-        <button id="stop" class="btn btn-ghost" type="button" hidden>Dừng</button>
-        <label class="field">
-          Số dòng tối đa
-          <input id="max-rows" class="num" type="number" min="1" step="50" />
-        </label>
-        <span id="limits" class="limits"></span>
-        <span class="spacer"></span>
-        <span id="run-status" class="run-status"></span>
+  <!-- ===== MỤC TIÊU ĐÀO TẠO ===== -->
+  <section class="pillars" id="muc-tieu" aria-labelledby="pil-title">
+    <div class="wrap rv">
+      <p class="eyebrow">Mục tiêu đào tạo</p>
+      <div class="rhd">
+        <h2 class="h2" id="pil-title">Bốn nhóm năng lực người học đạt&nbsp;được</h2>
+        <p>Mỗi module kết hợp một bộ công cụ với một lĩnh vực cụ thể, để người học vừa nắm kỹ thuật vừa hiểu nghiệp vụ, biết cần phân tích gì và trình bày cho ai.</p>
       </div>
-      <label class="sr-only" for="sql">Câu truy vấn SQL</label>
-      <textarea id="sql"></textarea>
-      <p class="hint-line">
-        <span>Mẹo: bôi đen một đoạn rồi nhấn Ctrl/Cmd + Enter để chỉ chạy đoạn đó.</span>
-        <span>Ctrl + Space để gợi ý tên bảng/cột.</span>
-      </p>
+      <ol class="pillars__grid">
+        <li><b>01</b><h3>Kiến thức lĩnh vực</h3><p>Sales, HR, Finance, Marketing, Game, Supply Chain, Operations. Đầu mỗi module có seminar tự chọn về nghiệp vụ và các chỉ số chính của lĩnh vực.</p></li>
+        <li><b>02</b><h3>Kỹ năng công cụ</h3><p>Excel, Power BI, SQL và BigQuery, Snowflake, Microsoft Fabric, Tableau, Looker, Python, Pydantic, DBT.</p></li>
+        <li><b>03</b><h3>Kỹ năng mềm</h3><p>Xác định vấn đề, làm việc với các bên liên quan, tư duy kinh doanh, tư duy logic, thuyết trình và làm việc nhóm.</p></li>
+        <li><b>04</b><h3>Ứng dụng AI</h3><p>Dùng Agentic AI trong Excel, Power BI và SQL, cùng Claude/Copilot và Harness Engineering để tự động hoá quy trình phân tích.</p></li>
+      </ol>
     </div>
+  </section>
 
-    <div class="pane-sep pane-sep-h" data-resize="editor" role="separator"
-         aria-orientation="horizontal" tabindex="0"
-         aria-label="Kéo để đổi chiều cao ô soạn thảo — mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
-    <div class="results-panel panel">
-      <!-- The expand button shares this row with the tablist but stays outside
-           it: role="tablist" must contain nothing but tabs, or arrow-key
-           navigation lands on a control that is not a tab. -->
-      <div class="results-head">
-        <div class="tabs" role="tablist" aria-label="Nội dung vùng kết quả">
-          <button id="tab-button-result" class="tab is-active" data-tab="result" role="tab" aria-controls="tab-result" aria-selected="true">Kết quả</button>
-          <!-- Mac dinh AN, va chi hien khi syncMartTab() dem duoc mart that. Chieu
-                 nguoc lai (hien san roi an di) lam hoc vien thay mot tab loe ra roi bien
-                 mat sau ~5 giay - do la thoi gian /schema/marts tra ve qua duong ham. -->
-            <button id="tab-button-mart" class="tab" data-tab="mart" role="tab" aria-controls="tab-mart" aria-selected="false" tabindex="-1" hidden>Data mart</button>
-          <button id="tab-button-erd" class="tab" data-tab="erd" role="tab" aria-controls="tab-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
-          <button id="tab-button-history" class="tab" data-tab="history" role="tab" aria-controls="tab-history" aria-selected="false" tabindex="-1">Lịch sử</button>
-          <button id="tab-button-detail" class="tab" data-tab="detail" role="tab" aria-controls="tab-detail" aria-selected="false" tabindex="-1">Chi tiết</button>
-        </div>
-        <button id="expand-results" class="icon-btn expand-btn" type="button" aria-pressed="false" aria-label="Phóng to vùng kết quả" title="Phóng to vùng kết quả (Esc để thoát)">
-          <svg class="icon-expand" viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" /></svg>
-          <svg class="icon-collapse" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 9h5V4M20 9h-5V4M4 15h5v5M20 15h-5v5" /></svg>
-        </button>
+  <!-- ===== LỘ TRÌNH ===== -->
+  <section class="road" id="lo-trinh" aria-labelledby="road-title">
+    <div class="wrap road__grid">
+      <div class="road__side">
+        <p class="eyebrow">Lộ trình đào tạo</p>
+        <h2 class="h2" id="road-title">Bảy module,<br>từ Excel đến Agentic&nbsp;AI và học&nbsp;máy</h2>
+        <dl class="road__stats">
+          <div><dt id="statHours">225+</dt><dd>giờ học trực tuyến qua Zoom, có record để xem lại</dd></div>
+          <div><dt>8 tháng</dt><dd>khai giảng 06/09/2026, thi cuối khoá tháng 5/2027</dd></div>
+          <div><dt>3 buổi</dt><dd>mỗi tuần, vào tối Thứ 4, Thứ 6 và Chủ Nhật</dd></div>
+        </dl>
+        <p class="road__k mono">Năm giai đoạn</p>
+        <ol class="road__stages" id="stages"></ol>
+        <a class="act road__all" href="#module">Xem nội dung các module<span class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span></a>
       </div>
+      <div class="road__list" id="roadList"></div>
+    </div>
+  </section>
 
-      <div id="tab-result" class="tabpanel is-active" role="tabpanel" aria-labelledby="tab-button-result">
-        <div id="error-box" class="errorbox" hidden></div>
-        <div id="result-meta" class="result-meta" hidden></div>
-        <div id="truncated" class="banner banner-info" hidden></div>
-        <div id="grid-wrap" class="grid-wrap">
-          <p class="empty">Chưa có kết quả. Gõ một câu SELECT rồi nhấn Chạy.</p>
+  <!-- ===== SƠ ĐỒ TIẾN TRÌNH ===== -->
+  <section class="sys" id="so-do" aria-labelledby="rmap-t">
+    <div class="sys__panel">
+      <div class="sys__in">
+        <div class="sys__head">
+          <div>
+            <p class="eyebrow">Sơ đồ tiến trình đào tạo</p>
+            <h2 id="rmap-t">Thứ tự học<br>các&nbsp;module</h2>
+          </div>
+          <p class="sys__lead">Bảy module học nối tiếp nhau từ M1 đến M7, module trước là nền tảng cho module sau. Trục ngang là thời gian, mỗi ô đặt đúng tháng học của module. Màu ô thể hiện nhóm kiến thức. Hàng dưới là các phần tự chọn.</p>
         </div>
-      </div>
-
-      <div id="tab-mart" class="tabpanel mart-panel" role="tabpanel" aria-labelledby="tab-button-mart" hidden>
-        <div class="mart-head">
-          <div><h2 class="mart-title">Khám phá data mart</h2></div>
-          <span id="mart-status" class="tag" role="status" aria-live="polite"></span>
-          <button id="mart-refresh" class="btn btn-ghost btn-sm" type="button" disabled>Làm mới</button>
-        </div>
-        <div class="mart-tools">
-          <label class="mart-field" for="mart-select"><span>Data mart</span><select id="mart-select" class="filter mart-select" disabled></select></label>
-          <label class="mart-field" for="mart-search"><span>Tìm trong kết quả</span><input id="mart-search" class="filter mart-search" type="search" placeholder="Nhập từ khoá…" autocomplete="off" disabled /></label>
-          <span id="mart-summary" class="muted" role="status" aria-live="polite"></span>
-        </div>
-        <div id="mart-grid" class="grid-wrap"><p class="empty">Đăng nhập để xem data mart.</p></div>
-      </div>
-
-      <!-- So do ERD cua bo du lieu DANG MO (frontend/erd.js dung panel vao day).
-           Bang va cot lay tu GET /schema, canh tu GET /schema/relationships.
-           Moi khu vuc mot so do cua chinh no: game va Thuc hanh SQL co so do
-           rieng trong khu vuc cua chung. Khong co ten nao viet san o day. -->
-      <div id="tab-erd" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-erd" hidden></div>
-
-      <div id="tab-history" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-history" hidden>
-        <div class="history-head">
-          <span class="muted">Các câu bạn đã chạy trong trình duyệt này.</span>
-          <button id="clear-history" class="btn btn-ghost btn-sm">Xoá lịch sử</button>
-        </div>
-        <div id="history-list" class="history-list"></div>
-      </div>
-
-      <div id="tab-detail" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-detail" hidden>
-        <div id="detail-body" class="detail-body">
-          <p class="empty">Chạy một câu truy vấn để xem chi tiết.</p>
+        <div class="sys__draw" id="mapDraw"></div>
+        <div class="sys__foot">
+          <table class="legend">
+            <caption>Chú thích sơ đồ</caption>
+            <tbody><tr><th scope="row">Chú thích</th>
+              <td><b>Excel và BI</b><i style="background:var(--ln0)"></i></td>
+              <td><b>SQL và dữ liệu</b><i style="background:var(--ln1)"></i></td>
+              <td><b>AI và học máy</b><i style="background:var(--ln2)"></i></td>
+              <td><b>Thứ tự học</b><i style="background:repeating-linear-gradient(90deg,var(--ink-2) 0 4px,transparent 4px 8px);height:2px"></i></td>
+              <td><b>Tự chọn</b><i style="border:1.5px dashed var(--ink-2)"></i></td>
+            </tr></tbody>
+          </table>
+          <dl class="tblock">
+            <div class="wide"><dt>Công trình</dt><dd>AI VIET NAM, eDA, sơ đồ tiến trình đào tạo</dd></div>
+            <div><dt>Bản vẽ số</dt><dd>EDA-ENG-002</dd></div>
+            <div><dt>Tỷ lệ</dt><dd>Theo thời gian thực tế</dd></div>
+            <div><dt>Bản</dt><dd>A</dd></div>
+          </dl>
         </div>
       </div>
     </div>
+  </section>
 
+  <!-- ===== CHUẨN ĐẦU RA ===== -->
+  <section class="cdr" id="chuan-dau-ra" aria-labelledby="cdr-t">
+    <div class="wrap rv">
+      <p class="eyebrow">Chuẩn đầu ra</p>
+      <div class="rhd">
+        <h2 class="h2" id="cdr-t">Ma trận module và chuẩn đầu&nbsp;ra</h2>
+        <p>Bảng trình bày theo dạng ma trận học phần và chuẩn đầu ra mà các trường đại học dùng khi xây dựng và kiểm định chương trình đào tạo. Mỗi hàng là một module, mỗi cột là một chuẩn đầu ra. Đọc theo cột sẽ thấy một năng lực được giới thiệu, củng cố rồi đạt mức thành thạo qua các module.</p>
+      </div>
+      <ul class="cm__lg">
+        <li><span class="lv lv--I">I</span>Giới thiệu</li>
+        <li><span class="lv lv--R">R</span>Củng cố</li>
+        <li><span class="lv lv--M">M</span>Thành thạo</li>
+        <li><span class="lv lv--A">A</span>Đánh giá tổng kết</li>
+      </ul>
+      <div class="cm" id="cmap"></div>
+      <ol class="plo" id="ploList"></ol>
+    </div>
+  </section>
+
+  <!-- ===== NỘI DUNG CÁC MODULE ===== -->
+  <section class="rcat" id="module" aria-labelledby="rcat-t">
+    <div class="wrap">
+      <p class="eyebrow">Nội dung các module</p>
+      <div class="rhd">
+        <h2 class="h2" id="rcat-t">Nội dung và lịch học chi tiết của từng&nbsp;module</h2>
+        <p>Mỗi module gồm nội dung chính, nội dung bổ trợ, phần lý thuyết, phần thực hành và lịch học chi tiết. Chọn nhóm kiến thức ở cột bên trái để xem nhóm đó có trong những module nào.</p>
+      </div>
+      <div class="rcat__in">
+        <div class="rcat__side">
+          <div class="rf" role="group" aria-label="Lọc theo nhóm kiến thức">
+            <p class="rf__k"><span>Nhóm kiến thức</span><button type="button" class="rf__clr" data-af="all">Bỏ lọc</button></p>
+            <div class="rf__list" id="areaFilter"></div>
+            <p class="rf__note" id="areaNote" aria-live="polite"></p>
+            <ul class="rf__kinds" aria-label="Chú thích loại buổi học">
+              <li><span class="kd kd--seminar"></span>Seminar lĩnh vực (tự chọn)</li>
+              <li><span class="kd kd--lesson"></span>Bài học</li>
+              <li><span class="kd kd--exercise"></span>Giải bài tập</li>
+              <li><span class="kd kd--softskill"></span>Kỹ năng mềm</li>
+              <li><span class="kd kd--project"></span>Dự án</li>
+              <li><span class="kd kd--exam"></span>Thi</li>
+            </ul>
+          </div>
+        </div>
+        <ol class="rmods" id="rmods"></ol>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== CẤU TRÚC MỘT MODULE ===== -->
+  <section class="sys" id="chu-ky" aria-labelledby="cyc-title">
+    <div class="sys__panel">
+      <div class="sys__in">
+        <div class="sys__head">
+          <div>
+            <p class="eyebrow">Cấu trúc một module</p>
+            <h2 id="cyc-title">Mỗi module gồm 13 buổi<br>trong bốn&nbsp;tuần</h2>
+          </div>
+          <p class="sys__lead">Chủ Nhật đầu tiên là seminar về lĩnh vực của module, người học tự chọn tham gia. Ba tuần tiếp theo, mỗi tuần có hai buổi học vào Thứ 4 và Thứ 6, một buổi giải bài tập vào Chủ Nhật. Tuần cuối gồm buổi kỹ năng mềm, buổi dự án và bài thi. Sơ đồ dưới lấy theo lịch của Module 1.</p>
+        </div>
+        <div class="sys__draw" id="cycleDraw"></div>
+        <div class="sys__foot">
+          <table class="legend">
+            <caption>Loại buổi học</caption>
+            <tbody><tr><th scope="row">Loại buổi</th>
+              <td><b>Seminar (tự chọn)</b><i style="background:var(--k-seminar)"></i></td>
+              <td><b>Bài học</b><i style="background:var(--k-lesson)"></i></td>
+              <td><b>Giải bài tập</b><i style="background:var(--k-exercise)"></i></td>
+              <td><b>Kỹ năng mềm</b><i style="background:var(--k-softskill)"></i></td>
+              <td><b>Dự án</b><i style="background:var(--k-project)"></i></td>
+              <td><b>Thi</b><i style="background:var(--k-exam)"></i></td>
+            </tr></tbody>
+          </table>
+          <dl class="tblock">
+            <div class="wide"><dt>Công trình</dt><dd>AI VIET NAM, eDA, cấu trúc một module</dd></div>
+            <div><dt>Bản vẽ số</dt><dd>EDA-ENG-001</dd></div>
+            <div><dt>Tỷ lệ</dt><dd>Mỗi ô là một buổi 2,5 giờ</dd></div>
+            <div><dt>Bản</dt><dd>A</dd></div>
+          </dl>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== HÌNH THỨC ĐÀO TẠO VÀ THỜI KHOÁ BIỂU ===== -->
+  <section class="tkb" id="lich-hoc" aria-labelledby="tkb-t">
+    <div class="wrap rv">
+      <p class="eyebrow">Hình thức đào tạo</p>
+      <div class="rhd">
+        <h2 class="h2" id="tkb-t">Thời khoá biểu hằng&nbsp;tuần</h2>
+        <p>Lịch dưới đây áp dụng cho cả 7 module. Các buổi bắt buộc học cùng cả lớp, buổi tự chọn dành cho người học tham gia dự án mentorship.</p>
+      </div>
+      <dl class="tkb__facts">
+        <div><dt>Hình thức học</dt><dd>Trực tuyến qua Zoom, có record để xem lại</dd></div>
+        <div><dt>Thời gian đào tạo</dt><dd>8 tháng, từ 06/09/2026 đến tháng 5/2027</dd></div>
+        <div><dt>Thời lượng mỗi buổi</dt><dd>2,5 giờ, 20:00-22:30</dd></div>
+      </dl>
+      <div class="tkb__wrap">
+        <table class="tkb__t">
+          <caption>Thời khoá biểu hằng tuần</caption>
+          <thead><tr><th scope="col">Thứ</th><th scope="col">Thời gian</th><th scope="col">Nội dung</th><th scope="col">Hình thức</th></tr></thead>
+          <tbody>
+            <tr class="is-opt"><th scope="row">Thứ 2</th><td>Theo kế hoạch dự án</td><td>Dự án mentorship theo lĩnh vực, làm việc với mentor</td><td><span class="req req--opt">Tự chọn</span></td></tr>
+            <tr><th scope="row">Thứ 4</th><td>20:00-22:30</td><td>Bài học. Tuần cuối module là buổi kỹ năng mềm</td><td><span class="req">Bắt buộc</span></td></tr>
+            <tr><th scope="row">Thứ 6</th><td>20:00-22:30</td><td>Bài học. Tuần cuối module là buổi dự án</td><td><span class="req">Bắt buộc</span></td></tr>
+            <tr><th scope="row">Chủ Nhật</th><td>20:00-22:30</td><td>Giải bài tập. Chủ Nhật đầu module là seminar lĩnh vực (tự chọn), Chủ Nhật cuối module là bài thi</td><td><span class="req">Bắt buộc</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== DỰ ÁN THỰC HÀNH ===== -->
+  <section class="proj" id="du-an" aria-labelledby="proj-t">
+    <div class="wrap rv">
+      <p class="eyebrow">Dự án thực hành</p>
+      <div class="rhd">
+        <h2 class="h2" id="proj-t">Dự án theo module và dự án&nbsp;mentorship</h2>
+        <p>Thị trường lao động hiện có hai nhóm vị trí Data Analyst. Nhóm thứ nhất làm việc với nhiều phòng ban và phân tích theo yêu cầu ở nhiều lĩnh vực. Nhóm thứ hai chuyên sâu một ngành, như phân tích dữ liệu ngân hàng hay phân tích dữ liệu nhân sự. Chương trình chuẩn bị cho cả hai nhóm bằng hai loại dự án.</p>
+      </div>
+
+      <div class="trk">
+        <article class="trk__c">
+          <p class="trk__tag">Bắt buộc</p>
+          <h3>Dự án theo module</h3>
+          <p class="trk__lead">Mở rộng hiểu biết về nhiều lĩnh vực.</p>
+          <p>Mỗi module kết thúc bằng một dự án gắn với lĩnh vực của module đó, cả lớp cùng thực hiện. Sau 8 tháng, người học hoàn thành 9 dự án ở nhiều lĩnh vực, từ Sales, HR, Finance đến Supply Chain và Operations.</p>
+          <ol class="dp" id="domainProjects"></ol>
+          <p class="trk__to"><span>Vị trí việc làm hướng tới</span>Data Analyst làm việc với nhiều phòng ban</p>
+        </article>
+        <article class="trk__c trk__c--m">
+          <p class="trk__tag">Tự chọn</p>
+          <h3>Dự án mentorship</h3>
+          <p class="trk__lead">Đi sâu vào lĩnh vực người học muốn theo đuổi.</p>
+          <p>Ngoài dự án theo module, người học tự chọn thêm dự án trong lĩnh vực mình quan tâm và tự chọn mentor hướng dẫn. Bài toán và dữ liệu sát với công việc thực tế của ngành, mức độ sâu hơn dự án module, có thể đưa vào hồ sơ ứng tuyển vị trí Data Analyst chuyên ngành.</p>
+          <ul class="trk__steps">
+            <li><b>1</b>Chọn lĩnh vực muốn đi sâu</li>
+            <li><b>2</b>Chọn mentor phụ trách lĩnh vực đó</li>
+            <li><b>3</b>Thực hiện dự án, trao đổi với mentor vào tối Thứ 2 theo kế hoạch dự án</li>
+          </ul>
+          <p class="trk__to"><span>Vị trí việc làm hướng tới</span>Data Analyst chuyên ngành như ngân hàng, nhân sự, bán lẻ</p>
+        </article>
+      </div>
+
+      <div class="proj__more">
+        <h3 class="proj__h">Các dự án mentorship hiện có</h3>
+        <p class="proj__p">Mỗi dự án đã có sẵn đề bài và dữ liệu do mentor chuẩn bị. Mục Học trước cho biết người học cần hoàn thành module nào để có đủ kỹ năng nền.</p>
+      </div>
+      <div class="pf" role="group" aria-label="Lọc dự án mentorship theo lĩnh vực" id="projFilter"></div>
+      <div class="pgrid" id="projGrid"></div>
+    </div>
+  </section>
+
+  <!-- ===== ĐỘI NGŨ GIẢNG VIÊN ===== -->
+  <section class="team" id="doi-ngu" aria-labelledby="team-title">
+    <div class="team__panel">
+      <svg class="team__deco" viewBox="0 0 400 400" fill="none" stroke="currentColor" stroke-width="1" aria-hidden="true">
+        <g id="decoBars"></g>
+      </svg>
+      <div class="team__head rv">
+        <div>
+          <p class="eyebrow">Đội ngũ giảng viên</p>
+          <h2 class="h2" id="team-title">Giảng viên của chương&nbsp;trình<span class="logo-chip" style="margin-left:.3em;vertical-align:middle"><img src="home/img/mark-144.png" width="144" height="56" alt="eDA" style="height:.7em;width:auto"></span></h2>
+        </div>
+        <div class="team__side">
+          <p>Chương trình do đội ngũ giảng viên của eDA giảng dạy và quản lý, gồm các tiến sĩ, thạc sĩ và chuyên gia phân tích dữ liệu trong từng lĩnh vực.</p>
+        </div>
+      </div>
+      <div class="team__view" id="teamView"><ul class="team__track" id="teamTrack"></ul></div>
+      <div class="team__nav">
+        <button type="button" data-dir="-1" aria-label="Xem giảng viên trước"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg></button>
+        <button type="button" data-dir="1" aria-label="Xem giảng viên tiếp theo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 18l6-6-6-6"/></svg></button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===== THÔNG TIN TUYỂN SINH ===== -->
+  <section class="start" id="bat-dau" aria-labelledby="start-title">
+    <div class="wrap">
+      <p class="eyebrow">Tuyển sinh</p>
+      <h2 class="h2" id="start-title">Thông tin tuyển&nbsp;sinh</h2>
+      <ul class="start__rows">
+        <li><a class="sr" href="https://zalo.me/0911118758" target="_blank" rel="noopener"><b>Đăng ký tư vấn</b><span>Tư vấn học phí và lịch học qua Zalo 0911 118 758</span><em class="act">Nhắn Zalo<i class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i></em></a></li>
+        <li><a class="sr" href="https://eda.aivietnam.edu.vn/" target="_blank" rel="noopener"><b>Trang chương trình eDA</b><span>Thông tin chung về chương trình End-to-end Data Analytics</span><em class="act">Xem trang chương trình<i class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i></em></a></li>
+        <li><a class="sr" href="https://www.facebook.com/aivietnam.edu.vn" target="_blank" rel="noopener"><b>Fanpage AI VIET NAM</b><span>Thông báo khai giảng và hoạt động của AI VIET NAM</span><em class="act">Mở Fanpage<i class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i></em></a></li>
+        <li><a class="sr" href="https://learning.aivietnam.edu.vn/" target="_blank" rel="noopener"><b>AI VIET NAM</b><span>Hệ thống học tập và các chương trình đào tạo khác</span><em class="act">Mở trang learning<i class="dot"><svg viewBox="0 0 10 10" aria-hidden="true"><path d="M2 5h6M5.5 2.5 8 5 5.5 7.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg></i></em></a></li>
+      </ul>
+    </div>
   </section>
 </main>
 
-<!-- ===================== SANDBOX: SQL on your own file =====================
-     Runs DuckDB-WASM in this browser. No upload, no session, no roles: the
-     file never leaves the machine. See frontend/sandbox.js for why the rules
-     that bind the console above do not all bind here. -->
-<!-- Game match-3 (thu muc game/), phuc vu o /game/ va nhung bang iframe cung
-     origin. `src` chi duoc gan lan dau mo tab (ensureGame trong app.js). Dang
-     nhap vao game la tu dong: game xin ve SSO tu /game-sso/token. -->
-<!-- Hai the trong khu vuc Tro choi: choi game, va so do ERD cua chinh database
-     game (jelly_analytics, GET /schema/game). Class `subtab`/`subpanel` chu KHONG
-     phai `tab`/`tabpanel`: selectTab() cua console dong mo MOI `.tab` trong
-     trang, va se an mat the o day moi lan console doi the. -->
-<section id="game-workspace" class="game-workspace" aria-label="Trò chơi" hidden>
-  <div class="subtabs" role="tablist" aria-label="Trò chơi">
-    <button id="game-tab-play" class="subtab is-active" type="button" role="tab" data-subtab="game-play"
-            aria-controls="game-play" aria-selected="true">Chơi</button>
-    <button id="game-tab-erd" class="subtab" type="button" role="tab" data-subtab="game-erd"
-            aria-controls="game-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
-  </div>
-  <div id="game-play" class="subpanel game-play" role="tabpanel" aria-labelledby="game-tab-play">
-    <iframe id="game-frame" class="game-frame" title="Vương Quốc Kẹo Ngọt"
-            allow="autoplay; fullscreen" referrerpolicy="no-referrer"></iframe>
-  </div>
-  <div id="game-erd" class="subpanel" role="tabpanel" aria-labelledby="game-tab-erd" hidden></div>
-</section>
-
-<section id="challenges-workspace" class="challenges-workspace" aria-label="Luyện SQL" hidden></section>
-
-<section id="leaderboard-workspace" class="leaderboard-workspace" aria-label="Bảng xếp hạng" hidden>
-  <div class="progress-panel">
-    <div class="progress-head">
-      <div><h2 class="progress-title">Luyện tập hôm nay</h2></div>
-      <button id="progress-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button>
+<footer class="foot">
+  <div class="wrap">
+    <div class="foot__cols">
+      <div><h2>Chương trình</h2><ul>
+        <li><a href="#lo-trinh">Lộ trình đào tạo</a></li><li><a href="#so-do">Sơ đồ tiến trình</a></li><li><a href="#chuan-dau-ra">Chuẩn đầu ra</a></li><li><a href="#module">Nội dung các module</a></li>
+      </ul></div>
+      <div><h2>Học tập</h2><ul>
+        <li><a href="#chu-ky">Cấu trúc một module</a></li><li><a href="#lich-hoc">Thời khoá biểu</a></li><li><a href="#du-an">Dự án thực hành</a></li><li><a href="#doi-ngu">Đội ngũ giảng viên</a></li>
+      </ul></div>
+      <div><h2>Liên kết</h2><ul>
+        <li><a href="https://eda.aivietnam.edu.vn/" target="_blank" rel="noopener">eDA</a></li><li><a href="https://learning.aivietnam.edu.vn/" target="_blank" rel="noopener">AI VIET NAM Learning</a></li><li><a href="https://aio.aivietnam.edu.vn/" target="_blank" rel="noopener">AIO2027</a></li><li><a href="https://aivietnam.edu.vn/blog" target="_blank" rel="noopener">Blog</a></li>
+      </ul></div>
+      <p class="foot__say" lang="en">From Data<br>to Business Impact.</p>
     </div>
-    <!-- Bon con so cua chinh nguoi xem, mot hang, ngan bang vach mo: con so lon
-         la noi dung, nhan nho ben duoi. Khong o icon (gate 3): bon icon trang
-         tri cu da bo, id cua tung con so giu nguyen cho app.js. -->
-    <dl class="reward-grid">
-      <div class="reward-card"><dt>Điểm sao</dt><dd><strong id="reward-stars">0</strong></dd></div>
-      <div class="reward-card"><dt>Kim cương</dt><dd><strong id="reward-diamonds">0</strong></dd></div>
-      <div class="reward-card"><dt>Ngày liên tiếp</dt><dd><strong id="reward-streak">0</strong></dd></div>
-      <div class="reward-card"><dt>Query hôm nay</dt><dd><strong id="reward-today">0</strong></dd></div>
-    </dl>
-    <section class="leaderboard-block">
-      <div class="leaderboard-head"><h3>Bảng xếp hạng</h3><span id="leaderboard-status" class="muted" role="status" aria-live="polite"></span></div>
-      <div id="leaderboard-list" class="leaderboard-list"><p class="empty">Đang tải…</p></div>
-    </section>
   </div>
-</section>
-
-<section id="sandbox-workspace" class="sandbox" aria-label="Thực hành SQL trên file của bạn" hidden>
-
-  <div class="sandbox-left">
-    <div class="sidebar-head">
-      <div>
-        <h2 class="sidebar-title">File đã nạp <span id="sandbox-count" class="count"></span></h2>
-      </div>
-      <button id="sandbox-reset" class="btn btn-ghost btn-sm" type="button" hidden>Xoá hết</button>
+  <div class="foot__low">
+    <div class="wrap">
+      <p>eDA, chương trình End-to-end Data Analytics của AI VIET NAM.</p>
+      <ul class="foot__ic">
+        <li><a href="tel:0911118758" aria-label="Hotline 0911 118 758" title="Hotline 0911 118 758"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 4h4l2 5-2.5 1.5a11 11 0 0 0 5 5L15 13l5 2v4a2 2 0 0 1-2 2A16 16 0 0 1 3 6a2 2 0 0 1 2-2"/></svg></a></li>
+        <li><a href="https://zalo.me/0911118758" target="_blank" rel="noopener" aria-label="Zalo 0911 118 758" title="Zalo"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16v11H9l-5 4V5Z"/><path d="M8 9h4l-4 4h4M15 9v4"/></svg></a></li>
+        <li><a href="mailto:admin@aivietnam.edu.vn" aria-label="Email admin@aivietnam.edu.vn" title="Email"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/></svg></a></li>
+        <li><a href="https://www.facebook.com/aivietnam.edu.vn" target="_blank" rel="noopener" aria-label="Facebook" title="Facebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 8h3V4h-3a4 4 0 0 0-4 4v3H7v4h3v6h4v-6h3l1-4h-4V8Z"/></svg></a></li>
+      </ul>
     </div>
-
-    <div id="sandbox-drop" class="dropzone" tabindex="0" role="button"
-         aria-label="Chọn hoặc kéo thả file dữ liệu">
-      <svg viewBox="0 0 24 24" aria-hidden="true" class="dropzone-icon">
-        <path d="M12 16V4m0 0L8 8m4-4 4 4M4 17v2a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-2" />
-      </svg>
-      <p class="dropzone-lead">Kéo thả file vào đây</p>
-      <p class="dropzone-hint">hoặc bấm để chọn: CSV, TSV, Parquet, JSON</p>
-      <input id="sandbox-file" type="file" multiple hidden
-             accept=".csv,.tsv,.tab,.txt,.parquet,.pq,.json,.ndjson,.jsonl" />
-    </div>
-
-    <p class="sandbox-privacy">
-      File được đọc <strong>ngay trên máy bạn</strong>. Không có gì được tải lên máy chủ.
-    </p>
-
-    <div id="sandbox-tables" class="sandbox-tables"></div>
   </div>
-
-  <!-- Kich thuoc 0, vung bat 12px do `::before` tao ra. Dat CHONG len mep khung
-       ben canh chu khong chiem mot lan grid rieng: them lan la phai sua ca 5 cho
-       ghi de grid (body.results-max va cac diem gay <=900px). -->
-  <div class="pane-sep pane-sep-v" data-resize="sidebar" role="separator"
-       aria-orientation="vertical" tabindex="0"
-       aria-label="Kéo để đổi bề rộng danh sách bảng — mũi tên trái/phải, nhấn đúp để về mặc định"></div>
-  <section class="sandbox-main" aria-label="Soạn và chạy truy vấn">
-    <div class="editor-panel panel">
-      <div class="toolbar">
-        <button id="sandbox-run" class="btn btn-primary" type="button" disabled>Chạy</button>
-        <span id="sandbox-status" class="run-status" aria-live="polite"></span>
-        <!-- The <progress> goc, khong phai mot <div> tu ve: no da co san ngu nghia cho
-             trinh doc man hinh, va BO thuoc tinh `value` la tu thanh dang chay vo dinh -
-             dung thu ma giai doan "dang tao bang" can, khong phai viet them gi. -->
-        <progress id="sandbox-progress" class="load-progress" max="1" hidden></progress>
-        <span class="spacer"></span>
-      </div>
-      <label class="sr-only" for="sandbox-sql">Câu lệnh SQL chạy trên file của bạn</label>
-      <textarea id="sandbox-sql" spellcheck="false"
-                placeholder="Nạp một file rồi gõ SELECT ở đây…"></textarea>
-      <p class="hint-line">
-        <span>Mẹo: bôi đen một đoạn rồi nhấn <kbd id="sandbox-kbd">Ctrl+Enter</kbd> để chỉ chạy đoạn đó.</span>
-        <span>Ctrl + Space để gợi ý tên bảng/cột của bạn.</span>
-      </p>
-    </div>
-
-    <div class="pane-sep pane-sep-h" data-resize="editor" role="separator"
-         aria-orientation="horizontal" tabindex="0"
-         aria-label="Kéo để đổi chiều cao ô soạn thảo — mũi tên lên/xuống, nhấn đúp để về mặc định"></div>
-    <div class="results-panel panel">
-      <!-- So do ERD cua chinh cac file da nap: quan he suy ra NGAY TRONG trinh
-           duyet (sandbox.js inferRelationships), khong gui gi len may chu. -->
-      <div class="results-head">
-        <div class="subtabs" role="tablist" aria-label="Nội dung vùng kết quả thực hành">
-          <button id="sandbox-tab-result" class="subtab is-active" type="button" role="tab" data-subtab="sandbox-result"
-                  aria-controls="sandbox-result" aria-selected="true">Kết quả</button>
-          <button id="sandbox-tab-erd" class="subtab" type="button" role="tab" data-subtab="sandbox-erd"
-                  aria-controls="sandbox-erd" aria-selected="false" tabindex="-1">Sơ đồ ERD</button>
-        </div>
-      </div>
-      <div id="sandbox-result" class="subpanel" role="tabpanel" aria-labelledby="sandbox-tab-result">
-        <div id="sandbox-error" class="errorbox" hidden></div>
-        <div id="sandbox-truncated" class="banner banner-info" hidden></div>
-        <div id="sandbox-meta" class="result-meta" hidden></div>
-        <div id="sandbox-grid" class="grid-wrap">
-          <p class="empty">Chưa có kết quả. Nạp một file rồi chạy một câu SELECT.</p>
-        </div>
-      </div>
-      <div id="sandbox-erd" class="subpanel" role="tabpanel" aria-labelledby="sandbox-tab-erd" hidden></div>
-    </div>
-  </section>
-
-</section>
-
-</div><!-- /#app -->
-
-<!-- CodeMirror 5, vendored under web/vendor (no CDN, no build step) -->
-<script src="vendor/codemirror/lib/codemirror.js"></script>
-<script src="vendor/codemirror/mode/sql/sql.js"></script>
-<script src="vendor/codemirror/addon/hint/show-hint.js"></script>
-<script src="vendor/codemirror/addon/edit/matchbrackets.js"></script>
-<script src="vendor/codemirror/addon/edit/closebrackets.js"></script>
-<script src="vendor/codemirror/addon/display/placeholder.js"></script>
-<script src="vendor/codemirror/addon/selection/active-line.js"></script>
-
-<script src="config.js"></script>
-<script type="module" src="app.js"></script>
-<!-- Panel giang vien song trong <template> co chu dinh: phien HOC VIEN khong
-     duoc CO no, chu khong phai khong duoc THAY no. `hidden` chi la mot thuoc
-     tinh - mo devtools go ra la panel hien. Noi dung trong <template> thi khong
-     nam trong document: getElementById khong thay, phim Tab khong toi duoc, va
-     khong co gi de go ca.
-
-     Cung nguyen tac ma hai database vat ly dang dung (ARCHITECTURE.md muc 2):
-     bang dap an KHONG TON TAI, chu khong phai bi che.
-
-     Day la lop thu hai. Lop thu nhat la `require_instructor` tren
-     /admin/analytics/queries - du lieu chua bao gio roi may chu. -->
-<template id="tpl-instructor">
-  <button id="tab-button-instructor" class="tab" data-tab="instructor" role="tab" aria-controls="tab-instructor" aria-selected="false" tabindex="-1">Giảng viên</button>
-  <div id="tab-instructor" class="tabpanel" role="tabpanel" aria-labelledby="tab-button-instructor" hidden>
-    <section class="instructor-dashboard"><div class="leaderboard-head"><h3>Bảng điều khiển giảng viên</h3><button id="analytics-refresh" class="btn btn-ghost btn-sm" type="button">Làm mới</button></div><div id="analytics-summary" class="analytics-grid" aria-live="polite"></div><div id="analytics-tables" class="analytics-list"></div></section>
-  </div>
-</template>
+</footer>
 </body>
 </html>

@@ -1,0 +1,25 @@
+/* Phần thêm của AIV Bank lên trang eda-roadmap (site.css giữ nguyên bản gốc
+   để dễ đồng bộ khi eda-roadmap cập nhật). Chỉ dùng biến của site.css. */
+
+/* Nút "Đăng nhập" trên thanh nav nổi */
+.nav__login{flex:none;display:inline-flex;align-items:center;min-height:40px;padding:0 16px;border-radius:12px;background:var(--brand-deep);color:#fff;font-size:14.5px;font-weight:600;letter-spacing:-.015em;transition:background .25s}
+.nav__login:hover{background:var(--brand)}
+.nav__login:focus-visible{outline:2px solid var(--brand);outline-offset:2px}
+:root[data-theme="dark"] .nav__login{background:var(--brand);color:#0b2a12}
+:root[data-theme="dark"] .nav__login:hover{background:var(--brand-deep)}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]) .nav__login{background:var(--brand);color:#0b2a12}
+  :root:not([data-theme="light"]) .nav__login:hover{background:var(--brand-deep)}
+}
+
+/* Nút chính trên hero: nền trắng chữ xanh, nổi hơn hai link phụ */
+.hero .act--login{padding:0 8px 0 18px;border-radius:99px;background:#fff;color:var(--hero);font-weight:600}
+.hero .act--login .dot{background:var(--hero);color:#fff}
+.hero .act--login:hover{background:#b9f5cb}
+
+/* Menu di động */
+.menu__login{display:flex;align-items:center;justify-content:center;min-height:48px;margin-top:12px;border-radius:12px;background:var(--brand-deep);color:#fff;font-size:17px;font-weight:600}
+
+@media (max-width:640px){
+  .nav__login{min-height:36px;padding:0 12px;font-size:14px}
+}

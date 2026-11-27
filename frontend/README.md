@@ -175,7 +175,11 @@ Lý do:
 
 | File | Vai trò |
 |---|---|
-| `index.html` | Khung giao diện + màn hình đăng nhập (`#auth-gate`) và khung ứng dụng (`#app`) |
+| `index.html` | **Trang chủ** (từ 2026-11-27): trang lộ trình eDA (port từ eda-roadmap), asset trong `home/`; nút "Đăng nhập" dẫn sang `app.html` |
+| `app.html` | Bảng điều khiển: màn hình đăng nhập (`#auth-gate`) và khung ứng dụng (`#app`) |
+| `home/` | CSS/JS/ảnh của trang chủ. `home/css/site.css` giữ nguyên bản eda-roadmap; phần thêm riêng ở `home/css/aivb-home.css`; `home/js/theme-boot.js` chọn sáng/tối trước khi vẽ (dùng chung cho cả hai trang, key `eda-theme`) |
+| `theme.js` | Nút đổi sáng/tối trên thanh trên cùng của bảng điều khiển |
+| `vendor/fonts/eda-fonts.css` | `@font-face` của Plus Jakarta Sans, IBM Plex Mono, Instrument Serif (tự host, OFL) |
 | `config.js` | Cấu hình triển khai (file duy nhất thường phải sửa) |
 | `api.js` | Gọi API, gắn cookie + header `X-AIVB-Client`, chuẩn hoá mọi lỗi về một shape, giữ nguyên số nguyên lớn |
 | `auth.js` | Mô hình phiên, câu chữ khi đăng nhập hỏng, gợi ý độ mạnh mật khẩu |
