@@ -2411,6 +2411,37 @@ body.role-instructor .focus-float .icon-btn {
 .erd-edge.is-inferred { stroke-dasharray: 6 5; }
 .erd-mark { fill: none; stroke: var(--erd-edge); stroke-width: 1.4; }
 
+/* Business-area chips (Finance Banking only): one area plus its direct
+ * neighbours is small enough to read with columns; the overview is not. */
+.erd-groups {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--line-soft);
+}
+.erd-groups[hidden] { display: none; }
+.erd-group-btn { display: inline-flex; align-items: center; gap: var(--space-2); }
+.erd-group-count {
+  font-size: var(--text-2xs);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-muted);
+}
+.erd-group-btn[aria-pressed="true"] .erd-group-count { color: inherit; opacity: .85; }
+/* Name-only boxes: the head colour fills the whole box. */
+.erd-node.is-compact .erd-box { fill: var(--erd-node-head); }
+.erd-node.is-compact.is-selected .erd-box { fill: var(--brand-100); }
+/* Neighbours outside the chosen area: present for the JOIN, quieter. */
+.erd-node.is-outside { opacity: .55; }
+.erd-node.is-outside .erd-box { stroke-dasharray: 3 3; }
+.erd-node.is-outside:hover, .erd-node.is-outside.is-lit, .erd-node.is-outside:focus-visible { opacity: 1; }
+/* Tray of tables with no declared relationship, below the map. */
+.erd-tray-rule { stroke: var(--line); stroke-width: 1; stroke-dasharray: 6 6; }
+.erd-lane.is-tray { font-size: var(--text-md); fill: var(--ink); }
+.erd-lane.is-sub { font-family: var(--font-mono); font-size: var(--text-xs); font-weight: var(--weight-normal); }
+.erd-hint { color: var(--ink); }
+
 .erd-node { cursor: pointer; outline: none; transition: opacity var(--duration-fast) var(--ease); }
 .erd-box { fill: var(--erd-node); stroke: var(--erd-node-line); stroke-width: 1; }
 .erd-head { fill: var(--erd-node-head); }
@@ -2543,6 +2574,9 @@ body.role-instructor .focus-float .icon-btn {
   .erd-title { flex: 1 0 100%; }
   .erd-status, .erd-tools > .spacer { display: none; }
   .erd-filter { width: auto; flex: 1 1 120px; }
+  /* One swipeable row of area chips instead of three wrapped rows. */
+  .erd-groups { flex-wrap: nowrap; overflow-x: auto; padding: var(--space-3) var(--space-4); }
+  .erd-group-btn { flex: 0 0 auto; }
 }
 @media (prefers-reduced-motion: reduce) {
   .erd-edge, .erd-node { transition: none; }
