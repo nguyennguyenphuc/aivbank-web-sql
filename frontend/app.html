@@ -3,13 +3,13 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>E2E Data Analytics: Bảng điều khiển SQL học viên</title>
+<title>Bảng điều khiển SQL · eDA End-to-end Data Analytics</title>
 <meta name="description" content="Nơi học viên eDA viết SQL trên dữ liệu ngân hàng và chuỗi cung ứng, xem sơ đồ quan hệ giữa các bảng và theo dõi tiến độ luyện tập." />
 <meta name="color-scheme" content="light dark" />
 <!-- Favicon is the real brand mark, served from web/assets. No CDN, no data-URI
      placeholder: the tab icon should be the same logo as the one on screen. -->
-<link rel="icon" type="image/png" sizes="256x249" href="assets/logo-mark.png" />
-<link rel="apple-touch-icon" href="assets/logo-mark.png" />
+<link rel="icon" type="image/png" sizes="32x32" href="home/img/favicon-32.png" />
+<link rel="apple-touch-icon" href="home/img/favicon-180.png" />
 <!-- Same theme switch as the landing page (localStorage "eda-theme"); runs
      before first paint so a dark-theme reader never sees a white flash. -->
 <script src="home/js/theme-boot.js"></script>
@@ -18,7 +18,7 @@
 <link rel="stylesheet" href="vendor/codemirror/addon/hint/show-hint.css" />
 <!-- tokens.css must load BEFORE styles.css: styles.css contains no literal
      colour, spacing, radius or font stack of its own, only var() lookups. -->
-<link rel="stylesheet" href="vendor/fonts/eda-fonts.css" />
+<link rel="stylesheet" href="vendor/fonts/eda-fonts.css?v=2" />
 <link rel="stylesheet" href="tokens.css" />
 <link rel="stylesheet" href="styles.css" />
 </head>
@@ -30,7 +30,7 @@
      confirms a session. If app.js fails to load, what stays on screen is the
      login form — never the console. Fail closed.
      ===================================================================== -->
-<div id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-label="Xác thực E2E Data Analytics">
+<div id="auth-gate" class="auth-gate" role="dialog" aria-modal="true" aria-label="Đăng nhập bảng điều khiển SQL eDA">
   <div class="auth-hero">
     <a class="auth-home" href="./"><span aria-hidden="true">←</span> Trang chủ eDA</a>
     <p class="auth-eyebrow"><i aria-hidden="true"></i>Bảng điều khiển SQL học viên</p>
@@ -41,8 +41,8 @@
 
     <div class="auth-brand">
       <div class="auth-logo-row">
-        <span class="logo-chip"><img class="auth-logo" src="home/img/mark-144.png" alt="eDA" width="144" height="56" /></span>
-        <span class="logo-caption">End-to-end<br />Data Analytics</span>
+        <span class="logo-chip"><img class="auth-logo" src="home/img/mark-144.png" alt="eDA, End-to-end Data Analytics" width="144" height="56" /></span>
+        <span class="logo-caption" aria-hidden="true">End-to-end<br />Data Analytics</span>
       </div>
       <p class="auth-brand-text">Bảng điều khiển SQL học viên · AI VIET NAM</p>
     </div>
@@ -163,7 +163,7 @@
   </button>
   <div class="brand">
     <span class="logo-chip"><img class="brand-mark" src="home/img/mark-144.png" alt="" width="144" height="56" aria-hidden="true" /></span>
-    <span class="brand-word">E2E Data Analytics</span>
+    <span class="logo-caption brand-word">End-to-end<br />Data Analytics</span>
     <span class="brand-text"><strong>SQL Workspace</strong><small>Thực hành dữ liệu ngân hàng</small></span>
   </div>
 
@@ -261,7 +261,7 @@
 <div id="service-banner" class="banner banner-warn" hidden></div>
 
 <main id="main-workspace" class="layout" tabindex="-1">
-  <h1 class="sr-only">Không gian thực hành SQL, E2E Data Analytics</h1>
+  <h1 class="sr-only">Bảng điều khiển SQL, eDA End-to-end Data Analytics</h1>
 
   <!-- ===================== SIDEBAR: schema explorer ===================== -->
   <div id="schema-backdrop" class="schema-backdrop" hidden></div>

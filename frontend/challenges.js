@@ -22,7 +22,7 @@ import { createResultsPanel } from './results.js';
 import { createErdPanel } from './erd.js';
 import { initChallengePanes } from './panes.js';
 
-const LEVEL_LABEL = { easy: 'Easy', medium: 'Medium', difficult: 'Difficult', advanced: 'Advanced' };
+const LEVEL_LABEL = { easy: 'Dễ', medium: 'Trung bình', difficult: 'Khó', advanced: 'Nâng cao' };
 const LEVELS = Object.keys(LEVEL_LABEL);
 
 /* Mot dong co dinh duoi "Dieu rut ra", thay cho cau "day la du lieu sinh" ma
@@ -39,6 +39,31 @@ function h(tag, className, text) {
   const node = document.createElement(tag);
   if (className) node.className = className;
   if (text !== undefined && text !== null) node.textContent = text;
+  return node;
+}
+
+/* Van ban bai tap viet ten bang/cot trong dau backtick kieu Markdown
+ * (`warehouses`, `warehouse_id`). Tach theo backtick: phan le thanh <code>,
+ * phan chan giu nguyen la text node. Khong dung innerHTML, nen noi dung bai
+ * khong bao gio duoc dien giai thanh HTML. Backtick le (khong co cap) giu nguyen. */
+function withCode(text) {
+  const frag = document.createDocumentFragment();
+  const parts = String(text).split('`');
+  if (parts.length % 2 === 0) {
+    frag.append(String(text));
+    return frag;
+  }
+  parts.forEach((part, i) => {
+    if (!part) return;
+    frag.append(i % 2 ? h('code', 'ch-code', part) : document.createTextNode(part));
+  });
+  return frag;
+}
+
+/* Nhu h(), nhung chu co the chua `code`. */
+function hc(tag, className, text) {
+  const node = h(tag, className);
+  if (text !== undefined && text !== null) node.appendChild(withCode(text));
   return node;
 }
 
@@ -349,10 +374,10 @@ export function createChallengesUi(root) {
 
     const st = q('[data-ch-pane="statement"]');
     st.replaceChildren();
-    st.appendChild(h('p', 'ch-statement', c.statement));
+    st.appendChild(hc('p', 'ch-statement', c.statement));
     if (c.output) {
       st.appendChild(h('h3', 'ch-sub', 'Kết quả cần trả về'));
-      st.appendChild(h('p', 'ch-output', c.output));
+      st.appendChild(hc('p', 'ch-output', c.output));
     }
     st.appendChild(h('h3', 'ch-sub', 'Bảng dùng trong bài'));
     st.appendChild(h('div', 'ch-tables'));
@@ -365,7 +390,7 @@ export function createChallengesUi(root) {
       more.type = 'button';
       st.appendChild(more);
       const paint = () => {
-        ol.replaceChildren(...c.hints.slice(0, hintShown).map((t) => h('li', '', t)));
+        ol.replaceChildren(...c.hints.slice(0, hintShown).map((t) => hc('li', '', t)));
         more.hidden = hintShown >= c.hints.length;
         more.textContent = `Xem gợi ý ${hintShown + 1} / ${c.hints.length}`;
       };
@@ -419,13 +444,13 @@ export function createChallengesUi(root) {
     const dl = h('dl', 'ch-lesson');
     for (const [k, label] of [['concept', 'Khái niệm'], ['formula', 'Công thức'], ['why', 'Vì sao quan trọng'], ['used_in', 'Dùng ở đâu']]) {
       if (!l[k]) continue;
-      dl.append(h('dt', '', label), h('dd', '', l[k]));
+      dl.append(h('dt', '', label), hc('dd', '', l[k]));
     }
     box.appendChild(dl);
     box.appendChild(h('h3', 'ch-sub', 'Điều rút ra'));
     box.appendChild(
       c.takeaway
-        ? h('p', 'ch-takeaway', c.takeaway)
+        ? hc('p', 'ch-takeaway', c.takeaway)
         : h('p', 'muted', 'Giải đúng bài này để mở phần rút ra: con số trong kết quả nói gì về doanh nghiệp.')
     );
     const note = c.takeaway && takeawayNote(c.domain);
@@ -608,7 +633,7 @@ export function createChallengesUi(root) {
       );
       if (v.takeaway) {
         verdictEl.appendChild(h('p', 'ch-verdict-sub', 'Điều rút ra'));
-        verdictEl.appendChild(h('p', '', v.takeaway));
+        verdictEl.appendChild(hc('p', '', v.takeaway));
         const note = takeawayNote(current && current.domain);
         if (note) verdictEl.appendChild(note);
       }

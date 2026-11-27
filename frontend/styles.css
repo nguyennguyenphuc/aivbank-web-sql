@@ -204,6 +204,11 @@ body {
   color: var(--on-hero-muted);
 }
 
+/* Changing the password (forced on first sign-in, or from the bar inside the
+ * console) is a task, not a welcome: the marketing hero and its home link step
+ * aside and the card stands alone. */
+.auth-gate:has(#auth-change:not([hidden])) .auth-hero { display: none; }
+
 /* Narrow screens: the hero shrinks to a back link above the card. */
 @media (max-width: 900px) {
   .auth-gate { flex-direction: column; justify-content: flex-start; gap: var(--space-7); padding-top: var(--space-7); }
@@ -482,11 +487,10 @@ body.is-gated { overflow: clip; }
   display: block;
 }
 
-/* The wordmark, set the way the logo sets it: mixed case, untracked. */
+/* Since 2026-11-27 the bar carries the same lockup as the landing page and the
+ * login card: the eDA chip + the two-line mono caption (.logo-caption).
+ * This rule only keeps it on one line pair; the type comes from .logo-caption. */
 .brand-word {
-  font-size: var(--text-lg);
-  font-weight: var(--weight-bold);
-  color: var(--ink);
   white-space: nowrap;
 }
 
@@ -589,28 +593,23 @@ body.is-gated { overflow: clip; }
   white-space: nowrap;
 }
 
-/* SAFETY, not decoration. Solid amber fill + white text (5.02:1), bold and a
- * ring, on an amber bar with a 3px amber rule under it: it reads as a live
- * warning from the back of a lecture room and can never be confused with the
- * green student badge. The 2026-11 redesign took away the capitals and the
- * tracking (labels stay in sentence case everywhere); fill, ring and the bar
- * colour, which are what actually carry the warning, all stay. */
+/* SAFETY, not decoration: an instructor session must never be mistaken for a
+ * student one on a projector. Until 2026-11-27 this was an amber bar; it now
+ * stays in the eDA greens but keeps the two strong signals: a SOLID deep-green
+ * badge (the student badge is a pale tint with green text) with a ring, and a
+ * 3px deep-green rule under the whole bar. on-brand on brand-700 is 9.60:1
+ * (light) and 9.27:1 (dark). */
 .role-badge.is-instructor {
-  background: var(--warning);
-  border-color: var(--warning);
+  background: var(--brand-700);
+  border-color: var(--brand-700);
   color: var(--on-brand);
   font-weight: var(--weight-bold);
-  box-shadow: 0 0 0 3px var(--warning-bg);
+  box-shadow: 0 0 0 3px var(--brand-100);
 }
 
 body.role-instructor .topbar {
-  background: var(--warning-bg);
-  border-bottom: 3px solid var(--warning);
+  border-bottom: 3px solid var(--brand-700);
 }
-body.role-instructor .brand-word,
-body.role-instructor .brand-text { color: var(--ink); }
-/* --ink-muted on amber paper: re-measure before changing either token. */
-body.role-instructor .section-tab { color: var(--ink); }
 
 /* -------------------------------------------------------------------- pills */
 
@@ -2152,13 +2151,6 @@ body.results-max .workspace { grid-template-rows: minmax(0, 1fr); }
 
 .section-tab:disabled { cursor: not-allowed; opacity: 0.55; }
 
-/* An instructor session recolours the top bar; keep the section row legible
-   against it rather than letting brand green sit on amber. */
-body.role-instructor .section-tab.is-active {
-  border-bottom-color: var(--warning);
-  color: var(--ink);
-}
-
 /* =====================================================================
    FOCUS MODE — khu vuc dang mo chiem tron cua so
    =====================================================================
@@ -2186,16 +2178,16 @@ body.is-focus .topbar { display: none; }
   width: var(--control-h-sm);
   height: var(--control-h-sm);
 }
-/* Thanh tieu de mau amber dang bi an, nen day la tin hieu duy nhat con lai cho
-   biet day la phien GIANG VIEN. Cung mau voi .role-badge.is-instructor. */
+/* Thanh tieu de dang bi an, nen day la tin hieu duy nhat con lai cho biet day
+   la phien GIANG VIEN. Cung mau voi .role-badge.is-instructor. */
 body.role-instructor .focus-float {
-  background: var(--warning);
-  border-color: var(--warning);
-  box-shadow: 0 0 0 3px var(--warning-bg), var(--shadow-md);
+  background: var(--brand-700);
+  border-color: var(--brand-700);
+  box-shadow: 0 0 0 3px var(--brand-100), var(--shadow-md);
 }
 body.role-instructor .focus-float .icon-btn {
-  background: var(--warning-bg);
-  border-color: var(--warning);
+  background: var(--surface);
+  border-color: var(--brand-700);
   color: var(--ink);
 }
 
@@ -2745,3 +2737,17 @@ body.ch-work-max .topbar { display: none; }
 .theme-toggle[aria-pressed="true"] .theme-icon-moon { display: none; }
 .theme-toggle[aria-pressed="true"] .theme-icon-sun { display: block; }
 .home-link { text-decoration: none; }
+
+/* Inline code inside exercise text (`warehouses`, `warehouse_id`): the
+ * statement is written with Markdown backticks, challenges.js turns each pair
+ * into <code class="ch-code">. Mono = "you can type this", as everywhere. */
+.ch-code {
+  font-family: var(--font-mono);
+  font-size: .92em;
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-xs);
+  background: var(--surface-code);
+  border: 1px solid var(--line-soft);
+  color: var(--ink);
+  white-space: nowrap;
+}
